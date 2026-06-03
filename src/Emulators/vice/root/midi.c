@@ -34,7 +34,6 @@
 
 #include "alarm.h"
 #include "archdep.h"
-#include "clkguard.h"
 #include "cmdline.h"
 #include "interrupt.h"
 #include "lib.h"
@@ -45,7 +44,6 @@
 #include "mididrv.h"
 #include "snapshot.h"
 #include "resources.h"
-#include "translate.h"
 #include "vicetypes.h"
 #include "util.h"
 
@@ -111,17 +109,17 @@ static int midi_ticks = 0; /* number of clock ticks per char */
 static int intx = 0;    /* indicates that a transmit is currently ongoing */
 static int rx_irq = 0;  /* indicates that a read IRQ is active, cleared by reading RX */
 static int tx_irq = 0;  /* indicates that a write IRQ is active, cleared by writing TX */
-static BYTE ctrl;       /* control register */
-static BYTE status;     /* status register */
-static BYTE rxdata;     /* data that has been received last */
-static BYTE txdata;     /* data prepared to send */
+static uint8_t ctrl;       /* control register */
+static uint8_t status;     /* status register */
+static uint8_t rxdata;     /* data that has been received last */
+static uint8_t txdata;     /* data prepared to send */
 static int alarm_active = 0;    /* if alarm is set or not */
 
-static log_t midi_log = LOG_ERR;
+static log_t midi_log = LOG_DEFAULT;
 
 static void int_midi(CLOCK offset, void *data);
 
-static BYTE midi_last_read = 0;  /* the byte read the last time (for RMW) */
+static uint8_t midi_last_read = 0;  /* the byte read the last time (for RMW) */
 
 /******************************************************************/
 
@@ -162,9 +160,9 @@ static int midi_set_irq(int new_irq_res, void *param)
 
     midi_irq = irq_tab[new_irq_res];
     midi_irq_res = new_irq_res;
-    
+
     midi_update_int();
-    
+
     return 0;
 }
 
@@ -172,11 +170,11 @@ static int midi_set_irq(int new_irq_res, void *param)
 get amount of ticks (cycles) between MIDI interrupts. Every received byte
 triggers an interrupt.
 
-The MIDI serial communication format is 31250baud, 8N1: 8 bits, one start bit 
-and one stop bit, no parity. 
+The MIDI serial communication format is 31250baud, 8N1: 8 bits, one start bit
+and one stop bit, no parity.
 
-This would mean *10 below, but 9 is better if the frequency of external devices 
-is a bit off, that avoids buffer overflows for very large and fast transfers 
+This would mean *10 below, but 9 is better if the frequency of external devices
+is a bit off, that avoids buffer overflows for very large and fast transfers
 (e.g. SysEx file transfers).
 */
 static int get_midi_ticks(void)
@@ -211,17 +209,14 @@ void midi_resources_shutdown(void)
     mididrv_resources_shutdown();
 }
 
-static const cmdline_option_t cmdline_options[] = {
-    { "-midi", SET_RESOURCE, 0,
+static const cmdline_option_t cmdline_options[] =
+{
+    { "-midi", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "MIDIEnable", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_MIDI_EMU,
-      NULL, NULL },
-    { "+midi", SET_RESOURCE, 0,
+      NULL, "Enable MIDI emulation" },
+    { "+midi", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "MIDIEnable", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_MIDI_EMU,
-      NULL, NULL },
+      NULL, "Disable MIDI emulation" },
     CMDLINE_LIST_END
 };
 
@@ -236,22 +231,13 @@ int midi_cmdline_options_init(void)
 
 /******************************************************************/
 
-static void clk_overflow_callback(CLOCK sub, void *var)
-{
-    if (alarm_active) {
-        midi_alarm_clk -= sub;
-    }
-}
-
 void midi_init(void)
 {
     midi_int_num = interrupt_cpu_status_int_new(maincpu_int_status, "MIDI");
 
     midi_alarm = alarm_new(maincpu_alarm_context, "MIDI", int_midi, NULL);
 
-    clk_guard_add_callback(maincpu_clk_guard, clk_overflow_callback, NULL);
-
-    if (midi_log == LOG_ERR) {
+    if (midi_log == LOG_DEFAULT) {
         midi_log = log_open("MIDI");
     }
     mididrv_init();
@@ -261,7 +247,7 @@ void midi_init(void)
 
 static void midi_suspend(void)
 {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
     log_message(midi_log, "suspend");
 #endif
     status = MIDI_STATUS_DEFAULT;
@@ -288,7 +274,7 @@ static void midi_suspend(void)
 
 void midi_reset(void)
 {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
     log_message(midi_log, "reset");
 #endif
     ctrl = MIDI_CTRL_DEFAULT;
@@ -298,7 +284,7 @@ void midi_reset(void)
 
 static void midi_activate(int alarm)
 {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
     log_message(midi_log, "activate");
 #endif
     /* open streams only once */
@@ -317,9 +303,9 @@ static void midi_activate(int alarm)
     }
 }
 
-void midi_store(WORD a, BYTE b)
+void midi_store(uint16_t a, uint8_t b)
 {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
     log_message(midi_log, "store(%x,%02x)", a, b);
 #endif
     if (maincpu_rmw_flag) {
@@ -334,7 +320,7 @@ void midi_store(WORD a, BYTE b)
     a &= midi_interface[midi_mode].mask;
 
     if (a == midi_interface[midi_mode].ctrl_addr) {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "store ctrl: %02x", b);
 #endif
         ctrl = b;
@@ -356,7 +342,7 @@ void midi_store(WORD a, BYTE b)
                 tx_irq = 0;
         }
     } else if (a == midi_interface[midi_mode].tx_addr) {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "store tx: %02x", b);
 #endif
         if ((status & MIDI_STATUS_TDRE) && !(MIDI_CTRL_CD(ctrl) == MIDI_CTRL_RESET)) {
@@ -380,21 +366,21 @@ void midi_store(WORD a, BYTE b)
     midi_update_int();
 }
 
-BYTE midi_read(WORD a)
+uint8_t midi_read(uint16_t a)
 {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
     log_message(midi_log, "read(%x)", a);
 #endif
     midi_last_read = 0xff;
     a &= midi_interface[midi_mode].mask;
 
     if (a == midi_interface[midi_mode].status_addr) {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "read status: %02x", status);
 #endif
         midi_last_read = status;
     } else if (a == midi_interface[midi_mode].rx_addr) {
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "read rx: %02x (%02x)", rxdata, status);
 #endif
         status &= ~MIDI_STATUS_OVRN;
@@ -412,7 +398,7 @@ BYTE midi_read(WORD a)
     return midi_last_read;
 }
 
-BYTE midi_peek(WORD a)
+uint8_t midi_peek(uint16_t a)
 {
     a &= midi_interface[midi_mode].mask;
 
@@ -431,14 +417,14 @@ BYTE midi_peek(WORD a)
     return 0;
 }
 
-int midi_test_read(WORD a)
+int midi_test_read(uint16_t a)
 {
     a &= midi_interface[midi_mode].mask;
 
     return (a == midi_interface[midi_mode].status_addr) || (a == midi_interface[midi_mode].rx_addr);
 }
 
-int midi_test_peek(WORD a)
+int midi_test_peek(uint16_t a)
 {
     a &= midi_interface[midi_mode].mask;
 
@@ -465,14 +451,14 @@ static void int_midi(CLOCK offset, void *data)
     if ((fd_in >= 0) && (!(status & MIDI_STATUS_RDRF)) && (mididrv_in(&rxdata) == 1)) {
         status |= MIDI_STATUS_RDRF;
         rxirq = 1;
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "int got %02x", rxdata);
 #endif
     }
 
     if (rxirq && (ctrl & MIDI_CTRL_RIE)) {
         rx_irq = 1;
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "int_midi rx IRQ offset=%ld, clk=%d", (long int)offset, (int)maincpu_clk);
 #endif
     }
@@ -483,13 +469,13 @@ static void int_midi(CLOCK offset, void *data)
     /* if tx interrupt is enabled, set interrupt */
     if (MIDI_CTRL_IS_TX_IRQ(ctrl)) {
         tx_irq = 1;
-#ifdef VICE_DEBUG
+#ifdef DEBUG
         log_message(midi_log, "int_midi tx IRQ offset=%ld, clk=%d", (long int)offset, (int)maincpu_clk);
 #endif
     }
 
     midi_update_int();
-    
+
     midi_alarm_clk = maincpu_clk + midi_ticks;
     alarm_set(midi_alarm, midi_alarm_clk);
     alarm_active = 1;
@@ -502,24 +488,24 @@ static void int_midi(CLOCK offset, void *data)
 
    type  | name         | description
    ----------------------------------
-   BYTE  | ctrl         | control
-   BYTE  | status       | status
-   BYTE  | rxdata       | RX data
-   BYTE  | rxdata       | TX data
-   BYTE  | last read    | last read value
-   DWORD | ticks        | midi ticks
-   BYTE  | intx         | intx
-   BYTE  | rx irq       | RX IRQ
-   BYTE  | rx irq       | TX IRQ
-   BYTE  | alarm active | alarm active flag
-   BYTE  | IRQ          | IRQ
-   DWORD | IRQ res      | IRQ res
-   BYTE  | mode         | midi mode
-   DWORD | int num      | interrupt number
-   DWORD | alarm clk    | alarm clock
+   uint8_t  | ctrl         | control
+   uint8_t  | status       | status
+   uint8_t  | rxdata       | RX data
+   uint8_t  | rxdata       | TX data
+   uint8_t  | last read    | last read value
+   uint32_t | ticks        | midi ticks
+   uint8_t  | intx         | intx
+   uint8_t  | rx irq       | RX IRQ
+   uint8_t  | rx irq       | TX IRQ
+   uint8_t  | alarm active | alarm active flag
+   uint8_t  | IRQ          | IRQ
+   uint32_t | IRQ res      | IRQ res
+   uint8_t  | mode         | midi mode
+   uint32_t | int num      | interrupt number
+   uint32_t | alarm clk    | alarm clock
  */
 
-static char snap_module_name[] = "MIDI";
+static const char snap_module_name[] = "MIDI";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   0
 
@@ -539,16 +525,16 @@ int midi_snapshot_write_module(snapshot_t *s)
         || SMW_B(m, rxdata) < 0
         || SMW_B(m, txdata) < 0
         || SMW_B(m, midi_last_read) < 0
-        || SMW_DW(m, (DWORD)midi_ticks) < 0
-        || SMW_B(m, (BYTE)intx) < 0
-        || SMW_B(m, (BYTE)rx_irq) < 0
-        || SMW_B(m, (BYTE)tx_irq) < 0
-        || SMW_B(m, (BYTE)alarm_active) < 0
-        || SMW_B(m, (BYTE)midi_irq) < 0
-        || SMW_DW(m, (DWORD)midi_irq_res) < 0
-        || SMW_B(m, (BYTE)midi_mode) < 0
-        || SMW_DW(m, (DWORD)midi_int_num) < 0
-        || SMW_DW(m, (DWORD)midi_alarm_clk) < 0) {
+        || SMW_DW(m, (uint32_t)midi_ticks) < 0
+        || SMW_B(m, (uint8_t)intx) < 0
+        || SMW_B(m, (uint8_t)rx_irq) < 0
+        || SMW_B(m, (uint8_t)tx_irq) < 0
+        || SMW_B(m, (uint8_t)alarm_active) < 0
+        || SMW_B(m, (uint8_t)midi_irq) < 0
+        || SMW_DW(m, (uint32_t)midi_irq_res) < 0
+        || SMW_B(m, (uint8_t)midi_mode) < 0
+        || SMW_DW(m, (uint32_t)midi_int_num) < 0
+        || SMW_DW(m, (uint32_t)midi_alarm_clk) < 0) {
         snapshot_module_close(m);
         return -1;
     }
@@ -558,9 +544,9 @@ int midi_snapshot_write_module(snapshot_t *s)
 
 int midi_snapshot_read_module(snapshot_t *s)
 {
-    BYTE vmajor, vminor;
+    uint8_t vmajor, vminor;
     snapshot_module_t *m;
-    DWORD tmpc;
+    uint32_t tmpc;
 
     m = snapshot_module_open(s, snap_module_name, &vmajor, &vminor);
 
@@ -569,7 +555,7 @@ int midi_snapshot_read_module(snapshot_t *s)
     }
 
     /* Do not accept versions higher than current */
-    if (vmajor > SNAP_MAJOR || vminor > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }

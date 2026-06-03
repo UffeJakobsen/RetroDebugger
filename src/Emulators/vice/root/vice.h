@@ -40,11 +40,7 @@
 
 //#define SDL_DEBUG
 
-#ifdef IDE_COMPILE
-# include <ide-config.h> /* standard config file for IDE based compiles. */
-#else
-# include "vice-config.h" /* Automagically created by the `configure' script.  */
-#endif
+#include "vice-config.h" /* Automagically created by the `configure' script.  */
 
 /* ------------------------------------------------------------------------- */
 
@@ -112,8 +108,30 @@ typedef int ssize_t;
 #endif
 
 /* ------------------------------------------------------------------------- */
+
+/* printf format attribute macros for compile-time format string checking */
+#if defined(__GNUC__) || defined(__clang__)
+#  define VICE_ATTR_PRINTF    __attribute__((__format__(__printf__, 1, 2)))
+#  define VICE_ATTR_PRINTF2   __attribute__((__format__(__printf__, 2, 3)))
+#  define VICE_ATTR_PRINTF3   __attribute__((__format__(__printf__, 3, 4)))
+#  define VICE_ATTR_PRINTF4   __attribute__((__format__(__printf__, 4, 5)))
+#else
+#  define VICE_ATTR_PRINTF
+#  define VICE_ATTR_PRINTF2
+#  define VICE_ATTR_PRINTF3
+#  define VICE_ATTR_PRINTF4
+#endif
+
+/* resource printf format attribute */
+#if defined(__GNUC__) || defined(__clang__)
+#  define VICE_ATTR_RESPRINTF __attribute__((__format__(__printf__, 1, 3)))
+#else
+#  define VICE_ATTR_RESPRINTF
+#endif
+
+/* ------------------------------------------------------------------------- */
 /* Which OS is using the common keyboard routines?  */
-#if !defined(__OS2__) || defined(USE_SDLUI) || defined(USE_SDLUI2)
+#if !defined(__OS2__) || defined(USE_SDLUI) || defined(USE_SDL2UI)
 #define COMMON_KBD
 #endif
 
@@ -139,9 +157,6 @@ typedef int ssize_t;
 #    define N_(String) (String)
 #endif /* ENABLE_NLS */
 
-/* T_() is just an indicator for new common text which needs
-   to be added to the translate.* translation tables. */
-#define T_(String) (String)
 
 #if defined(WIN32_COMPILE) && (defined(UNICODE) || defined(_UNICODE))
 /* enable WinNT Unicode support in VICE. */

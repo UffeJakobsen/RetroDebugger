@@ -100,8 +100,8 @@ void CViewC64StateREU::Render()
 extern "C" {
 	int reu_cart_enabled(void);
 
-	BYTE reu_read_without_sideeffects(WORD addr);
-	void c64d_reu_io2_store(WORD addr, BYTE value);
+	uint8_t reu_read_without_sideeffects(uint16_t addr);
+	void c64d_reu_io2_store(uint16_t addr, uint8_t value);
 }
 
 

@@ -31,18 +31,21 @@ void C64VicDisplayCanvasBlank::RefreshScreen(vicii_cycle_state_t *viciiState, CI
 
 	vicDisplay->GetViciiPointers(viciiState, &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, colors);
 
-	u8 bgcolor;
+	u8 bgcolor = colors[1];
 	u8 bgColorR, bgColorG, bgColorB;
-
-	bgcolor = colors[1];
-
 	debugInterface->GetCBMColor(bgcolor, &bgColorR, &bgColorG, &bgColorB);
+
+	// Fill with single uint32_t value instead of per-pixel SetPixelResultRGBA
+	uint32_t bgRGBA = (uint32_t)bgColorR | ((uint32_t)bgColorG << 8) | ((uint32_t)bgColorB << 16) | ((uint32_t)backgroundColorAlpha << 24);
+	u8 *imageData = (u8 *)imageDataScreen->resultData;
+	int imgWidth = imageDataScreen->width;
 
 	for (int y = 0; y < 200; y++)
 	{
+		uint32_t *row = (uint32_t *)(imageData + y * imgWidth * 4);
 		for (int x = 0; x < 320; x++)
 		{
-			imageDataScreen->SetPixelResultRGBA(x, y, bgColorR, bgColorG, bgColorB, backgroundColorAlpha);
+			row[x] = bgRGBA;
 		}
 	}
 }

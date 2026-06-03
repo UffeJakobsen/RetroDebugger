@@ -8,7 +8,8 @@ enum EmulatorType
 	EMULATOR_TYPE_UNKNOWN = 0,
 	EMULATOR_TYPE_C64_VICE = 1,
 	EMULATOR_TYPE_ATARI800 = 2,
-	EMULATOR_TYPE_NESTOPIA = 3
+	EMULATOR_TYPE_NESTOPIA = 3,
+	EMULATOR_TYPE_C64U = 4
 };
 
 #define DEBUGGER_MODE_RUNNING				0x00
@@ -22,8 +23,8 @@ enum EmulatorType
 #define MACHINE_TYPE_NTSC	2
 #define MACHINE_TYPE_LOADING_SNAPSHOT	100
 
-#define DEBUGGER_EVENT_TYPE_KEYBOARD	0x01
-#define DEBUGGER_EVENT_TYPE_JOYSTICK	0x02
+#define DEBUGGER_EVENT_TYPE_JOYSTICK	0x01
+#define DEBUGGER_EVENT_TYPE_KEYBOARD	0x02
 
 #define DEBUGGER_EVENT_BUTTON_UP		0x00
 #define DEBUGGER_EVENT_BUTTON_DOWN		0x01
@@ -82,7 +83,7 @@ enum WatchRepresentation
 //
 // C64 Debugger interface definitions go below:
 
-#define C64_MAX_NUM_SIDS	3
+#define C64_MAX_NUM_SIDS	4
 #define C64_NUM_DRIVES 4
 
 enum c64ViciiRecordMode
@@ -152,4 +153,3 @@ struct C64StateCartridge
 
 
 #endif
-

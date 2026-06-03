@@ -30,6 +30,7 @@
 #include "gt-log.h"
 
 #include <stdlib.h>
+#include "gt-abort.h"
 
 
 static struct chunkpool s_expr_pool[1];

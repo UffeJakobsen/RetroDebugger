@@ -23,6 +23,9 @@ void C64GetAvailablePalettes(std::vector<const char *> *vicPalettes);
 void C64GetAvailablePalettes(std::vector<CSlrString *> *vicPalettes);
 void C64SetPaletteOriginalColorCodes();
 
+// Extract RGB values from a palette by index into a 16x3 array
+bool C64GetPaletteRGB(uint16 paletteNum, uint8 outRgb[16][3]);
+
 std::vector<C64PaletteData *> *C64GetAvailablePalettes();
 
 #endif

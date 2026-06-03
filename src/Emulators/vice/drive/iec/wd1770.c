@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "clkguard.h"
 #include "diskimage.h"
 #include "drive.h"
 #include "drivetypes.h"
@@ -121,9 +120,9 @@ typedef enum wd_cmd_e {
 
 /* WD1770/1772 commands, masks, types */
 static const struct {
-    BYTE mask;
+    uint8_t mask;
     wd_cmd_t command;
-    BYTE type;
+    uint8_t type;
 } wd_commands[11]={
     {0xf0, WD_RESTORE        , 1},
     {0xf0, WD_SEEK           , 1},
@@ -142,8 +141,8 @@ struct wd1770_s {
     char *myname;
 
     /* WD1770/1772 registers.  */
-    BYTE data, track, sector, status, cmd;
-    WORD crc;
+    uint8_t data, track, sector, status, cmd;
+    uint16_t crc;
 
     /* Command and type  */
     wd_cmd_t command;
@@ -165,37 +164,25 @@ struct wd1770_s {
     int is1772;
 };
 
-static log_t wd1770_log = LOG_ERR;
+static log_t wd1770_log = LOG_DEFAULT;
 
 /*-----------------------------------------------------------------------*/
 /* WD1770 external interface.  */
 
-/* Clock overflow handling.  */
-static void clk_overflow_callback(CLOCK sub, void *data)
-{
-    wd1770_t *drv = (wd1770_t *)data;
-
-    if (drv->clk > (CLOCK) 0) {
-        drv->clk -= sub;
-    }
-}
-
 /* Functions using drive context.  */
 void wd1770d_init(drive_context_t *drv)
 {
-    if (wd1770_log == LOG_ERR) {
+    if (wd1770_log == LOG_DEFAULT) {
         wd1770_log = log_open("WD1770");
     }
 
     drv->wd1770 = lib_calloc(1, sizeof(wd1770_t));
-    drv->wd1770->myname = lib_msprintf("WD1770%d", drv->mynumber);
-    drv->wd1770->fdd = fdd_init(4 * drv->mynumber, drv->drive);
+    drv->wd1770->myname = lib_msprintf("WD1770%u", drv->mynumber);
+    drv->wd1770->fdd = fdd_init(4 * drv->mynumber, drv->drives[0]);
     drv->wd1770->cpu_clk_ptr = drv->clk_ptr;
     drv->wd1770->is1772 = 0;
     drv->wd1770->clock_frequency = 2;
 
-    clk_guard_add_callback(drv->cpu->clk_guard, clk_overflow_callback,
-                           drv->wd1770);
 }
 
 void wd1770_shutdown(wd1770_t *drv)
@@ -349,7 +336,7 @@ static void wd1770_execute(wd1770_t *drv)
                             drv->step--;
                             continue;
                         }
-                        drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                        drv->crc = fdd_crc(drv->crc, (uint8_t)res);
                         if (--drv->byte_count) {
                             continue;
                         }
@@ -447,7 +434,7 @@ static void wd1770_execute(wd1770_t *drv)
                         if (drv->byte_count == 3) {
                             drv->tmp = res;
                         }
-                        drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                        drv->crc = fdd_crc(drv->crc, res);
                         if (--drv->byte_count) {
                             continue;
                         }
@@ -480,12 +467,12 @@ static void wd1770_execute(wd1770_t *drv)
                                 if (!drv->sync) {
                                     drv->crc = 0xffff;
                                 }
-                                drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                                drv->crc = fdd_crc(drv->crc, res);
                                 drv->sync = (res == 0x1a1);
                                 continue;
                             }
                         }
-                        drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                        drv->crc = fdd_crc(drv->crc, res);
                         drv->status |= ((res & 0xff) == 0xf8) ? WD_RT : 0;
                         drv->byte_count = (128 << drv->tmp) + 2;
                         drv->step++;
@@ -499,7 +486,7 @@ static void wd1770_execute(wd1770_t *drv)
                             drv->status |= (drv->status & WD_DRQ) ? WD_LD : WD_DRQ;
                             drv->data = res;
                         }
-                        drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                        drv->crc = fdd_crc(drv->crc, res);
                         if (--drv->byte_count) {
                             continue;
                         }
@@ -541,8 +528,8 @@ static void wd1770_execute(wd1770_t *drv)
                             continue;
                         }
                         res = ((drv->cmd & WD_A) ? 0xf8 : 0xfb) | (drv->dden ? 0x100 : 0);
-                        fdd_write(drv->fdd, (BYTE)res);
-                        drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                        fdd_write(drv->fdd, res);
+                        drv->crc = fdd_crc(drv->crc, res);
                         drv->byte_count = (128 << drv->tmp) + 3;
                         drv->step++;
                     case 11:
@@ -555,10 +542,10 @@ static void wd1770_execute(wd1770_t *drv)
                                 fdd_write(drv->fdd, 0xff);
                                 break;
                             case 1:
-                                fdd_write(drv->fdd, (BYTE)(drv->crc & 0xff));
+                                fdd_write(drv->fdd, drv->crc & 0xff);
                                 continue;
                             case 2:
-                                fdd_write(drv->fdd, (BYTE)(drv->crc >> 8));
+                                fdd_write(drv->fdd, drv->crc >> 8);
                                 continue;
                             default:
                                 drv->status |= (drv->status & WD_DRQ) ? WD_LD : WD_DRQ;
@@ -645,7 +632,7 @@ static void wd1770_execute(wd1770_t *drv)
                             return;
                         }
                         drv->clk += BYTE_RATE;
-                        drv->data = (BYTE)fdd_read(drv->fdd);
+                        drv->data = fdd_read(drv->fdd);
                         drv->status |= (drv->status & WD_DRQ) ? WD_LD : WD_DRQ;
                         continue;
                     case 7:
@@ -674,7 +661,7 @@ static void wd1770_execute(wd1770_t *drv)
                         }
                         drv->status |= (drv->status & WD_DRQ) ? WD_LD : WD_DRQ;
                         drv->clk += BYTE_RATE;
-                        drv->data = (BYTE)fdd_read(drv->fdd);
+                        drv->data = fdd_read(drv->fdd);
                         if (drv->byte_count == 6) {
                             drv->sector = drv->data;
                         }
@@ -718,7 +705,7 @@ static void wd1770_execute(wd1770_t *drv)
                         drv->clk += BYTE_RATE;
                         res = drv->data;
                         if (drv->byte_count) {
-                            fdd_write(drv->fdd, (BYTE)(drv->crc & 0xff));
+                            fdd_write(drv->fdd, drv->crc & 0xff);
                             drv->byte_count--;
                         } else {
                             drv->status |= (drv->status & WD_DRQ) ? WD_LD : WD_DRQ;
@@ -762,9 +749,9 @@ static void wd1770_execute(wd1770_t *drv)
                                 }
                             }
                             if (drv->tmp) {
-                                drv->crc = fdd_crc(drv->crc, (BYTE)res);
+                                drv->crc = fdd_crc(drv->crc, res);
                             }
-                            fdd_write(drv->fdd, (BYTE)res);
+                            fdd_write(drv->fdd, res);
                             drv->data = 0;
                         }
                         continue;
@@ -792,7 +779,7 @@ static void wd1770_execute(wd1770_t *drv)
 /*-----------------------------------------------------------------------*/
 /* WD1770 register read/write access.  */
 
-static void wd1770_store(wd1770_t *drv, WORD addr, BYTE byte)
+static void wd1770_store(wd1770_t *drv, uint16_t addr, uint8_t byte)
 {
     int i;
 
@@ -860,7 +847,7 @@ static void wd1770_store(wd1770_t *drv, WORD addr, BYTE byte)
     }
 }
 
-static BYTE wd1770_read(wd1770_t *drv, WORD addr)
+static uint8_t wd1770_read(wd1770_t *drv, uint16_t addr)
 {
     wd1770_execute(drv);
 
@@ -880,7 +867,7 @@ static BYTE wd1770_read(wd1770_t *drv, WORD addr)
 }
 
 /* read from I/O without side effects */
-static BYTE wd1770_peek(wd1770_t *drv, WORD addr)
+static uint8_t wd1770_peek(wd1770_t *drv, uint16_t addr)
 {
     switch (addr) {
         case WD_STATUS:
@@ -911,14 +898,14 @@ void wd1770_reset(wd1770_t *drv)
 
 int wd1770_attach_image(disk_image_t *image, unsigned int unit)
 {
-    if (unit < 8 || unit > 8 + DRIVE_NUM) {
+    if (unit < 8 || unit > 8 + NUM_DISK_UNITS) {
         return -1;
     }
 
     switch (image->type) {
         case DISK_IMAGE_TYPE_D81:
         case DISK_IMAGE_TYPE_D1M:
-            disk_image_attach_log(image, wd1770_log, unit);
+            disk_image_attach_log(image, wd1770_log, unit, 0);
             break;
         default:
             return -1;
@@ -930,14 +917,14 @@ int wd1770_attach_image(disk_image_t *image, unsigned int unit)
 
 int wd1770_detach_image(disk_image_t *image, unsigned int unit)
 {
-    if (image == NULL || unit < 8 || unit > 8 + DRIVE_NUM) {
+    if (image == NULL || unit < 8 || unit > 8 + NUM_DISK_UNITS) {
         return -1;
     }
 
     switch (image->type) {
         case DISK_IMAGE_TYPE_D81:
         case DISK_IMAGE_TYPE_D1M:
-            disk_image_detach_log(image, wd1770_log, unit);
+            disk_image_detach_log(image, wd1770_log, unit, 0);
             break;
         default:
             return -1;
@@ -962,19 +949,19 @@ int wd1770_disk_change(wd1770_t *drv)
     return fdd_disk_change(drv->fdd);
 }
 
-void wd1770d_store(drive_context_t *drv, WORD addr, BYTE byte)
+void wd1770d_store(drive_context_t *drv, uint16_t addr, uint8_t byte)
 {
-    wd1770_store(drv->wd1770, (WORD)(addr & 3), byte);
+    wd1770_store(drv->wd1770, (uint16_t)(addr & 3), byte);
 }
 
-BYTE wd1770d_read(drive_context_t *drv, WORD addr)
+uint8_t wd1770d_read(drive_context_t *drv, uint16_t addr)
 {
-    return wd1770_read(drv->wd1770, (WORD)(addr & 3));
+    return wd1770_read(drv->wd1770, (uint16_t)(addr & 3));
 }
 
-BYTE wd1770d_peek(drive_context_t *drv, WORD addr)
+uint8_t wd1770d_peek(drive_context_t *drv, uint16_t addr)
 {
-    return wd1770_peek(drv->wd1770, (WORD)(addr & 3));
+    return wd1770_peek(drv->wd1770, (uint16_t)(addr & 3));
 }
 
 #define WD1770_SNAP_MAJOR 1
@@ -997,17 +984,17 @@ int wd1770_snapshot_write_module(wd1770_t *drv, struct snapshot_s *s)
         || SMW_B(m, drv->status) < 0
         || SMW_B(m, drv->cmd) < 0
         || SMW_W(m, drv->crc) < 0
-        || SMW_B(m, (BYTE)drv->command) < 0
+        || SMW_B(m, (uint8_t)drv->command) < 0
         || SMW_DW(m, drv->type) < 0
         || SMW_DW(m, drv->step) < 0
         || SMW_DW(m, drv->byte_count) < 0
         || SMW_DW(m, drv->tmp) < 0
         || SMW_DW(m, drv->direction) < 0
-        || SMW_DW(m, drv->clk) < 0
-        || SMW_B(m, (BYTE)drv->irq) < 0
-        || SMW_B(m, (BYTE)drv->dden) < 0
-        || SMW_B(m, (BYTE)drv->sync) < 0
-        || SMW_B(m, (BYTE)drv->is1772) < 0) {
+        || SMW_CLOCK(m, drv->clk) < 0
+        || SMW_B(m, (uint8_t)drv->irq) < 0
+        || SMW_B(m, (uint8_t)drv->dden) < 0
+        || SMW_B(m, (uint8_t)drv->sync) < 0
+        || SMW_B(m, (uint8_t)drv->is1772) < 0) {
         snapshot_module_close(m);
         return -1;
     }
@@ -1021,7 +1008,7 @@ int wd1770_snapshot_write_module(wd1770_t *drv, struct snapshot_s *s)
 
 int wd1770_snapshot_read_module(wd1770_t *drv, struct snapshot_s *s)
 {
-    BYTE vmajor, vminor;
+    uint8_t vmajor, vminor;
     snapshot_module_t *m;
     int command;
 
@@ -1031,7 +1018,7 @@ int wd1770_snapshot_read_module(wd1770_t *drv, struct snapshot_s *s)
     }
 
     /* Do not accept higher versions than current */
-    if (vmajor > WD1770_SNAP_MAJOR || vminor > WD1770_SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, WD1770_SNAP_MAJOR, WD1770_SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         snapshot_module_close(m);
         return -1;
@@ -1050,7 +1037,7 @@ int wd1770_snapshot_read_module(wd1770_t *drv, struct snapshot_s *s)
         || SMR_DW_INT(m, &drv->byte_count) < 0
         || SMR_DW_INT(m, &drv->tmp) < 0
         || SMR_DW_INT(m, &drv->direction) < 0
-        || SMR_DW(m, &drv->clk) < 0
+        || SMR_CLOCK(m, &drv->clk) < 0
         || SMR_B_INT(m, &drv->irq) < 0
         || SMR_B_INT(m, &drv->dden) < 0
         || SMR_B_INT(m, &drv->sync) < 0

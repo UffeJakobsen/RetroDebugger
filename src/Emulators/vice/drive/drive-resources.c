@@ -59,32 +59,40 @@ static int set_drive_true_emulation(int val, void *param)
 {
     unsigned int dnr;
     drive_t *drive;
+    drive_context_t *unit;
 
     drive_true_emulation = val ? 1 : 0;
 
-    machine_bus_status_truedrive_set((unsigned int)drive_true_emulation);
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        machine_bus_status_truedrive_set(dnr + 8, (unsigned int)drive_true_emulation);
+    }
 
     if (val) {
-        for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-            drive = drive_context[dnr]->drive;
-            if (drive->type != DRIVE_TYPE_NONE) {
+        for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+            unit = drive_context[dnr];
+            drive = unit->drive;
+            if (unit->type != DRIVE_TYPE_NONE) {
                 drive->enable = 1;
-                if (drive->type == DRIVE_TYPE_2000 || drive->type == DRIVE_TYPE_4000) {
-                    drivecpu65c02_reset_clk(drive_context[dnr]);
+                unit->enable = 1;
+                if (unit->type == DRIVE_TYPE_2000 || unit->type == DRIVE_TYPE_4000) {
+                    drivecpu65c02_reset_clk(unit);
                 } else {
-                    drivecpu_reset_clk(drive_context[dnr]);
+                    drivecpu_reset_clk(unit);
                 }
             }
         }
-        for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
+        for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
             drive_enable(drive_context[dnr]);
         }
     } else {
-        for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-            drive = drive_context[dnr]->drive;
-            drive_disable(drive_context[dnr]);
+        for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+            unit = drive_context[dnr];
+            drive = unit->drive;
+            drive_disable(unit);
+            drive->enable = 0;
+            unit->enable = 0;
             if (drive->image != NULL) {
-                vdrive_bam_reread_bam(dnr + 8);
+                vdrive_bam_reread_bam(dnr + 8, 0);
             }
         }
     }
@@ -125,10 +133,12 @@ static int drive_resources_type(int val, void *param)
     unsigned int type, dnr;
     int busses;
     drive_t *drive, *drive0;
+    drive_context_t *unit;
     char *rtc_device = NULL;
 
     dnr = vice_ptr_to_uint(param);
-    drive = drive_context[dnr]->drive;
+    unit = drive_context[dnr];
+    drive = unit->drive;
 
     type = (unsigned int)val;
     busses = iec_available_busses();
@@ -150,7 +160,7 @@ static int drive_resources_type(int val, void *param)
             int drive1 = mk_drive1(dnr);
 
             /* dual disk drives disable second emulated unit */
-            log_warning(drive->log,
+            log_warning(unit->log,
                         "Dual disk drive %d disables emulated drive %d", dnr, drive1);
 
             drive_resources_type(DRIVE_TYPE_NONE, int_to_void_ptr(drive1));
@@ -159,7 +169,7 @@ static int drive_resources_type(int val, void *param)
         drive0 = drive_context[mk_drive0(dnr)]->drive;
         if (drive0->enable && drive_check_dual(drive0->type)) {
             /* dual disk drives disable second emulated unit */
-            log_warning(drive->log,
+            log_warning(unit->log,
                         "Dual disk drive %d disables emulated drive %d", mk_drive0(dnr), dnr);
 
             type = DRIVE_TYPE_NONE;
@@ -209,22 +219,27 @@ static int drive_resources_type(int val, void *param)
                 }
             }
             drive->type = type;
+            unit->type = type;
             if (drive_true_emulation) {
                 drive->enable = 1;
-                drive_enable(drive_context[dnr]);
+                unit->enable = 1;
+                drive_enable(unit);
                 /* 1551 drive does not use the IEC bus */
                 machine_bus_status_drivetype_set(dnr + 8, drive_check_bus(type,
                                                                           IEC_BUS_IEC));
             } else {
-                drive_enable_update_ui(drive_context[dnr]);
+                drive_enable_update_ui(unit);
             }
-            drive_set_disk_drive_type(type, drive_context[dnr]);
+            drive_set_disk_drive_type(type, unit);
             driverom_initialize_traps(drive);
             machine_drive_idling_method(dnr);
             return 0;
         case DRIVE_TYPE_NONE:
             drive->type = type;
-            drive_disable(drive_context[dnr]);
+            unit->type = type;
+            drive->enable = 0;
+            unit->enable = 0;
+            drive_disable(unit);
             machine_bus_status_drivetype_set(dnr + 8, 0);
             return 0;
         default:
@@ -241,20 +256,20 @@ static resource_int_t res_drive_type[] = {
 int drive_resources_type_init(unsigned int default_type)
 {
     unsigned int dnr, type;
-    drive_t *drive;
+    drive_context_t *unit;
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-        drive = drive_context[dnr]->drive;
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        unit = drive_context[dnr];
         if (dnr == 0) {
             type = default_type;
         } else {
             type = DRIVE_TYPE_NONE;
         }
 
-        res_drive_type[0].name = lib_msprintf("Drive%iType", dnr + 8);
+        res_drive_type[0].name = lib_msprintf("Drive%uType", dnr + 8);
         res_drive_type[0].factory_value = (int)type;
-        res_drive_type[0].value_ptr = (int *)&(drive->type);
-        res_drive_type[0].param = uint_to_void_ptr(dnr);
+        res_drive_type[0].value_ptr = (int *)&(unit->type);
+        res_drive_type[0].param = vice_uint_to_ptr(dnr);
 
         if (resources_register_int(res_drive_type) < 0) {
             return -1;
@@ -270,9 +285,11 @@ static int set_drive_idling_method(int val, void *param)
 {
     unsigned int dnr;
     drive_t *drive;
+    drive_context_t *unit;
 
     dnr = vice_ptr_to_uint(param);
-    drive = drive_context[dnr]->drive;
+    unit = drive_context[dnr];
+    drive = unit->drive;
 
     /* FIXME: Maybe we should call `drive_cpu_execute()' here?  */
     switch (val) {
@@ -285,6 +302,7 @@ static int set_drive_idling_method(int val, void *param)
     }
 
     drive->idling_method = val;
+    unit->idling_method = val;
 
     if (!rom_loaded) {
         return 0;
@@ -322,11 +340,14 @@ static int set_drive_rtc_save(int val, void *param)
 {
     unsigned int dnr;
     drive_t *drive;
+    drive_context_t *unit;
 
     dnr = vice_ptr_to_uint(param);
-    drive = drive_context[dnr]->drive;
+    unit = drive_context[dnr];
+    drive = unit->drive;
 
     drive->rtc_save = val ? 1 : 0;
+    unit->rtc_save = val ? 1 : 0;
 
     return 0;
 }
@@ -363,6 +384,7 @@ int drive_resources_init(void)
 {
     unsigned int dnr;
     drive_t *drive;
+    drive_context_t *unit;
     int has_iec;
     int i;
 
@@ -378,26 +400,27 @@ int drive_resources_init(void)
             has_iec = 1;
     }
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-        drive = drive_context[dnr]->drive;
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        unit = drive_context[dnr];
+        drive = unit->drive;
 
-        res_drive[0].name = lib_msprintf("Drive%iExtendImagePolicy", dnr + 8);
+        res_drive[0].name = lib_msprintf("Drive%uExtendImagePolicy", dnr + 8);
         res_drive[0].value_ptr = (int *)&(drive->extend_image_policy);
-        res_drive[0].param = uint_to_void_ptr(dnr);
-        res_drive[1].name = lib_msprintf("Drive%iIdleMethod", dnr + 8);
-        res_drive[1].value_ptr = &(drive->idling_method);
-        res_drive[1].param = uint_to_void_ptr(dnr);
-        res_drive[2].name = lib_msprintf("Drive%iRPM", dnr + 8);
+        res_drive[0].param = vice_uint_to_ptr(dnr);
+        res_drive[1].name = lib_msprintf("Drive%uIdleMethod", dnr + 8);
+        res_drive[1].value_ptr = &(unit->idling_method);
+        res_drive[1].param = vice_uint_to_ptr(dnr);
+        res_drive[2].name = lib_msprintf("Drive%uRPM", dnr + 8);
         res_drive[2].value_ptr = &(drive->rpm);
-        res_drive[2].param = uint_to_void_ptr(dnr);
-        res_drive[3].name = lib_msprintf("Drive%iWobble", dnr + 8);
+        res_drive[2].param = vice_uint_to_ptr(dnr);
+        res_drive[3].name = lib_msprintf("Drive%uWobble", dnr + 8);
         res_drive[3].value_ptr = &(drive->rpm_wobble);
-        res_drive[3].param = uint_to_void_ptr(dnr);
+        res_drive[3].param = vice_uint_to_ptr(dnr);
 
         if (has_iec) {
-            res_drive_rtc[0].name = lib_msprintf("Drive%iRTCSave", dnr + 8);
-            res_drive_rtc[0].value_ptr = &(drive->rtc_save);
-            res_drive_rtc[0].param = uint_to_void_ptr(dnr);
+            res_drive_rtc[0].name = lib_msprintf("Drive%uRTCSave", dnr + 8);
+            res_drive_rtc[0].value_ptr = &(unit->rtc_save);
+            res_drive_rtc[0].param = vice_uint_to_ptr(dnr);
             if (resources_register_int(res_drive_rtc) < 0) {
                 return -1;
             }

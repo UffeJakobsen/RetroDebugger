@@ -84,7 +84,7 @@ void mouse_button(int bnumber, int state)
 //            mouse_funcs.mbr(state);
 //            break;
 ///* FIXME: fix for SDL2 */
-//#ifndef USE_SDLUI2
+//#ifndef USE_SDL2UI
 //        case SDL_BUTTON_WHEELUP:
 //            mouse_funcs.mbu(state);
 //            break;
@@ -107,12 +107,7 @@ int mousedrv_get_y(void)
     return mouse_y;
 }
 
-void mouse_move(int x, int y)
-{
-    mouse_x += x;
-    mouse_y -= y;
-    mouse_timestamp = vsyncarch_gettime();
-}
+/* mouse_move is defined in joyport/mouse.c (VICE 3.10) */
 
 void c64d_mouse_set_position(int x, int y)
 {

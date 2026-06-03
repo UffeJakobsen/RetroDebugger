@@ -42,30 +42,34 @@ typedef struct rtc_ds1216e_s {
     int pattern_ignore;
     int output;
     int output_pos;
+    int day_offset;
+    int day_latch;
     time_t latch;
     time_t offset;
     time_t old_offset;
-    BYTE *clock_regs;
-    BYTE old_clock_regs[DS1216E_REG_SIZE];
-    BYTE clock_regs_changed[DS1216E_REG_SIZE];
+    uint8_t *clock_regs;
+    uint8_t old_clock_regs[DS1216E_REG_SIZE];
+    uint8_t clock_regs_changed[DS1216E_REG_SIZE];
     char *device;
 } rtc_ds1216e_t;
 
-#define DS1216E_REGISTER_CENTISECONDS   0
-#define DS1216E_REGISTER_SECONDS        1
-#define DS1216E_REGISTER_MINUTES        2
-#define DS1216E_REGISTER_HOURS          3
-#define DS1216E_REGISTER_WEEKDAYS       4
-#define DS1216E_REGISTER_MONTHDAYS      5
-#define DS1216E_REGISTER_MONTHS         6
-#define DS1216E_REGISTER_YEARS          7
+enum {
+    DS1216E_REGISTER_CENTISECONDS = 0,
+    DS1216E_REGISTER_SECONDS,
+    DS1216E_REGISTER_MINUTES,
+    DS1216E_REGISTER_HOURS,
+    DS1216E_REGISTER_WEEKDAYS,
+    DS1216E_REGISTER_MONTHDAYS,
+    DS1216E_REGISTER_MONTHS,
+    DS1216E_REGISTER_YEARS
+};
 
-extern rtc_ds1216e_t *ds1216e_init(char *device);
-extern void ds1216e_destroy(rtc_ds1216e_t *context, int save);
+rtc_ds1216e_t *ds1216e_init(char *device);
+void ds1216e_destroy(rtc_ds1216e_t *context, int save);
 
-extern BYTE ds1216e_read(rtc_ds1216e_t *context, WORD address, BYTE original_read);
+uint8_t ds1216e_read(rtc_ds1216e_t *context, uint16_t address, uint8_t original_read);
 
-extern int ds1216e_write_snapshot(rtc_ds1216e_t *context, snapshot_t *s);
-extern int ds1216e_read_snapshot(rtc_ds1216e_t *context, snapshot_t *s);
+int ds1216e_write_snapshot(rtc_ds1216e_t *context, snapshot_t *s);
+int ds1216e_read_snapshot(rtc_ds1216e_t *context, snapshot_t *s);
 
 #endif

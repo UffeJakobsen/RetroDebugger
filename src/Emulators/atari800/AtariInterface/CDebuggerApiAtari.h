@@ -16,7 +16,9 @@ class CDebuggerApiAtari : public CDebuggerApi
 {
 public:
 	CDebuggerApiAtari(CDebugInterface *debugInterface);
+	virtual ~CDebuggerApiAtari();
 	CDebugInterfaceNes *debugInterfaceAtari;
+	CImageData *cachedScreenImage;
 	
 	virtual void CreateNewPicture(u8 mode, u8 backgroundColor);
 	virtual void StartThread(CSlrThread *run);

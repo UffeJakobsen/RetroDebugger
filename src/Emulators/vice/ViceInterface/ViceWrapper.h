@@ -3,8 +3,15 @@
 
 #include "SYS_Types.h"
 #include "DebuggerDefs.h"
+#include "vicetypes.h"
 
-#define C64DEBUGGER_VICE_VERSION_STRING		"3.1"
+#ifdef __cplusplus
+extern "C++" {
+#include <atomic>
+}
+#endif
+
+#define C64DEBUGGER_VICE_VERSION_STRING		"3.10"
 
 #ifndef VICII_NUM_SPRITES
 #define VICII_NUM_SPRITES      8
@@ -133,10 +140,20 @@ void c64d_mark_drive1541_contents_track_dirty(uint16 track);
 
 void c64d_clear_screen();
 void c64d_refresh_screen_no_callback();
+void c64d_refresh_screen_paused();
 void c64d_refresh_screen();
 void c64d_refresh_previous_lines();
 void c64d_refresh_dbuf();
 void c64d_refresh_cia();
+
+// Read one C64 palette index (0..15) from VIC's internal draw_buffer.
+// (x, y) are in interior screen coordinates: x in 0..319, y in 0..199.
+// 0 = background (black on the default palette). Bypasses the
+// screenImageData triple-buffer and the GUI-render dependent refresh
+// path — use when you need the just-rendered VIC pixel state directly
+// (e.g. cycle-level diagnostics). Returns -1 if VIC is not yet
+// initialised or the request is out of bounds.
+int c64d_vic_read_interior_pixel(int x, int y);
 
 int c64d_set_vicii_border_mode(int borderMode);
 int c64d_get_vicii_border_mode();
@@ -149,6 +166,22 @@ void c64d_vicii_copy_state_data(vicii_cycle_state_t *viciiDest, vicii_cycle_stat
 vicii_cycle_state_t *c64d_get_vicii_state_for_raster_cycle(int rasterLine, int rasterCycle);
 vicii_cycle_state_t *c64d_get_vicii_state_for_raster_line(int rasterLine);
 void c64d_c64_vicii_cycle();
+
+// Multi-frame VIC state recording. Allocates a ring of N frames; each
+// frame holds the full 312×64 cycle-state grid. Call _start(N) once,
+// let the emulator run for N frames; _get_count() reports how many
+// frames have been captured so far. _stop() releases the buffer.
+// Frame 0 is the OLDEST captured frame, frame (count-1) the newest.
+//
+// Memory: ~36 MB per frame on PAL (vicii_cycle_state_t is ~450 B and
+// the grid is 312×64). Keep N small (≤4).
+//
+// Diagnostic-only API — not threadsafe with concurrent _start/_stop.
+void c64d_vicii_multiframe_start(int numFrames);
+void c64d_vicii_multiframe_stop();
+int  c64d_vicii_multiframe_get_count();
+int  c64d_vicii_multiframe_get_capacity();
+vicii_cycle_state_t *c64d_vicii_multiframe_get(int frameIdx, int rasterLine, int rasterCycle);
 
 void c64d_c64_vicii_start_frame();
 void c64d_c64_vicii_start_raster_line(uint16 rasterLine);
@@ -170,7 +203,19 @@ void c64d_set_palette_vice(uint8 *palette);
 int c64d_is_debug_on_c64();
 int c64d_is_debug_on_drive1541();
 
-extern volatile int c64d_debug_mode;
+#ifdef __cplusplus
+extern std::atomic<int> c64d_debug_mode;
+extern "C" {
+#endif
+extern const char *c64d_debug_mode_last_setter;
+void c64d_debug_mode_trace(int newMode, const char *setter);
+// Thread-safe accessors for c64d_debug_mode — use these from C code
+// instead of reading/writing c64d_debug_mode directly
+int c64d_debug_mode_get(void);
+void c64d_debug_mode_store(int newMode);
+#ifdef __cplusplus
+}
+#endif
 
 void c64d_c64_check_pc_breakpoint(uint16 pc);
 void c64d_c64_check_raster_breakpoint(uint16 rasterLine);
@@ -264,10 +309,10 @@ extern uint16 *c64d_drive_cpu_stack_origin_pc;
 #define C64D_IRQ_SOURCE_VIA2         7
 #define C64D_IRQ_SOURCE_IEC          8
 
-// Main CPU cycle of previous instruction
-extern unsigned int c64d_maincpu_current_instruction_clk;
-extern volatile unsigned int c64d_maincpu_previous_instruction_clk;
-extern volatile unsigned int c64d_maincpu_previous2_instruction_clk;
+// Main CPU cycle of previous instruction (CLOCK = uint64_t since VICE 3.10)
+extern CLOCK c64d_maincpu_current_instruction_clk;
+extern volatile CLOCK c64d_maincpu_previous_instruction_clk;
+extern volatile CLOCK c64d_maincpu_previous2_instruction_clk;
 
 //// render transparent c64 screen (for Vic Display), transparent color = $d021
 //extern int c64d_setting_render_transparent_screen;
@@ -280,8 +325,23 @@ int c64d_check_cpu_snapshot_manager_restore();
 void c64d_check_cpu_snapshot_manager_store();
 void c64d_check_snapshot_interval();
 
-// returns 1 if snapshot was restored
-int c64d_check_snapshot_restore();
+// Fast C-level flag — set from C++ when replay/recording/tasks are active
+extern volatile int c64d_vice_input_tasks_flag;
+int c64d_has_pending_input_tasks();
+
+// When set, keyboard and joystick latch immediately (zero delay) instead of
+// using random alarm delays. This ensures deterministic input replay.
+extern volatile int c64d_input_latch_immediate;
+
+// Processes pending input-event tasks / pause-cycle checks and, when
+// allowSnapshotRestore != 0, executes a pending timeline snapshot restore.
+// IMPORTANT: the snapshot restore loads CPU registers into maincpu_regs but
+// does NOT sync the working register set (reg_pc etc.) — that is done by
+// IMPORT_REGISTERS in c64d_check_cpu_snapshot_manager_restore at the
+// instruction boundary. Therefore allowSnapshotRestore MUST be 0 when called
+// from the per-cycle hook (mid-instruction): restoring there leaves the CPU
+// running with a stale reg_pc and jams it. Returns 1 if a snapshot was restored.
+int c64d_check_snapshot_restore(int allowSnapshotRestore);
 
 // check if disk image changed, required for snapshots manager
 int c64d_is_drive_dirty_for_snapshot();

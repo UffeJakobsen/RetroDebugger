@@ -45,7 +45,6 @@
 #include "mouse.h"
 #include "mousedrv.h"
 #include "resources.h"
-#include "translate.h"
 #include "vicetypes.h"
 #include "ui.h"
 #include "uiapi.h"
@@ -301,51 +300,51 @@ void ui_resources_shutdown(void)
 
 static const cmdline_option_t cmdline_options[] =
 {
-//    { "-menukey", SET_RESOURCE, 1, NULL, NULL, "MenuKey", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu activate key" },
-//    { "-menukeyup", SET_RESOURCE, 1, NULL, NULL, "MenuKeyUp", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu up key" },
-//    { "-menukeydown", SET_RESOURCE, 1, NULL, NULL, "MenuKeyDown", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu down key" },
-//    { "-menukeyleft", SET_RESOURCE, 1, NULL, NULL, "MenuKeyLeft", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu left key" },
-//    { "-menukeyright", SET_RESOURCE, 1, NULL, NULL, "MenuKeyRight", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu right key" },
-//    { "-menukeyselect", SET_RESOURCE, 1, NULL, NULL, "MenuKeySelect", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu select key" },
-//    { "-menukeycancel", SET_RESOURCE, 1, NULL, NULL, "MenuKeyCancel", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu cancel key" },
-//    { "-menukeyexit", SET_RESOURCE, 1, NULL, NULL, "MenuKeyExit", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu exit key" },
-//    { "-menukeymap", SET_RESOURCE, 1, NULL, NULL, "MenuKeyMap", NULL,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      "<key>", "Keycode of the menu map key" },
-//    { "-saveresourcesonexit", SET_RESOURCE, 0, NULL, NULL, "SaveResourcesOnExit", (resource_value_t)1,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      NULL, "Enable save resource on exit" },
-//    { "+saveresourcesonexit", SET_RESOURCE, 0, NULL, NULL, "SaveResourcesOnExit", (resource_value_t)0,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      NULL, "Disable save resource on exit" },
-//    { "-confirmonexit", SET_RESOURCE, 0, NULL, NULL, "ConfirmOnExit", (resource_value_t)1,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      NULL, "Enable confirm on exit" },
-//    { "+confirmonexit", SET_RESOURCE, 0, NULL, NULL, "ConfirmOnExit", (resource_value_t)0,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      NULL, "Disable confirm on exit" },
-//    { "-statusbar", SET_RESOURCE, 0, NULL, NULL, "SDLStatusbar", (resource_value_t)1,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      NULL, "Enable statusbar" },
-//    { "+statusbar", SET_RESOURCE, 0, NULL, NULL, "SDLStatusbar", (resource_value_t)0,
-//      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
-//      NULL, "Disable statusbar" },
+    { "-menukey", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKey", NULL,
+      "<key>", "Keycode of the menu activate key" },
+    { "-menukeyup", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyUp", NULL,
+      "<key>", "Keycode of the menu up key" },
+    { "-menukeydown", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyDown", NULL,
+      "<key>", "Keycode of the menu down key" },
+    { "-menukeyleft", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyLeft", NULL,
+      "<key>", "Keycode of the menu left key" },
+    { "-menukeyright", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyRight", NULL,
+      "<key>", "Keycode of the menu right key" },
+    { "-menukeyselect", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeySelect", NULL,
+      "<key>", "Keycode of the menu select key" },
+    { "-menukeycancel", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyCancel", NULL,
+      "<key>", "Keycode of the menu cancel key" },
+    { "-menukeyexit", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyExit", NULL,
+      "<key>", "Keycode of the menu exit key" },
+    { "-menukeymap", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MenuKeyMap", NULL,
+      "<key>", "Keycode of the menu map key" },
+    { "-saveresourcesonexit", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SaveResourcesOnExit", (resource_value_t)1,
+      NULL, "Enable save resource on exit" },
+    { "+saveresourcesonexit", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SaveResourcesOnExit", (resource_value_t)0,
+      NULL, "Disable save resource on exit" },
+    { "-confirmonexit", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "ConfirmOnExit", (resource_value_t)1,
+      NULL, "Enable confirm on exit" },
+    { "+confirmonexit", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "ConfirmOnExit", (resource_value_t)0,
+      NULL, "Disable confirm on exit" },
+    { "-statusbar", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SDLStatusbar", (resource_value_t)1,
+      NULL, "Enable statusbar" },
+    { "+statusbar", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SDLStatusbar", (resource_value_t)0,
+      NULL, "Disable statusbar" },
     CMDLINE_LIST_END
 };
 
@@ -444,7 +443,7 @@ void ui_update_menus(void){}
 /* ----------------------------------------------------------------- */
 /* uicolor.h */
 
-int uicolor_alloc_color(unsigned int red, unsigned int green, unsigned int blue, unsigned long *color_pixel, BYTE *pixel_return)
+int uicolor_alloc_color(unsigned int red, unsigned int green, unsigned int blue, unsigned long *color_pixel, uint8_t *pixel_return)
 {
     DBG(("%s",__func__));
     return 0;
@@ -455,7 +454,7 @@ void uicolor_free_color(unsigned int red, unsigned int green, unsigned int blue,
     DBG(("%s",__func__));
 }
 
-void uicolor_convert_color_table(unsigned int colnr, BYTE *data, long color_pixel, void *c)
+void uicolor_convert_color_table(unsigned int colnr, uint8_t *data, long color_pixel, void *c)
 {
     DBG(("%s",__func__));
 }

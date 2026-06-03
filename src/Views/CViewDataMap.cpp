@@ -22,8 +22,18 @@
 #include "C64Opcodes.h"
 #include "CGuiMain.h"
 #include "CMainMenuBar.h"
+#include "imgui.h"
+#include "imgui_internal.h"
 
 #include <math.h>
+
+// Engine-wide shutdown flag (defined in MTEngineSDL/Render/VID_Main.cpp).
+// The data-map worker thread polls it so it stops dereferencing debugInterface
+// once the app starts tearing down — otherwise Cmd+Q can race ApplicationShutdown
+// deleting debugInterfaceC64U while this thread is still calling into it.
+extern volatile bool mtQuitApplication;
+
+static const char hexDigits[] = "0123456789ABCDEF";
 
 ////
 // TODO: generalise/abstract this (i.e. remove isFromDisk param)
@@ -209,7 +219,7 @@ void CViewDataMap::ThreadRun(void *data)
 	ThreadSetName("CViewMemoryMap update");
 	//SYS_SetThreadPriority(LOW);
 
-	while(true)
+	while (mtQuitApplication == false)
 	{
 		unsigned long lastFrameTime = SYS_GetCurrentTimeInMillis();
 
@@ -218,25 +228,24 @@ void CViewDataMap::ThreadRun(void *data)
 		{
 			targetFPS = 0.5f;
 		}
-		
 		double targetMS = 1000.0f / targetFPS;
-		
+
 		if (debugInterface->isRunning && this->visible)
 		{
 			UpdateWholeMap();
 		}
-		
+
 		if (this->visible ||
 			(viewDataDump != NULL && viewDataDump->visible))
 		{
 			CellsAnimationLogic(updateMapNumberOfFps);
 		}
-		
+
 		shouldRebindImage = true;
-		
+
 		unsigned long currentFrameTime = SYS_GetCurrentTimeInMillis();
 		double d = (double)(currentFrameTime-lastFrameTime);
-		
+
 		if (d < targetMS)
 		{
 			double s = targetMS - d;
@@ -286,7 +295,14 @@ void CViewDataMap::CellsAnimationLogic(double targetFPS)
 		for (int x = 0; x < imageWidth; x++)
 		{
 			CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
-			
+
+			// Skip cells with no active color (vast majority in typical usage)
+			if (cell->sr <= 0.0f && cell->sg <= 0.0f && cell->sb <= 0.0f && cell->sa <= 0.0f)
+			{
+				addr++;
+				continue;
+			}
+
 			if (cell->isExecuteCode || cell->isExecuteArgument)
 			{
 				colorSpeed = runCodeColorSpeed;
@@ -565,12 +581,11 @@ bool CViewDataMap::DoNotTouchedMove(float x, float y)
 		cursorInside = false;
 		return false;
 	}
-	
+
 	cursorX = px;
 	cursorY = py;
-	
+
 	cursorInside = true;
-	
 	return false;
 }
 
@@ -744,7 +759,7 @@ void CViewDataMap::UpdateMapPosition()
 	
 	
 	guiMain->UnlockMutex(); //"CViewMemoryMap::UpdateMapPosition");
-	
+
 //	LOGD("UpdateMapPosition: mapSize=%5.2f %5.2f", mapSizeX, mapSizeY);
 }
 
@@ -885,14 +900,20 @@ void CViewDataMap::Render()
 				
 				float px = cx + textAddrGapX;
 				float py = cy + textAddrGapY;
-				sprintf(buf, "%04X", addr);
+				buf[0] = hexDigits[(addr >> 12) & 0xF];
+				buf[1] = hexDigits[(addr >> 8) & 0xF];
+				buf[2] = hexDigits[(addr >> 4) & 0xF];
+				buf[3] = hexDigits[addr & 0xF];
+				buf[4] = 0;
 				font->BlitTextColor(buf, px, py, posZ, currentFontAddrScale, tcr, tcg, tcb, 1.0f);
-				
+
 				px = cx + textDataGapX;
 				py = cy + textDataGapY;
-				
+
 				uint8 val = memoryBuffer[addr];
-				sprintf(buf, "%02X", val);
+				buf[0] = hexDigits[val >> 4];
+				buf[1] = hexDigits[val & 0xF];
+				buf[2] = 0;
 				font->BlitTextColor(buf, px, py, posZ, currentFontDataScale, tcr, tcg, tcb, 1.0f);
 				
 				px = cx + textCodeCenterX;
@@ -1015,7 +1036,33 @@ void CViewDataMap::RenderImGui()
 {
 //	LOGD("CViewMemoryMap::RenderImGui");
 	PreRenderImGui();
-	
+
+	// Reconcile our cached render geometry with the live ImGui window.
+	//
+	// CViewDataMap derives renderMapPos*/renderMapSize* (and its clip rect)
+	// from posX/posY/sizeX/sizeY in UpdateMapPosition(), which only runs when
+	// SetPosition() is called. CGuiView::PreRenderImGui resyncs the view to the
+	// real window only when its delta gate fires (live window InnerRect differs
+	// from its own previousView* cache). A layout restore can push a different
+	// saved rectangle straight into the view via SetPosition() without touching
+	// that cache; when the view is later shown and the live window happens to
+	// match the cached previousView*, the gate stays satisfied and posX/sizeX
+	// keep the stale rectangle — the map then renders tiny in a corner until a
+	// manual resize nudges the window size. Mirror PreRenderImGui's own
+	// InnerRect math and resync here so the map always fills its window.
+	if (imGuiWindow != NULL && imGuiWindowKeepAspectRatio == false)
+	{
+		float winPosX = imGuiWindow->InnerRect.Min.x;
+		float winPosY = imGuiWindow->InnerRect.Min.y;
+		float winSizeX = imGuiWindow->InnerRect.GetSize().x - 1;
+		float winSizeY = imGuiWindow->InnerRect.GetSize().y - 1;
+		if (winSizeX > 0.0f && winSizeY > 0.0f
+			&& (winPosX != posX || winPosY != posY || winSizeX != sizeX || winSizeY != sizeY))
+		{
+			SetPosition(winPosX, winPosY, posZ, winSizeX, winSizeY);
+		}
+	}
+
 	bool renderMapValuesInThisFrame;
 
 //	LOGD("..mapSizeX=%f", mapSizeX);
@@ -1107,14 +1154,20 @@ void CViewDataMap::RenderImGui()
 				
 				float px = cx + textAddrGapX;
 				float py = cy + textAddrGapY;
-				sprintf(buf, "%04X", addr);
+				buf[0] = hexDigits[(addr >> 12) & 0xF];
+				buf[1] = hexDigits[(addr >> 8) & 0xF];
+				buf[2] = hexDigits[(addr >> 4) & 0xF];
+				buf[3] = hexDigits[addr & 0xF];
+				buf[4] = 0;
 				font->BlitTextColor(buf, px, py, posZ, currentFontAddrScale, tcr, tcg, tcb, 1.0f);
-				
+
 				px = cx + textDataGapX;
 				py = cy + textDataGapY;
-				
+
 				uint8 val = memoryBuffer[addr];
-				sprintf(buf, "%02X", val);
+				buf[0] = hexDigits[val >> 4];
+				buf[1] = hexDigits[val & 0xF];
+				buf[2] = 0;
 				font->BlitTextColor(buf, px, py, posZ, currentFontDataScale, tcr, tcg, tcb, 1.0f);
 				
 				px = cx + textCodeCenterX;

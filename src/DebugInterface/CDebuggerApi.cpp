@@ -1,3 +1,4 @@
+#include "CDebuggerApi.h"
 #include "CViewC64.h"
 #include "CViewMonitorConsole.h"
 #include "CViewC64VicEditor.h"
@@ -24,6 +25,12 @@
 #include "CDebuggerApiVice.h"
 #include "CDebuggerApiNestopia.h"
 #include "CDebuggerApiAtari.h"
+#include "CDebugMemory.h"
+#include "CDebugMemoryCell.h"
+#include "C64Opcodes.h"
+#include "CSlrTextParser.h"
+#include <sstream>
+#include <cstring>
 
 // static factory
 CDebuggerApi *CDebuggerApi::GetDebuggerApi(u8 emulatorType)
@@ -628,4 +635,511 @@ u32 CDebuggerApi::JoypadAxisNameToAxisCode(std::string axisName)
 		return JOYPAD_NE;
 	}
 	return JOYPAD_IDLE;
+}
+
+// ============================================================================
+// MCP analysis tools
+// ============================================================================
+
+using json = nlohmann::json;
+
+std::string CDebuggerApi::FormatDisassemblyLine(u16 addr, u8 op, u8 lo, u8 hi, bool includeBytes, bool includeLabels, bool isExecuted)
+{
+	char buf[256];
+	int len = opcodes[op].addressingLength;
+
+	// Address
+	int pos = sprintf(buf, ".%04X  ", addr);
+
+	// Optional bytes column (fixed width: 10 chars)
+	if (includeBytes)
+	{
+		switch (len)
+		{
+			case 1: pos += sprintf(buf + pos, "%02X        ", op); break;
+			case 2: pos += sprintf(buf + pos, "%02X %02X     ", op, lo); break;
+			case 3: pos += sprintf(buf + pos, "%02X %02X %02X  ", op, lo, hi); break;
+			default: pos += sprintf(buf + pos, "          "); break;
+		}
+	}
+
+	// Mnemonic
+	pos += sprintf(buf + pos, "%s ", opcodes[op].name);
+
+	// Argument
+	switch (opcodes[op].addressingMode)
+	{
+		case ADDR_IMP:
+			break;
+		case ADDR_IMM:
+			pos += sprintf(buf + pos, "#$%02X", lo);
+			break;
+		case ADDR_ZP:
+		{
+			char labelBuf[512];
+			if (includeLabels && debugInterface->symbols && debugInterface->symbols->currentSegment
+				&& debugInterface->symbols->currentSegment->FindLabelText(lo, labelBuf))
+				pos += sprintf(buf + pos, "%s", labelBuf);
+			else
+				pos += sprintf(buf + pos, "$%02X", lo);
+			break;
+		}
+		case ADDR_ZPX:
+			pos += sprintf(buf + pos, "$%02X,X", lo);
+			break;
+		case ADDR_ZPY:
+			pos += sprintf(buf + pos, "$%02X,Y", lo);
+			break;
+		case ADDR_IZX:
+			pos += sprintf(buf + pos, "($%02X,X)", lo);
+			break;
+		case ADDR_IZY:
+			pos += sprintf(buf + pos, "($%02X),Y", lo);
+			break;
+		case ADDR_ABS:
+		{
+			u16 absAddr = (hi << 8) | lo;
+			char labelBuf[512];
+			if (includeLabels && debugInterface->symbols && debugInterface->symbols->currentSegment
+				&& debugInterface->symbols->currentSegment->FindLabelText(absAddr, labelBuf))
+				pos += sprintf(buf + pos, "%s", labelBuf);
+			else
+				pos += sprintf(buf + pos, "$%04X", absAddr);
+			break;
+		}
+		case ADDR_ABX:
+			pos += sprintf(buf + pos, "$%04X,X", (hi << 8) | lo);
+			break;
+		case ADDR_ABY:
+			pos += sprintf(buf + pos, "$%04X,Y", (hi << 8) | lo);
+			break;
+		case ADDR_IND:
+			pos += sprintf(buf + pos, "($%04X)", (hi << 8) | lo);
+			break;
+		case ADDR_REL:
+		{
+			u16 target = (addr + 2 + (int8)lo) & 0xFFFF;
+			char labelBuf[512];
+			if (includeLabels && debugInterface->symbols && debugInterface->symbols->currentSegment
+				&& debugInterface->symbols->currentSegment->FindLabelText(target, labelBuf))
+				pos += sprintf(buf + pos, "%s", labelBuf);
+			else
+				pos += sprintf(buf + pos, "$%04X", target);
+			break;
+		}
+		default:
+			break;
+	}
+
+	// Execute marker
+	if (isExecuted)
+		pos += sprintf(buf + pos, "  ; [exec]");
+
+	return std::string(buf, pos);
+}
+
+json CDebuggerApi::DisassembleMemory(int startAddr, int instructionCount, bool includeBytes, bool includeLabels)
+{
+	CDataAdapter *dataAdapter = debugInterface->GetDataAdapter();
+	if (!dataAdapter)
+		return json({{"error", "no_data_adapter"}});
+
+	int memLength = dataAdapter->AdapterGetDataLength();
+	CDebugMemory *debugMemory = (debugInterface->symbols) ? debugInterface->symbols->memory : NULL;
+
+	json result;
+	std::ostringstream text;
+	json instructions = json::array();
+	int addr = startAddr;
+
+	for (int i = 0; i < instructionCount && addr < memLength; i++)
+	{
+		u8 op, lo = 0, hi = 0;
+		dataAdapter->AdapterReadByte(addr, &op);
+
+		int len = opcodes[op].addressingLength;
+		if (len >= 2 && addr + 1 < memLength)
+			dataAdapter->AdapterReadByte(addr + 1, &lo);
+		if (len >= 3 && addr + 2 < memLength)
+			dataAdapter->AdapterReadByte(addr + 2, &hi);
+
+		bool isExec = false;
+		if (debugMemory)
+		{
+			CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
+			if (cell) isExec = cell->isExecuteCode;
+		}
+
+		std::string line = FormatDisassemblyLine(addr, op, lo, hi, includeBytes, includeLabels, isExec);
+		text << line << "\n";
+
+		// Also build JSON instruction array
+		json instr;
+		instr["addr"] = addr;
+		char addrHex[8]; sprintf(addrHex, "%04X", addr);
+		instr["addrHex"] = addrHex;
+		instr["mnemonic"] = opcodes[op].name;
+		instr["isExecuted"] = isExec;
+		instr["length"] = len;
+		if (opcodes[op].isIllegal) instr["illegal"] = true;
+		instructions.push_back(instr);
+
+		addr += len;
+	}
+
+	result["text"] = text.str();
+	result["instructions"] = instructions;
+	result["startAddress"] = startAddr;
+	result["nextAddress"] = addr;
+	result["count"] = (int)instructions.size();
+	return result;
+}
+
+json CDebuggerApi::AssembleCode(int startAddr, const std::string &code)
+{
+	CDataAdapter *dataAdapter = debugInterface->GetDataAdapter();
+	if (!dataAdapter)
+		return json({{"error", "no_data_adapter"}});
+
+	CDebugMemory *debugMemory = (debugInterface->symbols) ? debugInterface->symbols->memory : NULL;
+
+	// Split code into lines
+	std::vector<std::string> lines;
+	std::istringstream stream(code);
+	std::string line;
+	while (std::getline(stream, line))
+	{
+		// Trim whitespace
+		size_t start = line.find_first_not_of(" \t\r");
+		if (start == std::string::npos) continue;
+		size_t end = line.find_last_not_of(" \t\r");
+		std::string trimmed = line.substr(start, end - start + 1);
+		if (!trimmed.empty())
+			lines.push_back(trimmed);
+	}
+
+	if (lines.empty())
+		return json({{"error", "empty_code"}});
+
+	// Phase 1: parse all lines, collect opcodes+values (don't write yet)
+	struct AssembledInstr {
+		int opcode;
+		uint16 value;
+		int length;
+		std::string source;
+	};
+	std::vector<AssembledInstr> assembled;
+
+	int addr = startAddr;
+	for (size_t i = 0; i < lines.size(); i++)
+	{
+		// Use CViewDisassembly's assembler if available
+		CViewDisassembly *viewDis = debugInterface->viewDisassembly;
+		if (!viewDis)
+			return json({{"error", "no_disassembly_view"}});
+
+		char lineBuf[256];
+		strncpy(lineBuf, lines[i].c_str(), sizeof(lineBuf) - 1);
+		lineBuf[sizeof(lineBuf) - 1] = 0;
+
+		// Strip '$' for the assembler (it expects bare hex)
+		// Actually the assembler handles '$' by stripping it internally via token parsing
+
+		int instructionOpcode = -1;
+		uint16 instructionValue = 0;
+		char errorMsg[256] = {0};
+
+		int ret = viewDis->Assemble(addr, lineBuf, &instructionOpcode, &instructionValue, errorMsg);
+
+		if (ret == -1 || instructionOpcode == -1)
+		{
+			json err;
+			err["error"] = "assemble_error";
+			err["line"] = (int)(i + 1);
+			err["input"] = lines[i];
+			err["message"] = std::string(errorMsg);
+			return err;
+		}
+
+		AssembledInstr ai;
+		ai.opcode = instructionOpcode;
+		ai.value = instructionValue;
+		ai.length = opcodes[instructionOpcode].addressingLength;
+		ai.source = lines[i];
+		assembled.push_back(ai);
+
+		addr += ai.length;
+	}
+
+	// Phase 2: all lines parsed successfully — write to memory atomically
+	addr = startAddr;
+	json instrArray = json::array();
+
+	for (auto &ai : assembled)
+	{
+		bool isAvailable;
+		dataAdapter->AdapterWriteByte(addr, ai.opcode, &isAvailable);
+		if (debugMemory)
+		{
+			CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
+			if (cell) cell->isExecuteCode = true;
+		}
+
+		if (ai.length >= 2)
+			dataAdapter->AdapterWriteByte(addr + 1, ai.value & 0xFF, &isAvailable);
+		if (ai.length >= 3)
+			dataAdapter->AdapterWriteByte(addr + 2, (ai.value >> 8) & 0xFF, &isAvailable);
+
+		json instr;
+		char addrHex[8]; sprintf(addrHex, "%04X", addr);
+		instr["addr"] = addrHex;
+
+		// Format bytes
+		char bytesBuf[16];
+		switch (ai.length)
+		{
+			case 1: sprintf(bytesBuf, "%02x", ai.opcode); break;
+			case 2: sprintf(bytesBuf, "%02x %02x", ai.opcode, ai.value & 0xFF); break;
+			case 3: sprintf(bytesBuf, "%02x %02x %02x", ai.opcode, ai.value & 0xFF, (ai.value >> 8) & 0xFF); break;
+			default: bytesBuf[0] = 0; break;
+		}
+		instr["bytes"] = bytesBuf;
+		instr["mnemonic"] = ai.source;
+		instrArray.push_back(instr);
+
+		addr += ai.length;
+	}
+
+	json result;
+	result["instructions"] = instrArray;
+	result["totalBytes"] = addr - startAddr;
+	char startHex[8]; sprintf(startHex, "%04X", startAddr);
+	char endHex[8]; sprintf(endHex, "%04X", addr > startAddr ? addr - 1 : startAddr);
+	result["startAddress"] = startHex;
+	result["endAddress"] = endHex;
+	result["written"] = true;
+	return result;
+}
+
+json CDebuggerApi::GetCodeMap(int startAddr, int endAddr)
+{
+	CDebugMemory *debugMemory = (debugInterface->symbols) ? debugInterface->symbols->memory : NULL;
+	if (!debugMemory)
+		return json({{"error", "no_debug_memory"}});
+
+	CDataAdapter *dataAdapter = debugInterface->GetDataAdapter();
+	int memLength = dataAdapter ? dataAdapter->AdapterGetDataLength() : 65536;
+	if (endAddr >= memLength) endAddr = memLength - 1;
+	if (startAddr < 0) startAddr = 0;
+
+	json regions = json::array();
+	int regionStart = -1;
+	int totalCodeBytes = 0;
+
+	for (int addr = startAddr; addr <= endAddr; addr++)
+	{
+		CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
+		bool isCode = (cell && cell->isExecuteCode);
+
+		if (isCode)
+		{
+			if (regionStart == -1)
+				regionStart = addr;
+			totalCodeBytes++;
+		}
+		else
+		{
+			if (regionStart != -1)
+			{
+				json region;
+				char startHex[8]; sprintf(startHex, "%04X", regionStart);
+				char endHex[8]; sprintf(endHex, "%04X", addr - 1);
+				region["start"] = startHex;
+				region["end"] = endHex;
+				region["bytes"] = addr - regionStart;
+				regions.push_back(region);
+				regionStart = -1;
+			}
+		}
+	}
+
+	// Close last region
+	if (regionStart != -1)
+	{
+		json region;
+		char startHex[8]; sprintf(startHex, "%04X", regionStart);
+		char endHex[8]; sprintf(endHex, "%04X", endAddr);
+		region["start"] = startHex;
+		region["end"] = endHex;
+		region["bytes"] = endAddr - regionStart + 1;
+		regions.push_back(region);
+	}
+
+	json result;
+	result["source"] = "runtime";
+	result["codeRegions"] = regions;
+	result["totalCodeBytes"] = totalCodeBytes;
+	result["totalDataBytes"] = (endAddr - startAddr + 1) - totalCodeBytes;
+	return result;
+}
+
+json CDebuggerApi::SearchOpcodePattern(const std::string &pattern, int startAddr, int endAddr, bool executedOnly)
+{
+	CDataAdapter *dataAdapter = debugInterface->GetDataAdapter();
+	if (!dataAdapter)
+		return json({{"error", "no_data_adapter"}});
+
+	CDebugMemory *debugMemory = (debugInterface->symbols) ? debugInterface->symbols->memory : NULL;
+	int memLength = dataAdapter->AdapterGetDataLength();
+	if (endAddr >= memLength) endAddr = memLength - 1;
+	if (startAddr < 0) startAddr = 0;
+
+	// Parse pattern: "DEC ??" or "LDA #??" or "STA $0340" etc.
+	// Pattern format: MNEMONIC [argument]
+	// "??" means wildcard for argument
+	// We match by mnemonic name, and optionally by argument value
+
+	// Parse mnemonic from pattern
+	char mnemonicBuf[4] = {0};
+	size_t i = 0;
+	while (i < pattern.size() && i < 3 && pattern[i] != ' ')
+	{
+		mnemonicBuf[i] = toupper(pattern[i]);
+		i++;
+	}
+
+	// Parse optional argument filter
+	std::string argPart;
+	if (i < pattern.size())
+	{
+		size_t argStart = pattern.find_first_not_of(" \t", i);
+		if (argStart != std::string::npos)
+			argPart = pattern.substr(argStart);
+	}
+
+	bool hasArgFilter = !argPart.empty() && argPart != "??" && argPart != "????";
+	int filterValue = -1;
+	if (hasArgFilter)
+	{
+		// Strip $ prefix
+		std::string hexStr = argPart;
+		if (!hexStr.empty() && hexStr[0] == '#') hexStr = hexStr.substr(1);
+		if (!hexStr.empty() && hexStr[0] == '$') hexStr = hexStr.substr(1);
+		// Remove surrounding () for indirect
+		if (!hexStr.empty() && hexStr[0] == '(') hexStr = hexStr.substr(1);
+		if (!hexStr.empty() && hexStr.back() == ')') hexStr.pop_back();
+		// Remove ,X ,Y suffix
+		size_t commaPos = hexStr.find(',');
+		if (commaPos != std::string::npos) hexStr = hexStr.substr(0, commaPos);
+		// Parse hex
+		if (!hexStr.empty() && hexStr != "??" && hexStr != "????")
+		{
+			try { filterValue = std::stoi(hexStr, nullptr, 16); } catch (...) {}
+		}
+	}
+
+	// Build set of matching opcodes
+	std::vector<u8> matchingOpcodes;
+	for (int op = 0; op < 256; op++)
+	{
+		if (strcmp(opcodes[op].name, mnemonicBuf) == 0)
+			matchingOpcodes.push_back(op);
+	}
+
+	if (matchingOpcodes.empty())
+		return json({{"error", "unknown_mnemonic"}, {"mnemonic", mnemonicBuf}});
+
+	// Scan memory
+	json matches = json::array();
+	int maxResults = 100;
+
+	int addr = startAddr;
+	while (addr <= endAddr && (int)matches.size() < maxResults)
+	{
+		u8 op;
+		dataAdapter->AdapterReadByte(addr, &op);
+
+		// Check if this opcode matches
+		bool opcodeMatch = false;
+		for (u8 matchOp : matchingOpcodes)
+		{
+			if (op == matchOp) { opcodeMatch = true; break; }
+		}
+
+		if (opcodeMatch)
+		{
+			// Check execute filter
+			bool isExec = false;
+			if (debugMemory)
+			{
+				CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
+				if (cell) isExec = cell->isExecuteCode;
+			}
+
+			if (!executedOnly || isExec)
+			{
+				// Read operand bytes
+				u8 lo = 0, hi = 0;
+				int len = opcodes[op].addressingLength;
+				if (len >= 2 && addr + 1 < memLength)
+					dataAdapter->AdapterReadByte(addr + 1, &lo);
+				if (len >= 3 && addr + 2 < memLength)
+					dataAdapter->AdapterReadByte(addr + 2, &hi);
+
+				// Check argument filter
+				bool argMatch = true;
+				if (filterValue >= 0)
+				{
+					u16 operand;
+					if (opcodes[op].addressingMode == ADDR_REL)
+						operand = (addr + 2 + (int8)lo) & 0xFFFF;
+					else if (len == 2)
+						operand = lo;
+					else if (len == 3)
+						operand = (hi << 8) | lo;
+					else
+						operand = 0;
+
+					argMatch = ((int)operand == filterValue);
+				}
+
+				if (argMatch)
+				{
+					json match;
+					char addrHex[8]; sprintf(addrHex, "%04X", addr);
+					match["addr"] = addrHex;
+					match["isExecuted"] = isExec;
+
+					// Build disassembly text for context
+					match["disassembly"] = FormatDisassemblyLine(addr, op, lo, hi, true, false, isExec);
+					matches.push_back(match);
+				}
+			}
+
+			addr += opcodes[op].addressingLength;
+		}
+		else
+		{
+			// If we're in executed code, skip by instruction length; otherwise advance 1 byte
+			bool isExec = false;
+			if (debugMemory)
+			{
+				CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
+				if (cell) isExec = cell->isExecuteCode;
+			}
+
+			if (isExec)
+				addr += opcodes[op].addressingLength;
+			else
+				addr++;
+		}
+	}
+
+	json result;
+	result["pattern"] = pattern;
+	result["mnemonic"] = mnemonicBuf;
+	result["matches"] = matches;
+	result["matchCount"] = (int)matches.size();
+	result["truncated"] = ((int)matches.size() >= maxResults);
+	return result;
 }

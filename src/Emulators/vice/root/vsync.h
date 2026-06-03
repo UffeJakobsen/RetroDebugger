@@ -37,14 +37,16 @@ struct video_canvas_s;
 
 extern int vsync_frame_counter;
 
-extern void vsync_suspend_speed_eval(void);
-extern void vsync_sync_reset(void);
-extern int vsync_resources_init(void);
-extern int vsync_cmdline_options_init(void);
-extern void vsync_init(void (*hook)(void));
-extern void vsync_set_machine_parameter(double refresh_rate, long cycles);
-extern double vsync_get_refresh_frequency(void);
-extern int vsync_do_vsync(struct video_canvas_s *c, int been_skipped, int isPaused);
-extern int vsync_disable_timer(void);
+void vsync_suspend_speed_eval(void);
+void vsync_sync_reset(void);
+void c64d_vsync_reset_timing(void);
+int vsync_resources_init(void);
+int vsync_cmdline_options_init(void);
+void vsync_init(void (*hook)(void));
+void vsync_set_machine_parameter(double refresh_rate, long cycles);
+double vsync_get_refresh_frequency(void);
+int vsync_do_vsync(struct video_canvas_s *c, int been_skipped, int isPaused);
+int vsync_disable_timer(void);
+int vsync_should_skip_frame(struct video_canvas_s *canvas);
 
 #endif

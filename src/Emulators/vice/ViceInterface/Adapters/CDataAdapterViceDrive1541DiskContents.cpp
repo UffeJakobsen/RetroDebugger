@@ -19,7 +19,7 @@ extern "C" {
 
 
 extern "C" {
-#define DWORD u32
+#define uint32_t u32
 disk_image_t *c64d_get_drive_disk_image(int driveId);
 gcr_t *c64d_get_drive_disk_gcr(int driveId);
 unsigned int disk_image_sector_per_track(unsigned int format, unsigned int track);
@@ -29,7 +29,7 @@ unsigned int disk_image_sector_per_track(unsigned int format, unsigned int track
 disk_image_t *c64d_read_disk_image(char *fileName);
 void c64d_disk_image_destroy(disk_image_t *diskImage);
 
-int disk_image_read_sector(const disk_image_t *image, BYTE *buf, const disk_addr_t *dadr);
+int disk_image_read_sector(const disk_image_t *image, uint8_t *buf, const disk_addr_t *dadr);
 disk_image_t *c64d_get_drive_disk_image(int driveId);
 
 }
@@ -447,7 +447,7 @@ void CDataAdapterViceDrive1541DiskContents::FormatDisk(const char *diskName, con
 
 	vdrive_device_setup(vdrive, 8);
 	vdrive->image = diskImage;
-	vdrive_attach_image(diskImage, 8, vdrive);
+	vdrive_attach_image(diskImage, 8, 0, vdrive);
 	
 	char *commandBuf = SYS_GetCharBuf();
 	
@@ -459,7 +459,7 @@ void CDataAdapterViceDrive1541DiskContents::FormatDisk(const char *diskName, con
 
 	SYS_ReleaseCharBuf(commandBuf);
 
-	vdrive_detach_image(diskImage, (unsigned int)8, vdrive);
+	vdrive_detach_image(diskImage, (unsigned int)8, 0, vdrive);
 	drive_image_attach(diskImage, 8);
 	
 	DiskAttached();
@@ -482,12 +482,12 @@ int CDataAdapterViceDrive1541DiskContents::InsertFile(std::filesystem::path file
 
 	vdrive_device_setup(vdrive, 8);
 	vdrive->image = diskImage;
-	vdrive_attach_image(diskImage, 8, vdrive);
+	vdrive_attach_image(diskImage, 8, 0, vdrive);
 
 	fileio_info_t *finfo;
 	finfo = fileio_open(filePath.string().c_str(), NULL, FILEIO_FORMAT_RAW | FILEIO_FORMAT_P00,
 						FILEIO_COMMAND_READ | FILEIO_COMMAND_FSNAME,
-						FILEIO_TYPE_PRG);
+						FILEIO_TYPE_PRG, NULL);
 	if (finfo == NULL)
 	{
 		LOGError("CDataAdapterViceDrive1541DiskContents::FormatDisk: file not found %s", filePath.string().c_str());
@@ -498,12 +498,12 @@ int CDataAdapterViceDrive1541DiskContents::InsertFile(std::filesystem::path file
 	CSlrString *fileNameNoExt = fileName->GetFileNameWithoutExtensionAndPath();
 	char *cFileNameNoExt = fileNameNoExt->GetStdASCII();
 		
-//	char *dest_name = lib_stralloc((char *)filePath.filename().string().c_str()); //(finfo->name));
+//	char *dest_name = lib_strdup((char *)filePath.filename().string().c_str()); //(finfo->name));
 	char *dest_name = cFileNameNoExt;
 	unsigned int dest_len = strlen(cFileNameNoExt); //finfo->length;
 	
 	bool replaced = false;
-	if (vdrive_iec_open(vdrive, (BYTE *)dest_name, (unsigned int)dest_len, 1, NULL))
+	if (vdrive_iec_open(vdrive, (uint8_t *)dest_name, (unsigned int)dest_len, 1, NULL))
 	{
 		LOGError("CDataAdapterViceDrive1541DiskContents::FormatDisk: cannot open `%s' for writing on image", finfo->name);
 		
@@ -518,11 +518,11 @@ int CDataAdapterViceDrive1541DiskContents::InsertFile(std::filesystem::path file
 			char *bufCommand = SYS_GetCharBuf();
 
 			sprintf(bufCommand, "s:");
-			charset_petconvstring((BYTE *)bufCommand, 0);
+			charset_petconvstring((uint8_t *)bufCommand, 0);
 			strcat(bufCommand, dest_name);
 
 			LOGD("replacing file: %s", bufCommand);
-			int status = vdrive_command_execute(vdrive, (BYTE *)bufCommand,
+			int status = vdrive_command_execute(vdrive, (uint8_t *)bufCommand,
 											(unsigned int)strlen(bufCommand));
 			LOGD("%02d, %s, 00, 00", status, cbmdos_errortext((unsigned int)status));
 			
@@ -543,18 +543,18 @@ int CDataAdapterViceDrive1541DiskContents::InsertFile(std::filesystem::path file
 //				}
 //
 //				sprintf(bufCommand, "s:");
-//				charset_petconvstring((BYTE *)bufCommand, 0);
+//				charset_petconvstring((uint8_t *)bufCommand, 0);
 //				strcat(bufCommand, dest_name);
 //
 //				LOGD("replacing file: %s", bufCommand);
-//				status = vdrive_command_execute(vdrive, (BYTE *)bufCommand,
+//				status = vdrive_command_execute(vdrive, (uint8_t *)bufCommand,
 //												(unsigned int)strlen(bufCommand));
 //				LOGD("%02d, %s, 00, 00", status, cbmdos_errortext((unsigned int)status));
 //			}
 
 			SYS_ReleaseCharBuf(bufCommand);
 			
-			if (vdrive_iec_open(vdrive, (BYTE *)dest_name, (unsigned int)dest_len, 1, NULL))
+			if (vdrive_iec_open(vdrive, (uint8_t *)dest_name, (unsigned int)dest_len, 1, NULL))
 			{
 				LOGError("CDataAdapterViceDrive1541DiskContents::FormatDisk: cannot open `%s' for writing on image", finfo->name);
 				
@@ -568,7 +568,7 @@ int CDataAdapterViceDrive1541DiskContents::InsertFile(std::filesystem::path file
 	}
 	
 	while (1) {
-		BYTE c;
+		uint8_t c;
 
 		if (fileio_read(finfo, &c, 1) != 1) {
 			break;
@@ -586,7 +586,7 @@ int CDataAdapterViceDrive1541DiskContents::InsertFile(std::filesystem::path file
 //	lib_free(dest_name);
 	STRFREE(cFileNameNoExt);
 	
-	vdrive_detach_image(diskImage, (unsigned int)8, vdrive);
+	vdrive_detach_image(diskImage, (unsigned int)8, 0, vdrive);
 	drive_image_attach(diskImage, 8);
 	
 	DiskAttached();

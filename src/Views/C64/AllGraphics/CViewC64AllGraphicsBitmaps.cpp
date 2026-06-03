@@ -187,9 +187,16 @@ void CViewC64AllGraphicsBitmaps::Render()
 					break;
 			}
 			
+			// Skip off-screen displays
+			if (vicDisplays[i]->posY + vicDisplays[i]->sizeY < this->posY ||
+				vicDisplays[i]->posY > this->posY + this->sizeY ||
+				vicDisplays[i]->posX + vicDisplays[i]->sizeX < this->posX ||
+				vicDisplays[i]->posX > this->posX + this->sizeX)
+				continue;
+
 			vicDisplays[i]->Render();
 		}
-		
+
 		{
 			// render selected bitmap outline only
 			if (selectedBitmapId >=0 && selectedBitmapId < 0x40)

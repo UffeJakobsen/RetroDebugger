@@ -28,6 +28,7 @@
 #include "gt-pc.h"
 #include "gt-log.h"
 #include <stdlib.h>
+#include "gt-abort.h"
 
 
 static struct expr unset_value[1];

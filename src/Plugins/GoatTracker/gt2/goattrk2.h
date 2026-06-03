@@ -1,6 +1,10 @@
 #ifndef GOATTRK2_H
 #define GOATTRK2_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +42,8 @@
 #define KEY_TRACKER 0
 #define KEY_DMC 1
 #define KEY_JANKO 2
+#define KEY_CUSTOM 3
+#define KEY_RENOISE 4
 
 #define VISIBLEPATTROWS 31
 #define VISIBLEORDERLIST 15
@@ -54,10 +60,14 @@ extern int followplay;
 extern int hexnybble;
 extern int stepsize;
 extern int autoadvance;
+extern int gt2RenoiseEditStep;
 extern int defaultpatternlength;
 extern int cursorflash;
 extern int cursorcolortable[];
 extern int exitprogram;
+extern int gt2_engine_ready;
+extern unsigned char customkeytbl1[15];
+extern unsigned char customkeytbl2[17];
 extern int eacolumn;
 extern int eamode;
 extern unsigned keypreset;
@@ -122,5 +132,9 @@ void editadsr(void);
 void calculatefreqtable(void);
 void setspecialnotenames(void);
 void readscalatuningfile(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

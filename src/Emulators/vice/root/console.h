@@ -47,22 +47,22 @@ typedef struct console_s {
     struct console_private_s *private;
 } console_t;
 
-extern console_t *console_open(const char *id);
-extern int console_close(console_t *log);
+console_t *console_open(const char *id);
+int console_close(console_t *log);
 
 /* the following must be called before any other
   console_...() function is used */
-extern int console_init(void);
+int console_init(void);
 
 /* The following should be called when quitting VICE
  after calling console_close_all(), the console_...()
  functions cannot be accessed unless console_init()
  is called again.
 */
-extern int console_close_all(void);
+int console_close_all(void);
 
-extern int console_out(console_t *log, const char *format, ...);
-extern int console_flush(console_t *log);
-extern char *console_in(console_t *log, const char *prompt);
+int console_out(console_t *log, const char *format, ...);
+int console_flush(console_t *log);
+char *console_in(console_t *log, const char *prompt);
 
 #endif

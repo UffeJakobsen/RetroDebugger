@@ -1,51 +1,60 @@
 #pragma once
 
 #include "ITestCallback.h"
-#include <vector>
+#include <ctime>
+#include <memory>
 #include <string>
-using namespace std;
+#include <vector>
 
 class CTest;
 
 struct CTestSuiteResult
 {
-	string testName;
+	std::string testName;
 	bool success;
-	string summary;
+	std::string summary;
 };
 
-// Runs all automated tests in sequence
 class CTestSuite : public ITestCallback
 {
 public:
 	CTestSuite();
 	virtual ~CTestSuite();
 
-	// Quick start static method for one-liner usage
-	static void QuickStart();
+	virtual void RegisterTests() = 0;
 
-	// CLI mode: register all known tests, optionally filtered by name
-	static void RegisterAllTests(CTestSuite *suite);
-	static void RunFromCLI(const char *testName);
-
-	// True when CLI test mode is active
+	static void RunFromCLI(CTestSuite *suite, const char *testName);
+	// Register tests, write their names (one per line) to tests/results/test_list.txt
+	// and stdout, then exit. Used by the subprocess-per-test orchestrator to
+	// enumerate tests without hardcoding the list.
+	static void ListTestsFromCLI(CTestSuite *suite);
 	static bool isCLIModeActive;
+
+	int defaultTestTimeoutSeconds = 30;
+	int suiteTimeoutSeconds = 180;
 
 	void Run();
 	void Cancel();
 
-	// ITestCallback
 	virtual void OnTestStepCompleted(CTest *test, int stepId, bool success, const char *message) override;
 	virtual void OnTestCompleted(CTest *test, bool success, const char *summary) override;
+
+protected:
+	std::vector<std::unique_ptr<CTest> > tests;
 
 private:
 	void RunNextTest();
 	void WriteResults();
+	void StartTimeoutWatchdog();
 
-	vector<CTest *> tests;
-	vector<CTestSuiteResult> results;
+	std::vector<CTestSuiteResult> results;
 	int currentTestIndex;
 	bool isRunning;
 	bool exitOnCompletion;
-	string resultsFilePath;
+	// When false (default), the suite runs every test and reports all failures
+	// in one pass; a failing test no longer hides the tests after it. Set true
+	// (CLI: --stop-on-first-failure) for fast-fail behaviour.
+	bool stopOnFirstFailure;
+	std::string resultsFilePath;
+	time_t suiteStartTime = 0;
 };

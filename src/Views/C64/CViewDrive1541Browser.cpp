@@ -28,6 +28,11 @@ typedef struct disk_image_s disk_image_t;
 disk_image_t *c64d_get_drive_disk_image(int driveId);
 };
 
+// Engine-wide shutdown flag (defined in MTEngineSDL/Render/VID_Main.cpp).
+// Polled by the disk-image refresh worker thread so it stops touching
+// debugInterfaceC64 once the app starts tearing down.
+extern volatile bool mtQuitApplication;
+
 CViewDrive1541Browser::CViewDrive1541Browser(const char *name, float posX, float posY, float posZ, float sizeX, float sizeY)
 : CGuiView(name, posX, posY, posZ, sizeX, sizeY)
 {
@@ -211,7 +216,7 @@ void CViewDrive1541Browser::StartFileEntry(DiskImageFileEntry *fileEntry, bool s
 }
 
 extern "C" {
-void c64d_set_drive_disk_memory(int driveId, BYTE *diskId, unsigned int track, unsigned int sector);
+void c64d_set_drive_disk_memory(int driveId, uint8_t *diskId, unsigned int track, unsigned int sector);
 void c64d_set_drive_half_track(int driveId, int halfTrack);
 };
 
@@ -225,7 +230,7 @@ void CViewDrive1541Browser::UpdateDriveDiskID()
 		// see $F3F6 in 1541 ROM: http://unusedino.de/ec64/technical/misc/c1541/romlisting.html#FDD3
 		//
 		LOGD("...diskId= %02x %02x", diskImage->diskId[2], diskImage->diskId[3]);
-		BYTE diskId[2];
+		uint8_t diskId[2];
 		diskId[0] = diskImage->diskId[2];
 		diskId[1] = diskImage->diskId[3];
 		c64d_set_drive_disk_memory(0, diskId, 6, 17);
@@ -1195,7 +1200,7 @@ CViewDrive1541FileD64RefreshDiskImageThread::CViewDrive1541FileD64RefreshDiskIma
 
 void CViewDrive1541FileD64RefreshDiskImageThread::ThreadRun(void *passData)
 {
-	while(true)
+	while (mtQuitApplication == false)
 	{
 		SYS_Sleep(500);
 		

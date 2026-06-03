@@ -2,6 +2,7 @@
 #define _CViewEmulatorScreen_h_
 
 #include "CGuiViewMovingPaneImage.h"
+#include <set>
 
 class CSlrMutex;
 class CDebugInterface;
@@ -57,7 +58,13 @@ public:
 	//
 	bool settingEnableShaderCRT;
 	CRenderShader *shaderCRT;
-	
+
+	// Key codes whose key-down was consumed as a global keyboard shortcut
+	// (e.g. Cmd+Left rewind). Their key-up must NOT be routed into the emulator
+	// — otherwise the C64 receives a spurious key-up and the input-task flag is
+	// raised. Tracked by raw key code so it is robust to modifier-release order.
+	std::set<u32> consumedShortcutKeyCodes;
+
 };
 
 #endif

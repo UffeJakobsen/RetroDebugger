@@ -41,7 +41,6 @@
 #include "sid.h"
 #include "sid-cmdline-options.h"
 #include "sid-resources.h"
-#include "translate.h"
 #include "util.h"
 
 static char *sid_address_range = NULL;
@@ -51,7 +50,7 @@ struct engine_s {
     int engine;
 };
 
-static struct engine_s engine_match[] = {
+static const struct engine_s engine_match[] = {
     { "0", SID_FASTSID_6581 },
     { "fast", SID_FASTSID_6581 },
     { "fastold", SID_FASTSID_6581 },
@@ -103,6 +102,12 @@ static struct engine_s engine_match[] = {
     { "ssi2001", SID_SSI2001 },
     { "ssi", SID_SSI2001 },
 #endif
+#ifdef HAVE_USBSID
+    { "1792", SID_USBSID },
+    { "usbsid", SID_USBSID },
+    { "usbs", SID_USBSID },
+    { "us", SID_USBSID },
+#endif
     { NULL, -1 }
 };
 
@@ -135,95 +140,78 @@ int sid_common_set_engine_model(const char *param, void *extra_param)
 }
 
 static const cmdline_option_t sidengine_cmdline_options[] = {
-    { "-sidenginemodel", CALL_FUNCTION, 1,
+    { "-sidenginemodel", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       sid_common_set_engine_model, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_ENGINE_MODEL, IDCLS_SPECIFY_SID_ENGINE_MODEL,
-      NULL, NULL },
+      "<engine and model>", "Specify SID engine and model (0: FastSID 6581, 1: FastSID 8580, 256: ReSID 6581, 257: ReSID 8580, 258: ReSID 8580 + digiboost)" },
     CMDLINE_LIST_END
 };
 
 #ifdef HAVE_RESID
 static const cmdline_option_t siddtvengine_cmdline_options[] = {
-    { "-sidenginemodel", CALL_FUNCTION, 1,
+    { "-sidenginemodel", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       sid_common_set_engine_model, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_ENGINE_MODEL, IDCLS_SPECIFY_SIDDTV_ENGINE_MODEL,
-      NULL, NULL },
+      "<engine and model>", "Specify SID engine and model (0: FastSID 6581, 1: FastSID 8580, 256: ReSID 6581, 257: ReSID 8580, 258: ReSID 8580 + digiboost, 260: DTVSID)" },
     CMDLINE_LIST_END
 };
 
 static const cmdline_option_t resid_cmdline_options[] = {
-    { "-residsamp", SET_RESOURCE, 1,
+    { "-residsamp", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidResidSampling", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_METHOD, IDCLS_RESID_SAMPLING_METHOD,
-      NULL, NULL },
-    { "-residpass", SET_RESOURCE, 1,
+      "<method>", "reSID sampling method (0: fast, 1: interpolating, 2: resampling, 3: fast resampling)" },
+    { "-residpass", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidResidPassband", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_PERCENT, IDCLS_PASSBAND_PERCENTAGE,
-      NULL, NULL },
-    { "-residgain", SET_RESOURCE, 1,
+      "<percent>", "reSID resampling passband in percentage of total bandwidth (0 - 90)" },
+    { "-residgain", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidResidGain", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_PERCENT, IDCLS_RESID_GAIN_PERCENTAGE,
-      NULL, NULL },
-    { "-residfilterbias", SET_RESOURCE, 1,
+      "<percent>", "reSID gain in percent (90 - 100)" },
+    { "-residfilterbias", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidResidFilterBias", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NUMBER, IDCLS_RESID_FILTER_BIAS,
-      NULL, NULL, },
+      "<number>", "reSID filter bias setting, which can be used to adjust DAC bias in millivolts." },
+    { "-resid8580pass", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SidResid8580Passband", NULL,
+      "<percent>", "reSID 8580 resampling passband in percentage of total bandwidth (0 - 90)" },
+    { "-resid8580gain", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SidResid8580Gain", NULL,
+      "<percent>", "reSID 8580 gain in percent (90 - 100)" },
+    { "-resid8580filterbias", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SidResid8580FilterBias", NULL,
+      "<number>", "reSID 8580 filter bias setting, which can be used to adjust DAC bias in millivolts.", },
     CMDLINE_LIST_END
 };
 #endif
 
 #ifdef HAVE_HARDSID
 static const cmdline_option_t hardsid_cmdline_options[] = {
-    { "-hardsidmain", SET_RESOURCE, 1,
+    { "-hardsidmain", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidHardSIDMain", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_DEVICE, IDCLS_HARDSID_MAIN,
-      NULL, NULL },
-    { "-hardsidright", SET_RESOURCE, 1,
+      "<device>", "Set the HardSID device for the main SID output" },
+    { "-hardsidright", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidHardSIDRight", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_DEVICE, IDCLS_HARDSID_RIGHT,
-      NULL, NULL },
+      "<device>", "Set the HardSID device for the right SID output" },
     CMDLINE_LIST_END
 };
 #endif
 
 static cmdline_option_t stereo_cmdline_options[] = {
-    { "-sidstereo", SET_RESOURCE, 1,
+    { "-sidstereo", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidStereo", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_AMOUNT, IDCLS_AMOUNT_EXTRA_SIDS,
-      NULL, NULL },
-    { "-sidstereoaddress", SET_RESOURCE, 1,
+      "<amount>", "amount of extra SID chips. (0..2)" },
+    { "-sidstereoaddress", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidStereoAddressStart", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_COMBO,
-      IDCLS_P_BASE_ADDRESS, IDCLS_SPECIFY_SID_2_ADDRESS,
-      NULL, NULL },
-    { "-sidtripleaddress", SET_RESOURCE, 1,
+      "<Base address>", "Specify base address for 2nd SID" },
+    { "-sidtripleaddress", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "SidTripleAddressStart", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_COMBO,
-      IDCLS_P_BASE_ADDRESS, IDCLS_SPECIFY_SID_3_ADDRESS,
-      NULL, NULL },
+      "<Base address>", "Specify base address for 3rd SID" },
     CMDLINE_LIST_END
 };
 
 static const cmdline_option_t common_cmdline_options[] = {
-    { "-sidfilters", SET_RESOURCE, 0,
+    { "-sidfilters", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "SidFilters", (void *)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_SID_FILTERS,
-      NULL, NULL },
-    { "+sidfilters", SET_RESOURCE, 0,
+      NULL, "Emulate SID filters" },
+    { "+sidfilters", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "SidFilters", (void *)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_SID_FILTERS,
-      NULL, NULL },
+      NULL, "Do not emulate SID filters" },
     CMDLINE_LIST_END
 };
 
@@ -231,7 +219,7 @@ static char *generate_sid_address_range(void)
 {
     char *temp1, *temp2, *temp3;
 
-    temp3 = lib_stralloc(". (");
+    temp3 = lib_strdup(". (");
 
     temp1 = util_gen_hex_address_list(0xd420, 0xd500, 0x20);
     temp2 = util_concat(temp3, temp1, "/", NULL);

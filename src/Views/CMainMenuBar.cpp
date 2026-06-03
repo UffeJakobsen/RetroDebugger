@@ -2,9 +2,11 @@
 #include "SYS_DefaultConfig.h"
 #include "EmulatorsConfig.h"
 #include "CGuiViewDebugLog.h"
+#include "CViewWSLog.h"
 #include "VID_Fonts.h"
 #include "CViewC64.h"
 #include "CMainMenuBar.h"
+#include "CByteBuffer.h"
 #include "CDebugInterfaceVice.h"
 #include "CDebugInterfaceAtari.h"
 #include "CDebugInterfaceNes.h"
@@ -32,7 +34,22 @@
 #include "CViewTimeline.h"
 #include "CViewAudioMixer.h"
 #include "CLayoutManager.h"
+#include "CDefaultWorkspaceLayouts.h"
 #include "C64DebuggerPluginGoatTracker.h"
+#include "CDebuggerEmulatorPlugin.h"
+#include "CPluginsManager.h"
+#include "CViewPluginManager.h"
+#include "CViewGT2Patterns.h"
+#include "CViewGT2OrderList.h"
+#include "CViewGT2Instrument.h"
+#include "CViewGT2Tables.h"
+#include "CViewGT2SongInfo.h"
+#include "CViewGT2Status.h"
+#include "CViewGT2TitleBar.h"
+#include "CViewGT2Mixer.h"
+#include "CViewGT2Toolbar.h"
+#include "CViewGT2KeyboardSetup.h"
+#include "CViewRenoiseImport.h"
 #include "C64DebuggerPluginCrtMaker.h"
 #include "C64DebuggerPluginDNDK.h"
 #include "CViewDataMap.h"
@@ -46,7 +63,11 @@
 #include "CViewC64VicEditor.h"
 #include "CViewC64KeyMap.h"
 #include "CDebuggerServer.h"
+#include "CMCPServer.h"
+#include "CViewCamera.h"
 #include "CConfigStorageHjson.h"
+#include "../Emulators/c64u/CDebugInterfaceC64U.h"
+#include "../Emulators/c64u/C64UConnectionStatus.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "implot.h"
@@ -57,7 +78,69 @@ extern bool c64dSkipBogusPageOffsetReadOnSTA;
 
 #include <map>
 
+static bool openCreateDefaultLayoutsPopup = false;
+static SDefaultWorkspacePopupState defaultWorkspacePopupState;
+static CDefaultWorkspaceLayouts *defaultWorkspaceLayouts = NULL;
+
+static CDefaultWorkspaceLayouts *GetDefaultWorkspaceLayouts()
+{
+	if (guiMain == NULL || guiMain->layoutManager == NULL)
+		return NULL;
+
+	if (defaultWorkspaceLayouts == NULL)
+	{
+		defaultWorkspaceLayouts = new CDefaultWorkspaceLayouts(viewC64, guiMain->layoutManager);
+	}
+	return defaultWorkspaceLayouts;
+}
+
+static void ClearDefaultWorkspacePopupSnapshot()
+{
+	defaultWorkspacePopupState.hasShortcutSlotSnapshot = false;
+	defaultWorkspacePopupState.shortcutSlotSnapshot.clear();
+}
+
+static bool HasGeneratedDefaultWorkspaceForPlatform(CDefaultWorkspaceLayouts *defaultLayouts, EDefaultWorkspacePlatform platform)
+{
+	if (defaultLayouts == NULL || guiMain == NULL || guiMain->layoutManager == NULL)
+		return false;
+
+	const std::vector<SDefaultWorkspaceLayoutSpec> &specs = GetDefaultWorkspaceLayoutSpecs(platform);
+	for (std::vector<SDefaultWorkspaceLayoutSpec>::const_iterator it = specs.begin(); it != specs.end(); ++it)
+	{
+		if (guiMain->layoutManager->GetPredefinedLayoutById(it->predefinedId) != NULL)
+			return true;
+	}
+
+	return false;
+}
+
+static void RenderDefaultWorkspacePlatformMenu(CDefaultWorkspaceLayouts *defaultLayouts, EDefaultWorkspacePlatform platform, const char *menuName)
+{
+	if (!HasGeneratedDefaultWorkspaceForPlatform(defaultLayouts, platform))
+		return;
+
+	if (ImGui::BeginMenu(menuName))
+	{
+		const std::vector<SDefaultWorkspaceLayoutSpec> &specs = GetDefaultWorkspaceLayoutSpecs(platform);
+		for (std::vector<SDefaultWorkspaceLayoutSpec>::const_iterator it = specs.begin(); it != specs.end(); ++it)
+		{
+			CLayoutData *layoutData = guiMain->layoutManager->GetPredefinedLayoutById(it->predefinedId);
+			bool isSelected = (layoutData != NULL && layoutData == guiMain->layoutManager->currentLayout);
+			bool isEnabled = (layoutData != NULL && layoutData->serializedLayoutBuffer != NULL && layoutData->serializedLayoutBuffer->length > 0);
+			if (ImGui::MenuItem(it->displayName, defaultLayouts->GetShortcutLabel(it->slot), isSelected, isEnabled))
+			{
+				guiMain->layoutManager->SetLayoutAsync(layoutData, true);
+			}
+		}
+		ImGui::EndMenu();
+	}
+}
+
 void PLUGIN_GoatTrackerSetVisible(bool isVisible);
+bool PLUGIN_GoatTrackerIsVisible();
+extern "C" { extern int numarpcolumns; extern int gt2RenoiseEditStep; extern unsigned keypreset; }
+extern bool gt2RenoiseFollowTrack;
 
 // move me to ImGui namespace
 void ImGuiTextCentered(std::string text) {
@@ -431,6 +514,12 @@ CMainMenuBar::CMainMenuBar()
 	guiMain->AddKeyboardShortcut(kbsSaveScreenImageAsPNG);
 
 #endif
+
+	CDefaultWorkspaceLayouts *defaultLayouts = GetDefaultWorkspaceLayouts();
+	if (defaultLayouts != NULL && gApplicationDefaultConfig != NULL && guiMain != NULL && guiMain->keyboardShortcuts != NULL)
+	{
+		defaultLayouts->RegisterStoredShortcutSlotsForGeneratedLayouts(guiMain->keyboardShortcuts, gApplicationDefaultConfig);
+	}
 }
 
 void CMainMenuBar::UpdateGamepads()
@@ -487,7 +576,7 @@ void CMainMenuBar::RenderImGui()
 //				viewC64->ShowDialogOpenFile(this, &openFileExtensions, c64SettingsDefaultPRGFolder, windowTitle);
 //				delete windowTitle;
 				
-				viewC64->mainMenuHelper->OpenDialogOpenFile();
+				viewC64->mainMenuHelper->OpenDialogOpenFile(true, false);
 			}
 			
 			bool mostRecentIsAvailable = viewC64->recentlyOpenedFiles->IsMostRecentFilePathAvailable();
@@ -613,8 +702,8 @@ void CMainMenuBar::RenderImGui()
 				kbsDetachCartridge->Run();
 			}
 			
-			if (viewC64->debugInterfaceC64->isRunning
-				|| viewC64->debugInterfaceAtari->isRunning)
+			if ((viewC64->debugInterfaceC64 && viewC64->debugInterfaceC64->isRunning)
+				|| (viewC64->debugInterfaceAtari && viewC64->debugInterfaceAtari->isRunning))
 			{
 				if (ImGui::MenuItem("Detach Executable", kbsDetachExecutable->cstr))
 				{
@@ -1175,6 +1264,26 @@ void CMainMenuBar::RenderImGui()
 
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+		// Plugin top-level menus — generic. Every registered emulator plugin
+		// may contribute its own top-level menu via the plugin menu API; no
+		// plugin is referenced by name here.
+		for (std::vector<CDebugInterface *>::iterator dit = viewC64->debugInterfaces.begin(); dit != viewC64->debugInterfaces.end(); dit++)
+		{
+			CDebugInterface *di = *dit;
+			if (di == NULL) continue;
+			for (std::list<CDebuggerEmulatorPlugin *>::iterator pit = di->plugins.begin(); pit != di->plugins.end(); pit++)
+			{
+				CDebuggerEmulatorPlugin *plugin = *pit;
+				if (plugin == NULL) continue;
+				const char *pluginMenuName = plugin->GetMainMenuName();
+				if (pluginMenuName != NULL && ImGui::BeginMenu(pluginMenuName))
+				{
+					plugin->RenderMainMenuImGui();
+					ImGui::EndMenu();
+				}
+			}
+		}
+
 //		if (viewC64->viewVicEditor->IsVisible())
 		if (viewC64->debugInterfaceC64->isRunning)
 		{
@@ -1194,18 +1303,29 @@ void CMainMenuBar::RenderImGui()
 		
 		if (ImGui::BeginMenu("Plugins"))
 		{
-			// TODO: generalize me
-			// TODO: add GetName to Plugin
-			if (ImGui::MenuItem("Goat Tracker"))
+			if (ImGui::MenuItem("Plugin Manager"))
 			{
-				PLUGIN_GoatTrackerInit();
-				PLUGIN_GoatTrackerSetVisible(true);
+				viewC64->viewPluginManager->SetVisible(true);
 			}
-			
-			if (ImGui::MenuItem("DNDK Trainer"))
+
+			ImGui::Separator();
+
+
+			// Generic plugin entries — driven dynamically by CPluginsManager.
+			// Each plugin renders an open/close toggle here; a plugin's own
+			// commands live in its top-level menu (see the plugin menu API).
+			for (auto &entry : gPluginsManager->entries)
 			{
-				PLUGIN_DdnkInit();
-				PLUGIN_DdnkSetVisible(true);
+				if (!entry.showInMenu)
+					continue;
+
+				if (ImGui::MenuItem(entry.displayName, nullptr, entry.isActive))
+				{
+					if (entry.isActive)
+						gPluginsManager->Deactivate(entry.name);
+					else
+						gPluginsManager->Activate(entry.name);
+				}
 			}
 
 			ImGui::EndMenu();
@@ -1213,10 +1333,23 @@ void CMainMenuBar::RenderImGui()
 		
 		if (ImGui::BeginMenu("Workspace"))
 		{
+			CDefaultWorkspaceLayouts *defaultLayouts = GetDefaultWorkspaceLayouts();
+			RenderDefaultWorkspacePlatformMenu(defaultLayouts, DefaultWorkspacePlatform_C64, "C64");
+			RenderDefaultWorkspacePlatformMenu(defaultLayouts, DefaultWorkspacePlatform_Atari800, "Atari800");
+			RenderDefaultWorkspacePlatformMenu(defaultLayouts, DefaultWorkspacePlatform_NES, "NES");
+			if (HasGeneratedDefaultWorkspaceForPlatform(defaultLayouts, DefaultWorkspacePlatform_C64)
+				|| HasGeneratedDefaultWorkspaceForPlatform(defaultLayouts, DefaultWorkspacePlatform_Atari800)
+				|| HasGeneratedDefaultWorkspaceForPlatform(defaultLayouts, DefaultWorkspacePlatform_NES))
+			{
+				ImGui::Separator();
+			}
+
 			for (std::list<CLayoutData *>::iterator it = guiMain->layoutManager->layouts.begin();
 				 it != guiMain->layoutManager->layouts.end(); it++)
 			{
 				CLayoutData *layoutData = *it;
+				if (layoutData->IsPredefined())
+					continue;
 				
 				bool isSelected = (layoutData == guiMain->layoutManager->currentLayout);
 
@@ -1252,6 +1385,58 @@ void CMainMenuBar::RenderImGui()
 			}
 			
 			ImGui::Separator();
+			if (ImGui::BeginMenu("Auto Layout"))
+			{
+				if (ImGui::MenuItem("Auto Layout (Docked - Preserve Scan)"))
+				{
+					guiMain->RequestAutoLayoutVisibleViewsDockedPreserveScan();
+				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Auto Layout"))
+				{
+					guiMain->RequestAutoLayoutVisibleViews();
+				}
+				if (ImGui::MenuItem("Auto Layout (Docked)"))
+				{
+					guiMain->RequestAutoLayoutVisibleViewsDocked();
+				}
+				if (ImGui::MenuItem("Auto Layout (Compact)"))
+				{
+					guiMain->RequestAutoLayoutVisibleViewsCompact();
+				}
+				ImGui::Separator();
+				if (ImGui::BeginMenu("Title Bars on Visible Views"))
+				{
+					if (ImGui::MenuItem("Show"))
+					{
+						guiMain->RequestAutoLayoutVisibleViewsDockedPreserveScan(AutoLayoutDockedPreserveScanTabBarMode_TabBar);
+					}
+					if (ImGui::MenuItem("Hide"))
+					{
+						guiMain->RequestAutoLayoutVisibleViewsDockedPreserveScan(AutoLayoutDockedPreserveScanTabBarMode_NoTabBar);
+					}
+					ImGui::EndMenu();
+				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Auto Layout Settings"))
+				{
+					guiMain->OpenAutoLayoutSettingsWindow();
+				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Create Default Layouts..."))
+				{
+					CDefaultWorkspaceLayouts *defaultLayouts = GetDefaultWorkspaceLayouts();
+					if (defaultLayouts != NULL)
+					{
+						defaultLayouts->SaveShortcutSlotStates(&defaultWorkspacePopupState.shortcutSlotSnapshot);
+						defaultWorkspacePopupState.hasShortcutSlotSnapshot = true;
+					}
+					openCreateDefaultLayoutsPopup = true;
+				}
+
+				ImGui::EndMenu();
+			}
+			ImGui::Separator();
 			if (ImGui::MenuItem("New Workspace..."))
 			{
 				layoutData = new CLayoutData();
@@ -1265,8 +1450,14 @@ void CMainMenuBar::RenderImGui()
 			{
 				CLayoutData *layout = guiMain->layoutManager->currentLayout;
 				guiMain->layoutManager->RemoveAndDeleteLayout(layout);
-				guiMain->layoutManager->currentLayout = NULL;
-				guiMain->layoutManager->StoreLayouts();
+				// RemoveAndDeleteLayout sets currentLayout to next available or creates Default.
+				// Restore that layout so ImGui state matches (otherwise the deleted layout's
+				// window positions would overwrite the new current on quit).
+				// StoreLayouts is called by UpdateLayouts after the restore completes.
+				if (guiMain->layoutManager->currentLayout != NULL)
+				{
+					guiMain->layoutManager->SetLayoutAsync(guiMain->layoutManager->currentLayout, false);
+				}
 				guiMain->ShowNotification("Information", "Workspace deleted");
 			}
 			
@@ -1327,7 +1518,7 @@ void CMainMenuBar::RenderImGui()
 					if (ImGui::BeginMenu("Reset C64 before PRG load"))
 					{
 						bool b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_NONE;
-						bool bp = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC;
+						bool bp = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
 						if (ImGui::MenuItem("No reset",
 											bp ? kbsAutoJmpDoReset->cstr : "", &b))
 						{
@@ -1365,39 +1556,79 @@ void CMainMenuBar::RenderImGui()
 						}
 
 						ImGui::Separator();
-						
-						bp = b;
-						b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC;
 
-						if (ImGui::MenuItem("Basic Snapshot (C64 PAL)",
+						bp = b;
+						b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
+
+						if (ImGui::MenuItem("Snapshot: C64 PAL",
 											bp ? kbsAutoJmpDoReset->cstr : "", &b))
 						{
-							c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC;
+							c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
 							C64DebuggerStoreSettings();
 						}
-						
-						/*
-						 
-						 TODO:
+
+						bp = b;
+						b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL;
+
+						if (ImGui::MenuItem("Snapshot: C64C PAL",
+											bp ? kbsAutoJmpDoReset->cstr : "", &b))
+						{
+							c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL;
+							C64DebuggerStoreSettings();
+						}
+
+						bp = b;
+						b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC;
+
+						if (ImGui::MenuItem("Snapshot: C64 NTSC",
+											bp ? kbsAutoJmpDoReset->cstr : "", &b))
+						{
+							c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC;
+							C64DebuggerStoreSettings();
+						}
+
+						bp = b;
+						b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC;
+
+						if (ImGui::MenuItem("Snapshot: C64C NTSC",
+											bp ? kbsAutoJmpDoReset->cstr : "", &b))
+						{
+							c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC;
+							C64DebuggerStoreSettings();
+						}
+
 						ImGui::Separator();
-						
+
 						bp = b;
 						b = c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM;
 
-						if (ImGui::MenuItem("Custom Snapshot (TODO)",
+						if (ImGui::MenuItem("Custom Snapshot",
 											bp ? kbsAutoJmpDoReset->cstr : "", &b))
 						{
-							c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM;
-							C64DebuggerStoreSettings();
+							if (c64SettingsPathToCustomStartupSnapshot != NULL && c64SettingsPathToCustomStartupSnapshot->GetLength() > 0)
+							{
+								c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM;
+								C64DebuggerStoreSettings();
+							}
 						}
-						
-						ImGui::MenuItem("Select snapshot file: XXXXXXX");
-						
-						static bool f = false;
-						ImGui::Checkbox("Setup Basic vectors and Drive RAM", &f);
 
-						 
-						 */
+						// Show currently selected custom snapshot filename
+						if (c64SettingsPathToCustomStartupSnapshot != NULL && c64SettingsPathToCustomStartupSnapshot->GetLength() > 0)
+						{
+							char *asciiPath = c64SettingsPathToCustomStartupSnapshot->GetStdASCII();
+							char *fname = SYS_GetFileNameWithExtensionFromFullPath(asciiPath);
+							ImGui::TextDisabled("  File: %s", fname);
+							delete [] asciiPath;
+						}
+						else
+						{
+							ImGui::TextDisabled("  No custom snapshot selected");
+						}
+
+						if (ImGui::MenuItem("Select custom snapshot file..."))
+						{
+							viewC64->mainMenuHelper->OpenDialogSelectCustomStartupSnapshot();
+						}
 
 						ImGui::EndMenu();
 					}
@@ -2041,7 +2272,176 @@ void CMainMenuBar::RenderImGui()
 						ImGui::EndMenu();
 					}
 					 */
-					
+
+					ImGui::EndMenu();
+				}
+			}
+			if (viewC64->debugInterfaceC64U)
+			{
+				if (ImGui::BeginMenu("C64 Ultimate##Settings"))
+				{
+					static char c64uHostnameBuf[256] = {0};
+					static char c64uPasswordBuf[256] = {0};
+					static char c64uLocalIPBuf[256] = {0};
+					static bool c64uBufsInitialized = false;
+					if (!c64uBufsInitialized)
+					{
+						if (c64SettingsC64UHostname)
+						{
+							char *tmp = c64SettingsC64UHostname->GetStdASCII();
+							strncpy(c64uHostnameBuf, tmp, sizeof(c64uHostnameBuf) - 1);
+							delete [] tmp;
+						}
+						if (c64SettingsC64UPassword)
+						{
+							char *tmp = c64SettingsC64UPassword->GetStdASCII();
+							strncpy(c64uPasswordBuf, tmp, sizeof(c64uPasswordBuf) - 1);
+							delete [] tmp;
+						}
+						if (c64SettingsC64ULocalIP)
+						{
+							char *tmp = c64SettingsC64ULocalIP->GetStdASCII();
+							strncpy(c64uLocalIPBuf, tmp, sizeof(c64uLocalIPBuf) - 1);
+							delete [] tmp;
+						}
+						c64uBufsInitialized = true;
+					}
+
+					if (ImGui::InputText("Hostname##C64U", c64uHostnameBuf, sizeof(c64uHostnameBuf)))
+					{
+						if (c64SettingsC64UHostname != NULL)
+							delete c64SettingsC64UHostname;
+						c64SettingsC64UHostname = new CSlrString(c64uHostnameBuf);
+						C64DebuggerStoreSettings();
+					}
+
+					int httpPort = c64SettingsC64UHttpPort;
+					if (ImGui::InputInt("HTTP Port##C64U", &httpPort))
+					{
+						c64SettingsC64UHttpPort = httpPort;
+						C64DebuggerStoreSettings();
+					}
+
+					int tcpPort = c64SettingsC64UTcpPort;
+					if (ImGui::InputInt("TCP Port##C64U", &tcpPort))
+					{
+						c64SettingsC64UTcpPort = tcpPort;
+						C64DebuggerStoreSettings();
+					}
+
+					int videoPort = c64SettingsC64UVideoPort;
+					if (ImGui::InputInt("Video Port##C64U", &videoPort))
+					{
+						c64SettingsC64UVideoPort = videoPort;
+						C64DebuggerStoreSettings();
+					}
+
+					if (ImGui::InputText("Password##C64U", c64uPasswordBuf, sizeof(c64uPasswordBuf),
+										 ImGuiInputTextFlags_Password))
+					{
+						if (c64SettingsC64UPassword != NULL)
+							delete c64SettingsC64UPassword;
+						c64SettingsC64UPassword = new CSlrString(c64uPasswordBuf);
+						C64DebuggerStoreSettings();
+					}
+
+					if (ImGui::Checkbox("Auto-connect##C64U", &c64SettingsC64UAutoConnect))
+					{
+						C64DebuggerStoreSettings();
+					}
+
+					int refreshRate = c64SettingsC64UMemoryRefreshRate;
+					if (ImGui::SliderInt("Memory Refresh Rate##C64U", &refreshRate, 1, 16))
+					{
+						c64SettingsC64UMemoryRefreshRate = refreshRate;
+						C64DebuggerStoreSettings();
+					}
+
+					if (ImGui::InputText("Local IP Override##C64U", c64uLocalIPBuf, sizeof(c64uLocalIPBuf)))
+					{
+						if (c64SettingsC64ULocalIP != NULL)
+							delete c64SettingsC64ULocalIP;
+						c64SettingsC64ULocalIP = new CSlrString(c64uLocalIPBuf);
+						C64DebuggerStoreSettings();
+					}
+
+					ImGui::Separator();
+					{
+						CDebugInterfaceC64U *c64u = (CDebugInterfaceC64U *)viewC64->debugInterfaceC64U;
+						if (c64u->GetConnectionStatus() == C64U_CONNECTION_STATUS_DISCONNECTED)
+						{
+							if (ImGui::Button("Connect##C64U"))
+								c64u->Connect();
+						}
+						else
+						{
+							if (ImGui::Button("Disconnect##C64U"))
+								c64u->Disconnect();
+						}
+						ImGui::Text("Status: %s", c64u->GetConnectionStatusString());
+					}
+
+					ImGui::Separator();
+
+					if (ImGui::Checkbox("Audio Enabled##C64U", &c64SettingsC64UAudioEnabled))
+					{
+						C64DebuggerStoreSettings();
+					}
+
+					int audioBufferMs = c64SettingsC64UAudioBufferMs;
+					if (ImGui::SliderInt("Audio Buffer (ms)##C64U", &audioBufferMs, 50, 1000))
+					{
+						c64SettingsC64UAudioBufferMs = audioBufferMs;
+						C64DebuggerStoreSettings();
+					}
+
+					if (ImGui::Checkbox("Use Multicast##C64U", &c64SettingsC64UUseMulticast))
+					{
+						C64DebuggerStoreSettings();
+					}
+
+					if (ImGui::Checkbox("Helper-assisted reads (invasive)##C64U", &c64SettingsC64UHelperAssisted))
+					{
+						C64DebuggerStoreSettings();
+					}
+
+					ImGui::SetNextItemWidth(80);
+					if (ImGui::InputInt("FTP Port##C64U", &c64SettingsC64UFtpPort))
+					{
+						C64DebuggerStoreSettings();
+					}
+
+					ImGui::SetNextItemWidth(80);
+					if (ImGui::InputInt("Telnet Port##C64U", &c64SettingsC64UTelnetPort))
+					{
+						C64DebuggerStoreSettings();
+					}
+
+					ImGui::Separator();
+
+					if (ImGui::BeginMenu("Trace Mode##C64U"))
+					{
+						int currentMode = c64SettingsC64UTraceMode;
+						if (ImGui::RadioButton("Auto##C64UTrace", &currentMode, 0)) { c64SettingsC64UTraceMode = 0; C64DebuggerStoreSettings(); }
+						if (ImGui::RadioButton("6510 Only##C64UTrace", &currentMode, 1)) { c64SettingsC64UTraceMode = 1; C64DebuggerStoreSettings(); }
+						if (ImGui::RadioButton("VIC Only##C64UTrace", &currentMode, 2)) { c64SettingsC64UTraceMode = 2; C64DebuggerStoreSettings(); }
+						if (ImGui::RadioButton("6510 & VIC##C64UTrace", &currentMode, 3)) { c64SettingsC64UTraceMode = 3; C64DebuggerStoreSettings(); }
+						if (ImGui::RadioButton("1541 Only##C64UTrace", &currentMode, 4)) { c64SettingsC64UTraceMode = 4; C64DebuggerStoreSettings(); }
+						if (ImGui::RadioButton("6510 & 1541##C64UTrace", &currentMode, 5)) { c64SettingsC64UTraceMode = 5; C64DebuggerStoreSettings(); }
+
+						ImGui::Separator();
+						CDebugInterfaceC64U *c64u = (CDebugInterfaceC64U *)viewC64->debugInterfaceC64U;
+						if (c64u->IsInTraceMode())
+						{
+							if (ImGui::Button("Enter Screen Mode##C64U")) c64u->EnterScreenMode();
+						}
+						else
+						{
+							if (ImGui::Button("Enter Trace Mode##C64U")) c64u->EnterTraceMode(c64SettingsC64UTraceMode);
+						}
+						ImGui::EndMenu();
+					}
+
 					ImGui::EndMenu();
 				}
 			}
@@ -2323,6 +2723,36 @@ void CMainMenuBar::RenderImGui()
 						if (c64SettingsDisassemblyNearLabelMaxOffset < 0)
 							c64SettingsDisassemblyNearLabelMaxOffset = 0;
 						viewC64->config->SetInt("DisassemblyNearLabelMaxOffset", &c64SettingsDisassemblyNearLabelMaxOffset);
+					}
+
+					ImGui::Separator();
+
+					if (ImGui::MenuItem("Show effective addresses", NULL, &c64SettingsDisassemblyShowEffectiveAddress))
+					{
+						viewC64->config->SetBool("DisassemblyShowEffectiveAddress", &c64SettingsDisassemblyShowEffectiveAddress);
+					}
+					if (c64SettingsDisassemblyShowEffectiveAddress)
+					{
+						if (ImGui::InputInt("EA instruction budget", &c64SettingsDisassemblyEAInstructionBudget))
+						{
+							if (c64SettingsDisassemblyEAInstructionBudget < 16)
+								c64SettingsDisassemblyEAInstructionBudget = 16;
+							if (c64SettingsDisassemblyEAInstructionBudget > 4096)
+								c64SettingsDisassemblyEAInstructionBudget = 4096;
+							viewC64->config->SetInt("DisassemblyEAInstructionBudget", &c64SettingsDisassemblyEAInstructionBudget);
+						}
+						if (ImGui::InputInt("EA JSR depth limit", &c64SettingsDisassemblyEAJsrDepthLimit))
+						{
+							if (c64SettingsDisassemblyEAJsrDepthLimit < 0)
+								c64SettingsDisassemblyEAJsrDepthLimit = 0;
+							if (c64SettingsDisassemblyEAJsrDepthLimit > 16)
+								c64SettingsDisassemblyEAJsrDepthLimit = 16;
+							viewC64->config->SetInt("DisassemblyEAJsrDepthLimit", &c64SettingsDisassemblyEAJsrDepthLimit);
+						}
+						if (ImGui::MenuItem("Hide unknown values", NULL, &c64SettingsDisassemblyEAHideUnknown))
+						{
+							viewC64->config->SetBool("DisassemblyEAHideUnknown", &c64SettingsDisassemblyEAHideUnknown);
+						}
 					}
 
 					ImGui::EndMenu();
@@ -2650,6 +3080,56 @@ void CMainMenuBar::RenderImGui()
 					viewC64->DebuggerServerWebSocketsSetPort(c64SettingsRunDebuggerServerWebSocketsPort);
 					C64DebuggerStoreSettings();
 				}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Show WS Log", "", &viewC64->viewWSLog->visible)) {}
+				ImGui::MenuItem("  Log connections", "", &viewC64->viewWSLog->logConnections);
+				ImGui::MenuItem("  Log requests", "", &viewC64->viewWSLog->logRequests);
+				ImGui::MenuItem("  Log responses", "", &viewC64->viewWSLog->logResponses);
+				ImGui::Separator();
+				if (ImGui::MenuItem("MCP Server (stdio)", "", &c64SettingsRunMCPServer))
+				{
+					if (c64SettingsRunMCPServer)
+					{
+						MCP_ServerStart();
+						guiMain->ShowNotification("Information", "MCP server started (stdin/stdout).");
+					}
+					else
+					{
+						MCP_ServerStop();
+						guiMain->ShowNotification("Information", "MCP server stopped.");
+					}
+					C64DebuggerStoreSettings();
+				}
+				if (c64SettingsRunMCPServer)
+				{
+					const char *modeNames[] = { "Alongside GUI", "Headless" };
+					if (ImGui::BeginCombo("MCP Mode", modeNames[c64SettingsMCPServerMode]))
+					{
+						for (int i = 0; i < 2; i++)
+						{
+							if (ImGui::Selectable(modeNames[i], c64SettingsMCPServerMode == i))
+							{
+								c64SettingsMCPServerMode = i;
+								C64DebuggerStoreSettings();
+							}
+						}
+						ImGui::EndCombo();
+					}
+					const char *logNames[] = { "Log to file", "Log to stderr", "Logging off" };
+					if (ImGui::BeginCombo("MCP Log Output", logNames[c64SettingsMCPLogOutput]))
+					{
+						for (int i = 0; i < 3; i++)
+						{
+							if (ImGui::Selectable(logNames[i], c64SettingsMCPLogOutput == i))
+							{
+								c64SettingsMCPLogOutput = i;
+								C64DebuggerStoreSettings();
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+
 				ImGui::EndMenu();
 			}
 			ImGui::Separator();
@@ -2849,7 +3329,56 @@ void CMainMenuBar::RenderImGui()
 			}
 			
 			ImGui::Separator();
-			
+
+			if (ImGui::BeginMenu("Camera"))
+			{
+				if (ImGui::MenuItem("Show Camera View", "", &viewC64->viewCamera->visible))
+				{
+					if (viewC64->viewCamera->visible)
+					{
+						viewC64->viewCamera->SetVisible(true);
+						guiMain->SetFocus(viewC64->viewCamera);
+					}
+					else
+					{
+						viewC64->viewCamera->SetVisible(false);
+					}
+					guiMain->StoreLayoutInSettingsAtEndOfThisFrame();
+				}
+
+				ImGui::Separator();
+
+				std::vector<CCameraDevice> &devices = viewC64->viewCamera->GetDevices();
+				int selectedIdx = viewC64->viewCamera->GetSelectedDeviceIndex();
+
+				if (devices.empty())
+				{
+					ImGui::TextDisabled("No cameras found");
+				}
+				else
+				{
+					for (int i = 0; i < (int)devices.size(); i++)
+					{
+						bool isSelected = (i == selectedIdx);
+						if (ImGui::MenuItem(devices[i].name, "", &isSelected))
+						{
+							viewC64->viewCamera->SelectDevice(i);
+							guiMain->StoreLayoutInSettingsAtEndOfThisFrame();
+						}
+					}
+				}
+
+				ImGui::Separator();
+				if (ImGui::MenuItem("Refresh devices"))
+				{
+					viewC64->viewCamera->RefreshDeviceList();
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::Separator();
+
 			if (ImGui::BeginMenu("Audio"))
 			{
 				bool isVisibleAudioMixer = viewC64->viewAudioMixer->visible;
@@ -3019,7 +3548,7 @@ void CMainMenuBar::RenderImGui()
 		{
 			ImGui::Begin("Retro Debugger v" RETRODEBUGGER_VERSION_STRING " About", &show_retro_debugger_about);
 			ImGui::Text("Retro Debugger is a multiplatform debugger APIs host with ImGui implementation.");
-			ImGui::Text("(C) 2016-2025 Marcin 'slajerek' Skoczylas, see README for libraries copyright.");
+			ImGui::Text("(C) 2016-2026 Marcin 'slajerek' Skoczylas, see README for libraries copyright.");
 			ImGui::Separator();
 			ImGui::Text("");
 			ImGui::Text("If you like this tool and you feel that you would like to share with me some beers,");
@@ -3028,7 +3557,7 @@ void CMainMenuBar::RenderImGui()
 			ImGui::TextURL("http://tinyurl.com/C64Debugger-PayPal", "https://www.paypal.com/donate/?business=7CQZJRKL9BXPL&no_recurring=0&item_name=For+the+Retro+Debugger&currency_code=EUR", true, false);
 			ImGui::Text("");
 			ImGui::Separator();
-			ImGui::Text("                            Built for %s %s", SYS_GetPlatformNameString(), SYS_GetPlatformArchitectureString());
+			ImGui::Text("                            Built for %s %s, %s", SYS_GetPlatformNameString(), SYS_GetPlatformArchitectureString(), SYS_GetCompilerNameString());
 
 			for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 			{
@@ -3079,6 +3608,190 @@ void CMainMenuBar::RenderImGui()
 		message[0] = 0x00;
 		doNotUpdateViewsPosition = false;
 		ImGui::OpenPopup("New Workspace");
+	}
+
+	if (openCreateDefaultLayoutsPopup)
+	{
+		ImGui::OpenPopup("Create Default Layouts");
+	}
+	if (guiMain != NULL && defaultWorkspacePopupState.ConsumeKeyboardCallbackRemovalRequest())
+	{
+		guiMain->RemoveGlobalKeyboardCallback(this);
+	}
+
+	if (ImGui::BeginPopupModal("Create Default Layouts", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Checkbox("Locked default layouts", &defaultWorkspacePopupState.lockedDefaultLayouts);
+		ImGui::Checkbox("Create context shortcuts", &defaultWorkspacePopupState.createContextShortcuts);
+		ImGui::Checkbox("No tab bars in generated layouts", &defaultWorkspacePopupState.noTabBarsInGeneratedLayouts);
+		if (defaultWorkspacePopupState.capturingShortcutSlot != (EDefaultWorkspaceSlot)0)
+		{
+			ImGui::Text("Press shortcut for slot %d", (int)defaultWorkspacePopupState.capturingShortcutSlot);
+		}
+
+		CDefaultWorkspaceLayouts *defaultLayouts = GetDefaultWorkspaceLayouts();
+		if (defaultLayouts == NULL)
+		{
+			ImGui::TextUnformatted("Default workspace layouts are not available yet");
+			if (ImGui::Button("Cancel"))
+			{
+				ClearDefaultWorkspacePopupSnapshot();
+				ImGui::CloseCurrentPopup();
+			}
+			openCreateDefaultLayoutsPopup = false;
+			ImGui::EndPopup();
+			return;
+		}
+		const std::vector<SDefaultWorkspaceShortcutSlotSpec> &shortcutSpecs = GetDefaultWorkspaceShortcutSlotSpecs();
+		ImGui::Separator();
+		const ImGuiStyle &style = ImGui::GetStyle();
+		float slotColumnWidth = ImGui::CalcTextSize("Slot").x;
+		float roleColumnWidth = ImGui::CalcTextSize("Layout Role").x;
+		float defaultShortcutColumnWidth = ImGui::CalcTextSize("Default Shortcut").x;
+		float assignedShortcutColumnWidth = ImGui::CalcTextSize("Assigned Shortcut").x;
+		float statusColumnWidth = ImGui::CalcTextSize("Status").x;
+		for (std::vector<SDefaultWorkspaceShortcutSlotSpec>::const_iterator it = shortcutSpecs.begin(); it != shortcutSpecs.end(); ++it)
+		{
+			slotColumnWidth = ImMax(slotColumnWidth, ImGui::CalcTextSize("99").x);
+			roleColumnWidth = ImMax(roleColumnWidth, ImGui::CalcTextSize(it->roleName).x + style.FramePadding.x * 2.0f);
+			defaultShortcutColumnWidth = ImMax(defaultShortcutColumnWidth, ImGui::CalcTextSize(it->defaultShortcutLabel).x);
+			assignedShortcutColumnWidth = ImMax(assignedShortcutColumnWidth, ImGui::CalcTextSize(defaultWorkspacePopupState.createContextShortcuts ? defaultLayouts->GetShortcutLabel(it->slot) : "").x);
+			statusColumnWidth = ImMax(statusColumnWidth, ImGui::CalcTextSize(defaultWorkspacePopupState.createContextShortcuts ? defaultLayouts->GetShortcutStatus(it->slot) : "Disabled").x);
+		}
+		float actionsColumnWidth = ImGui::CalcTextSize("Set...").x + ImGui::CalcTextSize("Clear").x + style.FramePadding.x * 4.0f + style.ItemSpacing.x;
+		ImGuiTableFlags shortcutTableFlags = ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuter
+			| ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX
+			| ImGuiTableFlags_NoSavedSettings;
+		if (ImGui::BeginTable("##DefaultWorkspaceShortcutSlots", 6, shortcutTableFlags))
+		{
+			ImGui::TableSetupColumn("Slot", ImGuiTableColumnFlags_WidthFixed, slotColumnWidth);
+			ImGui::TableSetupColumn("Layout Role", ImGuiTableColumnFlags_WidthFixed, roleColumnWidth);
+			ImGui::TableSetupColumn("Default Shortcut", ImGuiTableColumnFlags_WidthFixed, defaultShortcutColumnWidth);
+			ImGui::TableSetupColumn("Assigned Shortcut", ImGuiTableColumnFlags_WidthFixed, assignedShortcutColumnWidth);
+			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, statusColumnWidth);
+			ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, actionsColumnWidth);
+			ImGui::TableHeadersRow();
+
+			for (std::vector<SDefaultWorkspaceShortcutSlotSpec>::const_iterator it = shortcutSpecs.begin(); it != shortcutSpecs.end(); ++it)
+			{
+				bool useScopedActionIds = it != shortcutSpecs.begin();
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("%2d", (int)it->slot);
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SmallButton(it->roleName);
+				ImGui::TableSetColumnIndex(2);
+				ImGui::TextUnformatted(it->defaultShortcutLabel);
+				ImGui::TableSetColumnIndex(3);
+				ImGui::TextUnformatted(defaultWorkspacePopupState.createContextShortcuts ? defaultLayouts->GetShortcutLabel(it->slot) : "");
+				ImGui::TableSetColumnIndex(4);
+				ImGui::TextUnformatted(defaultWorkspacePopupState.createContextShortcuts ? defaultLayouts->GetShortcutStatus(it->slot) : "Disabled");
+				ImGui::TableSetColumnIndex(5);
+				if (useScopedActionIds)
+					ImGui::PushID((int)it->slot);
+				if (ImGui::SmallButton("Set..."))
+				{
+					defaultWorkspacePopupState.StartShortcutCapture(it->slot);
+					guiMain->AddGlobalKeyboardCallback(this);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Clear"))
+				{
+					defaultLayouts->ClearShortcutSlot(guiMain->keyboardShortcuts, it->slot);
+					if (defaultWorkspacePopupState.capturingShortcutSlot == it->slot)
+					{
+						defaultWorkspacePopupState.StopShortcutCapture(true);
+						if (guiMain != NULL && defaultWorkspacePopupState.ConsumeKeyboardCallbackRemovalRequest())
+						{
+							guiMain->RemoveGlobalKeyboardCallback(this);
+						}
+					}
+				}
+				if (useScopedActionIds)
+					ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+		ImGui::Separator();
+
+		if (ImGui::Button("Reset to defaults"))
+		{
+			if (defaultWorkspacePopupState.capturingShortcutSlot != (EDefaultWorkspaceSlot)0)
+			{
+				defaultWorkspacePopupState.StopShortcutCapture(true);
+				if (guiMain != NULL && defaultWorkspacePopupState.ConsumeKeyboardCallbackRemovalRequest())
+				{
+					guiMain->RemoveGlobalKeyboardCallback(this);
+				}
+			}
+			std::vector<SDefaultWorkspaceShortcutSlotSnapshot> shortcutSlotSnapshot = defaultWorkspacePopupState.shortcutSlotSnapshot;
+			bool hasShortcutSlotSnapshot = defaultWorkspacePopupState.hasShortcutSlotSnapshot;
+			defaultWorkspacePopupState = SDefaultWorkspacePopupState();
+			defaultWorkspacePopupState.shortcutSlotSnapshot = shortcutSlotSnapshot;
+			defaultWorkspacePopupState.hasShortcutSlotSnapshot = hasShortcutSlotSnapshot;
+			defaultLayouts->ResetShortcutSlotsToDefaults(guiMain->keyboardShortcuts);
+		}
+
+		float cancelButtonWidth = ImGui::CalcTextSize("Cancel").x + style.FramePadding.x * 2.0f;
+		float createButtonWidth = ImGui::CalcTextSize("Create").x + style.FramePadding.x * 2.0f;
+		float rightButtonGroupWidth = cancelButtonWidth + style.ItemSpacing.x + createButtonWidth;
+		float rightButtonGroupX = ImGui::GetWindowContentRegionMax().x - rightButtonGroupWidth;
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(ImMax(ImGui::GetCursorPosX(), rightButtonGroupX));
+		if (ImGui::Button("Cancel"))
+		{
+			if (defaultWorkspacePopupState.capturingShortcutSlot != (EDefaultWorkspaceSlot)0)
+			{
+				defaultWorkspacePopupState.StopShortcutCapture(true);
+				if (guiMain != NULL && defaultWorkspacePopupState.ConsumeKeyboardCallbackRemovalRequest())
+				{
+					guiMain->RemoveGlobalKeyboardCallback(this);
+				}
+			}
+			if (defaultWorkspacePopupState.hasShortcutSlotSnapshot)
+			{
+				defaultLayouts->RestoreShortcutSlotStates(guiMain->keyboardShortcuts, defaultWorkspacePopupState.shortcutSlotSnapshot);
+				ClearDefaultWorkspacePopupSnapshot();
+			}
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Create"))
+		{
+			if (defaultWorkspacePopupState.capturingShortcutSlot != (EDefaultWorkspaceSlot)0)
+			{
+				defaultWorkspacePopupState.StopShortcutCapture(true);
+				if (guiMain != NULL && defaultWorkspacePopupState.ConsumeKeyboardCallbackRemovalRequest())
+				{
+					guiMain->RemoveGlobalKeyboardCallback(this);
+				}
+			}
+			if (defaultWorkspacePopupState.createContextShortcuts)
+			{
+				defaultLayouts->RegisterDefaultShortcutSlots(guiMain->keyboardShortcuts);
+			}
+			else
+			{
+				defaultLayouts->ClearAllShortcutSlots(guiMain->keyboardShortcuts);
+			}
+			if (gApplicationDefaultConfig != NULL)
+			{
+				defaultLayouts->SaveShortcutSlotSettings(gApplicationDefaultConfig, defaultWorkspacePopupState.createContextShortcuts);
+			}
+			ClearDefaultWorkspacePopupSnapshot();
+			defaultLayouts->BeginDefaultWorkspaceGeneration(defaultWorkspacePopupState.lockedDefaultLayouts, defaultWorkspacePopupState.noTabBarsInGeneratedLayouts);
+			guiMain->ShowNotification("Information", "Generating default workspaces...");
+			ImGui::CloseCurrentPopup();
+		}
+
+		openCreateDefaultLayoutsPopup = false;
+		ImGui::EndPopup();
+	}
+
+	CDefaultWorkspaceLayouts *defaultLayoutsForGeneration = GetDefaultWorkspaceLayouts();
+	if (defaultLayoutsForGeneration != NULL && defaultLayoutsForGeneration->IsGeneratingDefaultWorkspaces())
+	{
+		defaultLayoutsForGeneration->UpdateDefaultWorkspaceGenerationFrame();
 	}
 	
 	if (ImGui::BeginPopupModal("New Workspace", NULL, ImGuiWindowFlags_AlwaysAutoResize)) //waitingForNewLayoutKeyShortcut ? ImGuiWindowFlags_NoResize : ImGuiWindowFlags_AlwaysAutoResize))
@@ -3181,10 +3894,41 @@ void CMainMenuBar::RenderImGui()
 		ImGui::EndPopup();
 	}
 
+	// Render Renoise import modal (if open)
+	if (pluginGoatTracker && pluginGoatTracker->viewRenoiseImport)
+	{
+		pluginGoatTracker->viewRenoiseImport->RenderImGui();
+	}
+
+	// Render GoatTracker export dialog (if open)
+	if (pluginGoatTracker)
+	{
+		pluginGoatTracker->RenderExportDialog();
+	}
 }
 
 void CMainMenuBar::GlobalPreKeyDownCallback(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper)
 {
+	if (defaultWorkspacePopupState.capturingShortcutSlot != (EDefaultWorkspaceSlot)0)
+	{
+		if (SYS_IsKeyCodeSpecial(keyCode))
+			return;
+
+		CDefaultWorkspaceLayouts *defaultLayouts = GetDefaultWorkspaceLayouts();
+		if (defaultLayouts != NULL)
+		{
+			defaultLayouts->AssignShortcutSlot(guiMain->keyboardShortcuts,
+												 defaultWorkspacePopupState.capturingShortcutSlot,
+												 keyCode,
+												 isShift,
+												 isAlt,
+												 isControl,
+												 isSuper);
+		}
+		defaultWorkspacePopupState.StopShortcutCapture(true);
+		return;
+	}
+
 	if (waitingForNewLayoutKeyShortcut)
 	{
 		if (SYS_IsKeyCodeSpecial(keyCode))
@@ -3245,7 +3989,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 	
 	if (shortcut == kbsOpenFile)
 	{
-		viewC64->mainMenuHelper->OpenDialogOpenFile();
+		if (!viewC64->HandleOpenFileShortcutFromPlugins())
+			viewC64->mainMenuHelper->OpenDialogOpenFile(true, true);
 		return true;
 	}
 	
@@ -3266,11 +4011,11 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 	}
 	if (shortcut == kbsDetachExecutable)
 	{
-		if (viewC64->debugInterfaceC64->isRunning)
+		if (viewC64->debugInterfaceC64 && viewC64->debugInterfaceC64->isRunning)
 		{
 			DetachC64PRG(true);
 		}
-		if (viewC64->debugInterfaceAtari->isRunning)
+		if (viewC64->debugInterfaceAtari && viewC64->debugInterfaceAtari->isRunning)
 		{
 			DetachAtariXEX(true);
 		}
@@ -3279,7 +4024,10 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 
 	if (shortcut == kbsCartridgeFreezeButton)
 	{
-		viewC64->debugInterfaceC64->CartridgeFreezeButtonPressed();
+		if (viewC64->debugInterfaceC64 && viewC64->debugInterfaceC64->isRunning)
+		{
+			viewC64->debugInterfaceC64->CartridgeFreezeButtonPressed();
+		}
 		return true;
 	}
 
@@ -3551,6 +4299,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->snapshotsManager->isPerformingSnapshotRestore == false)
 			{
 				debugInterface->snapshotsManager->RestoreSnapshotByNumFramesOffset(-1);
@@ -3566,7 +4316,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
-
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->snapshotsManager->isPerformingSnapshotRestore == false)
 			{
 				debugInterface->snapshotsManager->RestoreSnapshotByNumFramesOffset(+1);
@@ -3583,7 +4334,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
-
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->snapshotsManager->isPerformingSnapshotRestore == false)
 			{
 				float emulationFPS = debugInterface->GetEmulationFPS();
@@ -3600,6 +4352,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->snapshotsManager->isPerformingSnapshotRestore == false)
 			{
 				float emulationFPS = debugInterface->GetEmulationFPS();
@@ -3619,6 +4373,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->snapshotsManager->isPerformingSnapshotRestore == false)
 			{
 				debugInterface->snapshotsManager->RestoreSnapshotByNumFramesOffset(-scrubNumberOfFrames);
@@ -3627,7 +4383,7 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		guiMain->UnlockMutex();
 		return true;
 	}
-	
+
 	if (shortcut == kbsScrubEmulationForwardMultipleFrames)
 	{
 		int scrubNumberOfFrames = 10;
@@ -3637,6 +4393,8 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->snapshotsManager->isPerformingSnapshotRestore == false)
 			{
 				float emulationFPS = debugInterface->GetEmulationFPS();
@@ -3695,7 +4453,10 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 
 	else if (shortcut == kbsDiskDriveReset)
 	{
-		viewC64->debugInterfaceC64->DiskDriveReset();
+		if (viewC64->debugInterfaceC64 && viewC64->debugInterfaceC64->isRunning)
+		{
+			viewC64->debugInterfaceC64->DiskDriveReset();
+		}
 		return true;
 	}
 	else if (shortcut == kbsResetSoft)
@@ -3732,11 +4493,13 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 	{
 		int numCycles = 10;
 		gApplicationDefaultConfig->GetInt("StepNumberOfCycles", &numCycles, 10);
-		
+
 		guiMain->LockMutex();
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->GetDebugMode() == DEBUGGER_MODE_RUNNING
 				&& !debugInterface->snapshotsManager->IsPerformingSnapshotRestore())
 			{
@@ -3754,11 +4517,13 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 	{
 		int numCycles = 10;
 		gApplicationDefaultConfig->GetInt("StepNumberOfCycles", &numCycles, 10);
-		
+
 		guiMain->LockMutex();
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			if (debugInterface->GetDebugMode() == DEBUGGER_MODE_RUNNING
 				&& !debugInterface->snapshotsManager->IsPerformingSnapshotRestore())
 			{
@@ -3788,20 +4553,30 @@ bool CMainMenuBar::ProcessKeyboardShortcut(u32 zone, u8 actionType, CSlrKeyboard
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			CViewTimeline *viewTimeline = debugInterface->GetViewTimeline();
+			if (viewTimeline == NULL)
+				continue;
 			int enteredGoToFrameNum = viewTimeline->enteredGoToFrameNum;
 			debugInterface->snapshotsManager->RestoreSnapshotByFrame(enteredGoToFrameNum);
 		}
+		return true;
 	}
 	else if (shortcut == kbsGoToCycle)
 	{
 		for (std::vector<CDebugInterface *>::iterator it = viewC64->debugInterfaces.begin(); it != viewC64->debugInterfaces.end(); it++)
 		{
 			CDebugInterface *debugInterface = *it;
+			if (!debugInterface->isRunning || debugInterface->snapshotsManager == NULL)
+				continue;
 			CViewTimeline *viewTimeline = debugInterface->GetViewTimeline();
+			if (viewTimeline == NULL)
+				continue;
 			int enteredGoToCycleNum = viewTimeline->enteredGoToCycleNum;
 			debugInterface->snapshotsManager->RestoreSnapshotByCycle(enteredGoToCycleNum);
 		}
+		return true;
 	}
 
 	else if (shortcut == kbsIsDataDirectlyFromRam)
@@ -4032,10 +4807,21 @@ void CMainMenuBar::ToggleAutoJmpAlwaysToLoadedPRGAddress()
 
 void CMainMenuBar::ToggleAutoJmpDoReset()
 {
+	// Cycle: None -> Soft -> Hard -> C64 PAL -> C64C PAL -> C64 NTSC -> C64C NTSC -> Custom (if set) -> None
 	c64SettingsAutoJmpDoReset++;
-	if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_END_OF_ENUM)
+
+	// Skip Custom if no custom file is set
+	if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM)
+	{
+		if (c64SettingsPathToCustomStartupSnapshot == NULL || c64SettingsPathToCustomStartupSnapshot->GetLength() == 0)
+		{
+			c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_NONE; // wrap around
+		}
+	}
+
+	if (c64SettingsAutoJmpDoReset >= MACHINE_LOADPRG_RESET_MODE_END_OF_ENUM)
 		c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_NONE;
-	
+
 	if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_NONE)
 	{
 		viewC64->ShowMessageInfo("Do not Reset before PRG load");
@@ -4048,13 +4834,25 @@ void CMainMenuBar::ToggleAutoJmpDoReset()
 	{
 		viewC64->ShowMessageInfo("Hard Reset before PRG load");
 	}
-	else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC)
+	else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL)
 	{
-		viewC64->ShowMessageInfo("Load Basic snapshot before PRG load");
+		viewC64->ShowMessageInfo("Snapshot: C64 PAL before PRG load");
+	}
+	else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL)
+	{
+		viewC64->ShowMessageInfo("Snapshot: C64C PAL before PRG load");
+	}
+	else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC)
+	{
+		viewC64->ShowMessageInfo("Snapshot: C64 NTSC before PRG load");
+	}
+	else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC)
+	{
+		viewC64->ShowMessageInfo("Snapshot: C64C NTSC before PRG load");
 	}
 	else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM)
 	{
-		viewC64->ShowMessageInfo("Load Custom snapshot before PRG load");
+		viewC64->ShowMessageInfo("Custom Snapshot before PRG load");
 	}
 }
 
@@ -4333,8 +5131,10 @@ void CMainMenuBar::DetachC64PRG(bool showMessage)
 	viewC64->debugInterfaceC64->ClearDebugMarkers();
 	viewC64->debugInterfaceC64->ResetHard();
 
+	guiMain->UnlockMutex();
+
 	C64DebuggerStoreSettings();
-	
+
 	if (showMessage)
 	{
 		viewC64->ShowMessageInfo("C64 PRG detached");
@@ -4355,8 +5155,10 @@ void CMainMenuBar::DetachAtariXEX(bool showMessage)
 	viewC64->debugInterfaceAtari->ClearDebugMarkers();
 	viewC64->debugInterfaceAtari->ResetHard();
 
+	guiMain->UnlockMutex();
+
 	C64DebuggerStoreSettings();
-	
+
 	if (showMessage)
 	{
 		viewC64->ShowMessageInfo("Atari XEX detached");
@@ -4859,4 +5661,3 @@ void CMainMenuBar::GuiViewSearchCompleted(u32 index)
 	viewSearchWindow->SetVisible(false);
 	guiMain->UnlockMutex();
 }
-

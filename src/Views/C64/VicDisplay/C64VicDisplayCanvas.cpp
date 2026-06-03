@@ -310,7 +310,24 @@ void C64VicDisplayCanvas::RenderCycleInfo()
 		if (cy + fs * 4.0f < 0 || cy > vicDisplay->sizeY)
 			continue;
 
-		for (int vicCycle = 0; vicCycle < 63; vicCycle++)
+		// Compute visible cycle range to avoid iterating all 63 cycles
+		// cx = baseX + (vicCycle * 8 - 0x88) * sfX
+		// Visible when: cx >= -fs2 && cx < vicDisplay->sizeX
+		// Solve for vicCycle:
+		//   vicCycle >= ((-fs2 - baseX) / sfX + 0x88) / 8
+		//   vicCycle <  ((vicDisplay->sizeX - baseX) / sfX + 0x88) / 8
+		int startCycle = 0;
+		int endCycle = 63;
+		if (sfX > 0)
+		{
+			startCycle = (int)((-fs2 - baseX) / sfX + 0x88) / 8;
+			endCycle = (int)((vicDisplay->sizeX - baseX) / sfX + 0x88) / 8 + 1;
+			if (startCycle < 0) startCycle = 0;
+			if (endCycle > 63) endCycle = 63;
+			if (startCycle >= endCycle) continue;  // entire line off-screen horizontally
+		}
+
+		for (int vicCycle = startCycle; vicCycle < endCycle; vicCycle++)
 		{
 			float cx = baseX + (float)(vicCycle * 8 - 0x88) * sfX;
 

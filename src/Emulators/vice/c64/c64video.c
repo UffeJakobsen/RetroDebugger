@@ -35,8 +35,6 @@
 
 void machine_video_init(void)
 {
-    video_render_2x2_init();
-    video_render_pal_init();
 }
 
 int machine_video_resources_init(void)

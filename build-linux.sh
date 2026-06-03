@@ -1,18 +1,26 @@
 #!/bin/bash
+set -e
+
 CURRENT_DIR=`pwd`
 
 # MTEngineSDL
 cd $CURRENT_DIR/../
 if [ ! -d "MTEngineSDL" ]; then
 	echo -e "\e[94mCloning \e[31mMTEngineSDL \e[94mlibrary repository\e[0m"
-	git clone https://github.com/slajerek/MTEngineSDL.git
+	git clone --recursive https://github.com/slajerek/MTEngineSDL.git
 	echo -e ""
+else
+	cd MTEngineSDL
+	git submodule update --init --recursive
+	cd ..
 fi
 
 echo -e "\e[94mCompiling \e[31mMTEngineSDL \e[94mlibrary\e[0m"
 mkdir -p $CURRENT_DIR/../MTEngineSDL/build
 cd $CURRENT_DIR/../MTEngineSDL/build
-cmake ../
+if [ ! -f CMakeCache.txt ]; then
+	cmake ../ -DMT_ENABLE_MBEDTLS=OFF ${CMAKE_EXTRA_ARGS}
+fi
 make -j$(nproc) MTEngineSDL
 
 # uSockets
@@ -32,11 +40,9 @@ cp -f uSockets.a $CURRENT_DIR/../MTEngineSDL/platform/Linux/libs/
 echo -e "\n\e[94mCompiling \e[31mRetroDebugger\e[0m"
 mkdir -p $CURRENT_DIR/build
 cd $CURRENT_DIR/build
-cmake ../
+if [ ! -f CMakeCache.txt ]; then
+	cmake ../
+fi
 make -j$(nproc) retrodebugger
 
-if [ -f "$CURRENT_DIR/build/retrodebugger" ]; then
-	echo -e "\n\e[1;92mRetroDebugger compiled successfully. Binary is in ./build folder.\e[0m"
-else
-	echo -e "\n\e[1;91mFailed to build RetroDebugger.\e[0m"
-fi 
+echo -e "\n\e[1;92mRetroDebugger compiled successfully. Binary is in ./build folder.\e[0m"

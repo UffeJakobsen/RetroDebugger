@@ -105,6 +105,19 @@ const char *find_symref(const char *symbol, struct expr **expp);
 
 void symbol_dump_resolved(int level, const char *symbol);
 
+/* Phase 7G diagnostic — look up a resolved symbol value (e.g. label
+ * address after assembly). Returns 0 on success and writes the value
+ * into *out; returns -1 if the symbol is not found or has no value.
+ * Valid only between output_atoms() and parse_free() — caller must
+ * register a hook via gt2_post_output_hook to query it. */
+int assemble_get_symbol(const char *symbol, int *out);
+
+/* Optional callback fired by assemble() AFTER output_atoms() emits
+ * the binary but BEFORE parse_free() tears down the symbol table.
+ * Set to NULL to disable. The hook can call assemble_get_symbol()
+ * to capture label addresses for later diagnostic use. */
+extern void (*gt2_post_output_hook)(void);
+
 void gtnew_label(const char *label);
 void set_org(struct expr *arg);
 void push_if_state(struct expr *arg);

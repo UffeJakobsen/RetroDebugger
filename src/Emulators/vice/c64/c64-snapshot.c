@@ -65,7 +65,7 @@ int c64_snapshot_write(const char *name, int save_roms, int save_disks, int even
 
 	LOGD("c64_snapshot_write: name=%s save_roms=%d save_disks=%d event_mode=%d save_reu_data=%d save_cart_roms=%d save_screen=%d", name, save_roms, save_disks, event_mode, save_reu_data, save_cart_roms, save_screen);
 
-    s = snapshot_create(name, ((BYTE)(SNAP_MAJOR)), ((BYTE)(SNAP_MINOR)), machine_get_name(), 0);
+    s = snapshot_create(name, ((uint8_t)(SNAP_MAJOR)), ((uint8_t)(SNAP_MINOR)), machine_get_name(), 0);
     if (s == NULL) {
         return -1;
     }
@@ -106,7 +106,7 @@ int c64_snapshot_write_in_memory(int save_chips, int save_roms, int save_disks, 
 {
 	snapshot_t *s;
 	
-	s = snapshot_create_in_memory( ((BYTE)(SNAP_MAJOR)), ((BYTE)(SNAP_MINOR)), machine_get_name(), 0);
+	s = snapshot_create_in_memory( ((uint8_t)(SNAP_MAJOR)), ((uint8_t)(SNAP_MINOR)), machine_get_name(), 0);
 	if (s == NULL) {
 		return -1;
 	}
@@ -186,7 +186,7 @@ int c64_snapshot_write_in_memory(int save_chips, int save_roms, int save_disks, 
 int c64_snapshot_read(const char *name, int event_mode, int read_roms, int read_disks, int read_reu_data, int read_cart_roms)
 {
     snapshot_t *s;
-    BYTE minor, major;
+    uint8_t minor, major;
 
     s = snapshot_open(name, &major, &minor, machine_get_name());
     if (s == NULL) {
@@ -233,7 +233,7 @@ fail:
         snapshot_close(s);
     }
 
-    machine_trigger_reset(MACHINE_RESET_MODE_SOFT);
+    machine_trigger_reset(MACHINE_RESET_MODE_RESET_CPU);
 
     return -1;
 }
@@ -242,7 +242,7 @@ int c64_snapshot_read_from_memory(int read_chips, int read_roms, int read_disks,
 								  unsigned char *snapshot_data, int snapshot_size)
 {
 	snapshot_t *s;
-	BYTE minor, major;
+	uint8_t minor, major;
 	
 	s = snapshot_open_from_memory(&major, &minor, machine_get_name(), snapshot_data, snapshot_size);
 	if (s == NULL) {
@@ -289,7 +289,7 @@ fail:
 		snapshot_close(s);
 	}
 	
-	machine_trigger_reset(MACHINE_RESET_MODE_SOFT);
+	machine_trigger_reset(MACHINE_RESET_MODE_RESET_CPU);
 	
 	return -1;
 }

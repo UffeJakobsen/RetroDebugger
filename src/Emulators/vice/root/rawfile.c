@@ -27,14 +27,23 @@
 #include "vice.h"
 
 #include <stdio.h>
+#include <sys/types.h>
 
 #include "archdep.h"
 #include "fileio.h"
 #include "ioutil.h"
 #include "lib.h"
+#include "log.h"
 #include "rawfile.h"
 #include "util.h"
 
+/* #define DEBUGRAWFILE */
+
+#ifdef DEBUGRAWFILE
+#define DBG(x)  log_printf x
+#else
+#define DBG(x)
+#endif
 
 struct rawfile_info_s {
     FILE *fd;
@@ -55,7 +64,7 @@ rawfile_info_t *rawfile_open(const char *file_name, const char *path,
     unsigned int isdir, len;
 
     if (path == NULL) {
-        complete = lib_stralloc(file_name);
+        complete = lib_strdup(file_name);
     } else {
         complete = util_concat(path, FSDEV_DIR_SEP_STR, file_name, NULL);
     }
@@ -65,7 +74,11 @@ rawfile_info_t *rawfile_open(const char *file_name, const char *path,
         case FILEIO_COMMAND_READ:
             mode = MODE_READ;
             break;
+        case FILEIO_COMMAND_READ_WRITE:
+            mode = MODE_READ_WRITE;
+            break;
         case FILEIO_COMMAND_WRITE:
+        case FILEIO_COMMAND_OVERWRITE:
             mode = MODE_WRITE;
             break;
         case FILEIO_COMMAND_APPEND:
@@ -121,7 +134,7 @@ void rawfile_destroy(rawfile_info_t *info)
     }
 }
 
-unsigned int rawfile_read(rawfile_info_t *info, BYTE *buf, unsigned int len)
+unsigned int rawfile_read(rawfile_info_t *info, uint8_t *buf, unsigned int len)
 {
     if (info->fd) {
         return (unsigned int)fread(buf, 1, len, info->fd);
@@ -129,7 +142,7 @@ unsigned int rawfile_read(rawfile_info_t *info, BYTE *buf, unsigned int len)
     return -1;
 }
 
-unsigned int rawfile_write(rawfile_info_t *info, BYTE *buf, unsigned int len)
+unsigned int rawfile_write(rawfile_info_t *info, uint8_t *buf, unsigned int len)
 {
     if (info->fd) {
         return (unsigned int)fwrite(buf, 1, len, info->fd);
@@ -137,9 +150,14 @@ unsigned int rawfile_write(rawfile_info_t *info, BYTE *buf, unsigned int len)
     return -1;
 }
 
-int rawfile_seek_set(rawfile_info_t *info, int offset)
+unsigned int rawfile_seek(rawfile_info_t *info, off_t offset, int whence)
 {
-    return fseek(info->fd, offset, SEEK_SET);
+    return fseek(info->fd, offset, whence);
+}
+
+unsigned int rawfile_tell(rawfile_info_t *info)
+{
+    return (unsigned int)ftell(info->fd);
 }
 
 unsigned int rawfile_get_bytes_left(struct rawfile_info_s *info)
@@ -164,8 +182,8 @@ unsigned int rawfile_rename(const char *src_name, const char *dst_name,
     int rc;
 
     if (path == NULL) {
-        complete_src = lib_stralloc(src_name);
-        complete_dst = lib_stralloc(dst_name);
+        complete_src = lib_strdup(src_name);
+        complete_dst = lib_strdup(dst_name);
     } else {
         complete_src = util_concat(path, FSDEV_DIR_SEP_STR, src_name, NULL);
         complete_dst = util_concat(path, FSDEV_DIR_SEP_STR, dst_name, NULL);
@@ -193,7 +211,7 @@ unsigned int rawfile_remove(const char *src_name, const char *path)
     int rc;
 
     if (path == NULL) {
-        complete_src = lib_stralloc(src_name);
+        complete_src = lib_strdup(src_name);
     } else {
         complete_src = util_concat(path, FSDEV_DIR_SEP_STR, src_name, NULL);
     }

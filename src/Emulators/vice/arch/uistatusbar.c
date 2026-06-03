@@ -65,12 +65,12 @@ static menufont_t *menufont = NULL;
 static int pitch;
 static int draw_offset;
 
-static inline void uistatusbar_putchar(BYTE c, int pos_x, int pos_y, BYTE color_f, BYTE color_b)
+static inline void uistatusbar_putchar(uint8_t c, int pos_x, int pos_y, uint8_t color_f, uint8_t color_b)
 {
     int x, y;
-    BYTE fontchar;
-    BYTE *font_pos;
-    BYTE *draw_pos;
+    uint8_t fontchar;
+    uint8_t *font_pos;
+    uint8_t *draw_pos;
 
     font_pos = &(menufont->font[menufont->translate[(int)c]]);
     draw_pos = &(sdl_active_canvas->draw_buffer->draw_buffer[pos_x * menufont->w + pos_y * menufont->h * pitch]);
@@ -247,28 +247,28 @@ void ui_display_drive_current_image(unsigned int drive_number, const char *image
 
 /* Tape related UI */
 
-void ui_set_tape_status(int tape_status)
+void ui_set_tape_status(int port, int tape_status)
 {
     tape_enabled = tape_status;
 
     display_tape();
 }
 
-void ui_display_tape_motor_status(int motor)
+void ui_display_tape_motor_status(int port, int motor)
 {
     tape_motor = motor;
 
     display_tape();
 }
 
-void ui_display_tape_control_status(int control)
+void ui_display_tape_control_status(int port, int control)
 {
     tape_control = control;
 
     display_tape();
 }
 
-void ui_display_tape_counter(int counter)
+void ui_display_tape_counter(int port, int counter)
 {
     if (tape_counter != counter) {
         display_tape();
@@ -277,11 +277,41 @@ void ui_display_tape_counter(int counter)
     tape_counter = counter;
 }
 
-void ui_display_tape_current_image(const char *image)
+void ui_display_tape_current_image(int port, const char *image)
 {
 #ifdef SDL_DEBUG
-    fprintf(stderr, "%s: %s\n", __func__, image);
+    fprintf(stderr, "%s: port=%d %s\n", __func__, port, image);
 #endif
+}
+
+/* Stubs for VICE 3.10 UI action/reset API */
+void arch_ui_activate(void)
+{
+    /* no-op in our embedded build */
+}
+
+const char *ui_action_get_name(int action)
+{
+    (void)action;
+    return "";
+}
+
+int ui_action_get_id(const char *name)
+{
+    (void)name;
+    return -1;
+}
+
+void ui_action_trigger(int action)
+{
+    /* no-op in our embedded build */
+    (void)action;
+}
+
+void ui_display_reset(int device, int mode)
+{
+    /* no-op in our embedded build */
+    (void)device; (void)mode;
 }
 
 /* Recording UI */
@@ -307,7 +337,7 @@ void ui_display_event_time(unsigned int current, unsigned int total)
 }
 
 /* Joystick UI */
-void ui_display_joyport(BYTE *joyport)
+void ui_display_joyport(uint8_t *joyport)
 {
 #ifdef SDL_DEBUG
     fprintf(stderr, "%s: %02x %02x %02x %02x %02x\n", __func__, joyport[0], joyport[1], joyport[2],  joyport[3], joyport[4]);
@@ -373,7 +403,7 @@ void uistatusbar_close(void)
 void uistatusbar_draw(void)
 {
     int i;
-    BYTE c, color_f, color_b;
+    uint8_t c, color_f, color_b;
     unsigned int line;
     menu_draw_t *limits = NULL;
     menufont = sdl_ui_get_menu_font();
@@ -400,7 +430,7 @@ void uistatusbar_draw(void)
         }
 
         if (c & 0x80) {
-            uistatusbar_putchar((BYTE)(c & 0x7f), i, 0, color_b, color_f);
+            uistatusbar_putchar((uint8_t)(c & 0x7f), i, 0, color_b, color_f);
         } else {
             uistatusbar_putchar(c, i, 0, color_f, color_b);
         }

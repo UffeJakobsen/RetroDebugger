@@ -27,10 +27,10 @@
 #ifndef VICE_FSDEVICE_CLOSE_H
 #define VICE_FSDEVICE_CLOSE_H
 
-#include "vicetypes.h"
+#include "types.h"
 
 struct vdrive_s;
 
-extern int fsdevice_close(struct vdrive_s *vdrive, unsigned int secondary);
+int fsdevice_close(struct vdrive_s *vdrive, unsigned int secondary);
 
 #endif

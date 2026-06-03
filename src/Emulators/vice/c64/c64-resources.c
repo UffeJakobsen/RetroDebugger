@@ -58,6 +58,9 @@
    calculated as 65536 * drive_clk / clk_[main machine] */
 static int sync_factor;
 
+/* Frequency of the power grid in Hz */
+static int power_freq = -1;
+
 /* Name of the character ROM.  */
 static char *chargen_rom_name = NULL;
 
@@ -73,7 +76,8 @@ int kernal_revision = C64_KERNAL_REV3;
 int cia1_model;
 int cia2_model;
 
-static int board_type = 0;
+/* VICE 3.10: non-static for direct access from c64memsc.c */
+int board_type = 0;
 static int iec_reset = 0;
 
 static int set_chargen_rom_name(const char *val, void *param)
@@ -88,7 +92,7 @@ static int set_chargen_rom_name(const char *val, void *param)
 static int set_kernal_rom_name(const char *val, void *param)
 {
     int ret, changed = 1;
-    log_verbose("set_kernal_rom_name val:%s.", val);
+    log_verbose(LOG_DEFAULT, "set_kernal_rom_name val:%s.", val);
     if ((val != NULL) && (kernal_rom_name != NULL)) {
         changed = (strcmp(val, kernal_rom_name) != 0);
     }
@@ -98,7 +102,7 @@ static int set_kernal_rom_name(const char *val, void *param)
     /* load kernal without a kernal overriding buffer */
     ret = c64rom_load_kernal(kernal_rom_name, NULL);
     if (changed) {
-        machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+        machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
     }
     return ret;
 }
@@ -114,7 +118,7 @@ static int set_basic_rom_name(const char *val, void *param)
     }
     ret = c64rom_load_basic(basic_rom_name);
     if (changed) {
-        machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+        machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
     }
     return ret;
 }
@@ -127,7 +131,7 @@ static int set_board_type(int val, void *param)
     }
     board_type = val;
     if (old_board_type != board_type) {
-        machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+        machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
     }
     return 0;
 }
@@ -182,7 +186,7 @@ static int set_kernal_revision(int val, void *param)
 {
     int trapfl;
 
-    log_verbose("set_kernal_revision val:%d kernal_revision: %d", val, kernal_revision);
+    log_verbose(LOG_DEFAULT, "set_kernal_revision val:%d kernal_revision: %d", val, kernal_revision);
     if(!c64rom_isloaded()) {
         return 0;
     }
@@ -197,14 +201,14 @@ static int set_kernal_revision(int val, void *param)
     }
     memcpy(c64memrom_kernal64_trap_rom, c64memrom_kernal64_rom, C64_KERNAL_ROM_SIZE);
     if (kernal_revision != val) {
-        machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+        machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
     }
     /* restore traps */
     if (machine_class != VICE_MACHINE_VSID) {
         resources_set_int("VirtualDevices", trapfl);
     }
     kernal_revision = val;
-    log_verbose("set_kernal_revision new kernal_revision: %d", kernal_revision);
+    log_verbose(LOG_DEFAULT, "set_kernal_revision new kernal_revision: %d", kernal_revision);
     return 0;
 }
 
@@ -218,31 +222,41 @@ static int set_sync_factor(int val, void *param)
 
     switch (val) {
         case MACHINE_SYNC_PAL:
-            sync_factor = val;
-            if (change_timing) {
-                machine_change_timing(MACHINE_SYNC_PAL, vicii_resources.border_mode);
-            }
-            break;
         case MACHINE_SYNC_NTSC:
-            sync_factor = val;
-            if (change_timing) {
-                machine_change_timing(MACHINE_SYNC_NTSC, vicii_resources.border_mode);
-            }
-            break;
         case MACHINE_SYNC_NTSCOLD:
-            sync_factor = val;
-            if (change_timing) {
-                machine_change_timing(MACHINE_SYNC_NTSCOLD, vicii_resources.border_mode);
-            }
-            break;
         case MACHINE_SYNC_PALN:
-            sync_factor = val;
-            if (change_timing) {
-                machine_change_timing(MACHINE_SYNC_PALN, vicii_resources.border_mode);
-            }
             break;
         default:
             return -1;
+    }
+    sync_factor = val;
+    if (change_timing) {
+        machine_change_timing(val, power_freq > 0 ? power_freq : 0, vicii_resources.border_mode);
+    }
+
+    return 0;
+}
+
+static int set_power_freq(int val, void *param)
+{
+    int change_timing = 0;
+
+    if (power_freq != val) {
+        change_timing = 1;
+    }
+
+    switch (val) {
+        case 50:
+        case 60:
+            break;
+        default:
+            return -1;
+    }
+    power_freq = val;
+    if (change_timing) {
+        if (sync_factor > 0) {
+            machine_change_timing(sync_factor, val, vicii_resources.border_mode);
+        }
     }
 
     return 0;
@@ -264,6 +278,8 @@ static const resource_string_t resources_string[] = {
 static const resource_int_t resources_int[] = {
     { "MachineVideoStandard", MACHINE_SYNC_PAL, RES_EVENT_SAME, NULL,
       &sync_factor, set_sync_factor, NULL },
+    { "MachinePowerFrequency", 50, RES_EVENT_SAME, NULL,
+      &power_freq, set_power_freq, NULL },
     { "BoardType", 0, RES_EVENT_SAME, NULL,
       &board_type, set_board_type, NULL },
     { "IECReset", 0, RES_EVENT_SAME, NULL,

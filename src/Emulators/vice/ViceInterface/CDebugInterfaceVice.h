@@ -5,6 +5,12 @@
 #include "ViceWrapper.h"
 #include "SYS_Threading.h"
 #include "CPool.h"
+#include <deque>
+
+// VICE's sound.h defines SOUND_SIDS_MAX=4, but c64d supports C64_MAX_NUM_SIDS=3.
+// CSidData arrays must use a fixed constant to avoid ODR violations when
+// different translation units see different values of SOUND_SIDS_MAX.
+#define C64D_SID_DATA_MAX_SIDS C64_MAX_NUM_SIDS
 
 #ifndef SOUND_SIDS_MAX
 #define SOUND_SIDS_MAX C64_MAX_NUM_SIDS
@@ -80,6 +86,7 @@ public:
 
 	virtual int GetEmulatorType();
 	virtual CSlrString *GetEmulatorVersionString();
+	virtual CC64BackendCapabilities GetC64BackendCapabilities();
 	
 	virtual float GetEmulationFPS();
 	float numEmulationFPS;
@@ -89,6 +96,9 @@ public:
 	virtual void DoFrame();
 	virtual void RefreshSync();
 	virtual void RestartAudio();
+	void SetPausedVSyncProcessing(bool isEnabled);
+	bool ShouldProcessPausedVSync();
+	std::atomic<bool> processPausedVSync;
 
 	virtual uint8 *GetCharRom();
 	virtual uint8 *GetDefaultCharRom();
@@ -103,6 +113,8 @@ public:
 
 	virtual void ResetSoft();
 	virtual void ResetHard();
+	void ResetSoftSynced();
+	void ResetHardSynced();
 	virtual void DiskDriveReset();
 
 	// this is main emulation cpu cycle counter
@@ -124,6 +136,8 @@ public:
 	
 	virtual void JoystickDown(int port, uint32 axis);
 	virtual void JoystickUp(int port, uint32 axis);
+	virtual uint32 GetJoystickState(int port);
+	virtual void ReplayInputEventsFromSnapshotsManager(CByteBuffer *inputEventsBuffer);
 	
 	virtual void EmulatedMouseUpdateSettings();
 	virtual bool EmulatedMouseEnable(bool enable);
@@ -136,6 +150,7 @@ public:
 
 	//
 	virtual int GetCpuPC();
+	virtual void GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S);
 	virtual int GetDrive1541PC();
 	virtual void GetC64CpuState(C64StateCPU *state);
 	virtual void GetDrive1541CpuState(C64StateCPU *state);
@@ -333,7 +348,7 @@ public:
 	CSlrMutex *mutexSidDataHistory;
 	int sidDataHistorySteps;
 	void SetSidDataHistorySteps(int numSteps);
-	std::list<CSidData *> sidDataHistory;
+	std::deque<CSidData *> sidDataHistory;
 	volatile int sidDataHistoryCurrentStep;
 	virtual void UpdateSidDataHistory();
 	
@@ -385,10 +400,10 @@ public:
 	void PeekFromSids();
 	void RestoreSids();
 	void CopyFrom(CSidData *sidData);
-	u8 sidRegs[SOUND_SIDS_MAX][C64_NUM_SID_REGISTERS];
-	
+	u8 sidRegs[C64D_SID_DATA_MAX_SIDS][C64_NUM_SID_REGISTERS];
+
 	// shall we copy that sid register to SID
-	bool shouldSetSidReg[SOUND_SIDS_MAX][C64_NUM_SID_REGISTERS];
+	bool shouldSetSidReg[C64D_SID_DATA_MAX_SIDS][C64_NUM_SID_REGISTERS];
 	
 	void Serialize(CByteBuffer *byteBuffer);
 	bool Deserialize(CByteBuffer *byteBuffer);
@@ -415,4 +430,3 @@ typedef enum {
 
 
 #endif
-

@@ -81,7 +81,7 @@ static embedded_palette_t palette_files[] = {
     EMBEDDED_PALETTE_LIST_END
 };
 
-static size_t embedded_match_file(const char *name, BYTE *dest, int minsize, int maxsize, embedded_t *emb)
+static size_t embedded_match_file(const char *name, uint8_t *dest, int minsize, int maxsize, embedded_t *emb)
 {
     int i = 0;
 
@@ -101,7 +101,7 @@ static size_t embedded_match_file(const char *name, BYTE *dest, int minsize, int
     return 0;
 }
 
-size_t embedded_check_file(const char *name, BYTE *dest, int minsize, int maxsize)
+size_t embedded_check_file(const char *name, uint8_t *dest, int minsize, int maxsize)
 {
     size_t retval;
 
@@ -128,7 +128,7 @@ int embedded_palette_load(const char *fname, palette_t *p)
                 p->entries[j].red = entries[(j * 4) + 0];
                 p->entries[j].green = entries[(j * 4) + 1];
                 p->entries[j].blue = entries[(j * 4) + 2];
-                p->entries[j].dither = entries[(j * 4) + 3];
+                /* dither field removed in VICE 3.10 */
             }
             return 0;
         }

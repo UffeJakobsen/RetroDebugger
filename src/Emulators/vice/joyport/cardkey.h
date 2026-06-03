@@ -27,8 +27,8 @@
 #ifndef VICE_CARDKEY_H
 #define VICE_CARDKEY_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int joyport_cardkey_resources_init(void);
+int joyport_cardkey_resources_init(void);
 
 #endif

@@ -62,7 +62,7 @@
 
 #define SUPERCARD_ROM_SIZE 0x2000
 
-static BYTE supercard_rom[SUPERCARD_ROM_SIZE];
+static uint8_t supercard_rom[SUPERCARD_ROM_SIZE];
 
 int supercard_load(const char *name)
 {
@@ -79,7 +79,7 @@ int supercard_load(const char *name)
     return 0;
 }
 
-static BYTE supercard_read(drive_context_t *drv, WORD addr)
+static uint8_t supercard_read(drive_context_t *drv, uint16_t addr)
 {
     DBG(("supercard_read <%04x> <%02x>\n", addr, supercard_rom[addr & 0x07ff]));
     return supercard_rom[addr & 0x07ff];
@@ -89,9 +89,9 @@ void supercard_mem_init(struct drive_context_s *drv, unsigned int type)
 {
     drivecpud_context_t *cpud = drv->cpud;
 
-    DBG(("supercard_mem_init <type:%d> <sc:%d>\n", type, drv->drive->supercard));
+    DBG(("supercard_mem_init <type:%d> <sc:%d>\n", type, drv->supercard));
 
-    if (!drv->drive->supercard) {
+    if (!drv->supercard) {
         return;
     }
 

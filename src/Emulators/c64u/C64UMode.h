@@ -1,0 +1,12 @@
+#ifndef _C64UMODE_H_
+#define _C64UMODE_H_
+
+enum EC64UMode
+{
+	C64U_MODE_DISCONNECTED = 0,
+	C64U_MODE_SCREEN,
+	C64U_MODE_TRACE,
+	C64U_MODE_SWITCHING,
+};
+
+#endif

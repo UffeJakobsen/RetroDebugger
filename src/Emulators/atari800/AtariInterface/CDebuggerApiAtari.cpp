@@ -15,6 +15,12 @@ CDebuggerApiAtari::CDebuggerApiAtari(CDebugInterface *debugInterface)
 : CDebuggerApi(debugInterface)
 {
 	this->debugInterfaceAtari = (CDebugInterfaceNes*)debugInterface;
+	this->cachedScreenImage = NULL;
+}
+
+CDebuggerApiAtari::~CDebuggerApiAtari()
+{
+	delete cachedScreenImage;
 }
 
 void CDebuggerApiAtari::StartThread(CSlrThread *run)
@@ -72,14 +78,57 @@ CImageData *CDebuggerApiAtari::GetReferenceImage()
 
 CImageData *CDebuggerApiAtari::GetScreenImage(int *width, int *height)
 {
-	LOGTODO("CDebuggerApiAtari::GetScreenImage: not implemented");
-	return NULL;
+	int factor = debugInterface->screenSupersampleFactor;
+	int contentW = debugInterface->GetScreenSizeX();
+	int contentH = debugInterface->GetScreenSizeY();
+	int texStride = 512 * factor; // texture row width in pixels (hardcoded 512 base)
+
+	if (contentW <= 0 || contentH <= 0)
+		return NULL;
+
+	if (width)  *width  = contentW;
+	if (height) *height = contentH;
+
+	// Allocate or resize cached buffer
+	if (!cachedScreenImage || cachedScreenImage->width != contentW || cachedScreenImage->height != contentH)
+	{
+		delete cachedScreenImage;
+		cachedScreenImage = new CImageData(contentW, contentH, IMG_TYPE_RGBA);
+		cachedScreenImage->AllocImage(false, true);
+	}
+
+	CImageData *src = debugInterface->AcquireScreenImageForRendering();
+	if (!src || !src->resultData)
+	{
+		debugInterface->ReleaseScreenImageAfterRendering();
+		return NULL;
+	}
+
+	uint8_t *srcBase = src->resultData;
+	uint8_t *dstBase = cachedScreenImage->resultData;
+	if (factor <= 1)
+	{
+		for (int y = 0; y < contentH; y++)
+			memcpy(dstBase + y * contentW * 4, srcBase + y * texStride * 4, (size_t)contentW * 4);
+	}
+	else
+	{
+		for (int y = 0; y < contentH; y++)
+		{
+			const uint8_t *srcRow = srcBase + (size_t)(y * factor) * texStride * 4;
+			uint8_t *dstRow = dstBase + (size_t)y * contentW * 4;
+			for (int x = 0; x < contentW; x++)
+				memcpy(dstRow + x * 4, srcRow + (size_t)(x * factor) * 4, 4);
+		}
+	}
+
+	debugInterface->ReleaseScreenImageAfterRendering();
+	return cachedScreenImage;
 }
 
 CImageData *CDebuggerApiAtari::GetScreenImageWithoutBorders()
 {
-	LOGTODO("CDebuggerApiAtari::GetScreenImageWithoutBorders: not implemented");
-	return NULL;
+	return GetScreenImage(NULL, NULL);
 }
 
 void CDebuggerApiAtari::ZoomDisplay(float newScale)

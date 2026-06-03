@@ -16,9 +16,13 @@
 #include "CViewJukeboxPlaylist.h"
 #include "SYS_Platform.h"
 
+#include "../Emulators/c64u/C64UTestFixture.h"
+
 #include "CDebugInterfaceC64.h"
 #include "CDebugInterfaceAtari.h"
 #include "CDebugInterfaceNes.h"
+
+#include <atomic>
 
 // TODO: fixme, plugins should also parse command line options
 extern char *crtMakerConfigFilePath;
@@ -104,6 +108,8 @@ void c64PrintCommandLineHelp()
 //	printHelp("     start with layout id <1-%d>\n", SCREEN_LAYOUT_MAX);
 	printHelp("-breakpoints <file>\n");
 	printHelp("     load breakpoints\n");
+	printHelp("--layouts-file <file>\n");
+	printHelp("     load/save layouts from specified file path\n");
 	printHelp("-symbols <file>\n");
 	printHelp("     load symbols (code labels)\n");
 	printHelp("-watch <file>\n");
@@ -116,6 +122,9 @@ void c64PrintCommandLineHelp()
 	
 #if defined(RUN_COMMODORE64)
 	printHelp("-c64 select emulator: C64 Vice\n");
+	printHelp("-c64u select emulator: C64 Ultimate (reserved additive backend selector)\n");
+	printHelp("-ultimate select emulator: C64 Ultimate (alias for -c64u)\n");
+	printHelp("--c64u-test-fixture enable deterministic disconnected C64U startup for tests\n");
 	printHelp("-prg <file>\n");
 	printHelp("     load PRG file into memory\n");
 	printHelp("-d64 <file>\n");
@@ -434,6 +443,9 @@ void C64DebuggerParseCommandLine0()
 	while(c64cmdIt != sysCommandLineArguments.end())
 	{
 		char *cmd = c64ParseCommandLineGetArgument();
+		char *option = cmd;
+		if (option[0] == '-')
+			++option;
 
 		if (!strcmp(cmd, "help") || !strcmp(cmd, "h")
 			|| !strcmp(cmd, "-help") || !strcmp(cmd, "-h")
@@ -456,6 +468,7 @@ void C64DebuggerParseCommandLine0()
 			C64DebuggerInitSharedMemory();
 			C64DebuggerPassConfigToRunningInstance();
 		}
+
 	}
 }
 
@@ -507,6 +520,18 @@ CSlrString *c64CommandLineAudioOutDevice = NULL;
 bool c64CommandLineHardReset = false;
 bool c64CommandLineWindowFullScreen = false;
 bool c64CommandLineDetachEverything = false;
+static std::atomic_bool gC64DebuggerStartupTasksInProgress(false);
+static std::atomic_bool gC64DebuggerStartupTasksDone(false);
+
+bool C64DebuggerStartupTasksInProgress()
+{
+	return gC64DebuggerStartupTasksInProgress.load(std::memory_order_acquire);
+}
+
+bool C64DebuggerStartupTasksDone()
+{
+	return gC64DebuggerStartupTasksDone.load(std::memory_order_acquire);
+}
 
 void c64PreRunStartupCallbacks()
 {
@@ -802,6 +827,8 @@ class C64PerformStartupTasksThread : public CSlrThread
 		SYS_Sleep(c64SettingsWaitOnStartup);
 
 		c64PerformStartupTasksThreaded();
+		gC64DebuggerStartupTasksDone.store(true, std::memory_order_release);
+		gC64DebuggerStartupTasksInProgress.store(false, std::memory_order_release);
 	}
 };
 
@@ -827,6 +854,14 @@ void C64DebuggerParseCommandLine2()
 		if (!strcmp(cmd, "c64"))
 		{
 			c64SettingsSelectEmulator = EMULATOR_TYPE_C64_VICE;
+		}
+		else if (!strcmp(cmd, "c64u") || !strcmp(cmd, "ultimate"))
+		{
+			c64SettingsSelectEmulator = EMULATOR_TYPE_C64U;
+		}
+		else if (!strcmp(cmd, "c64u-test-fixture") || !strcmp(cmd, "-c64u-test-fixture"))
+		{
+			C64UTestFixture::SetEnabled(true);
 		}
 		else if (!strcmp(cmd, "atari"))
 		{
@@ -995,6 +1030,8 @@ void C64DebuggerParseCommandLine2()
 void C64DebuggerPerformStartupTasks()
 {
 	LOGM("C64DebuggerPerformStartupTasks()");
+	gC64DebuggerStartupTasksDone.store(false, std::memory_order_release);
+	gC64DebuggerStartupTasksInProgress.store(true, std::memory_order_release);
 	C64PerformStartupTasksThread *thread = new C64PerformStartupTasksThread();
 	SYS_StartThread(thread, NULL);
 }
@@ -1533,4 +1570,3 @@ void C64DebuggerStartupTaskCallback::PreRunStartupTaskCallback()
 void C64DebuggerStartupTaskCallback::PostRunStartupTaskCallback()
 {
 }
-

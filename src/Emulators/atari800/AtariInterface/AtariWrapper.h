@@ -25,6 +25,8 @@ void atrd_check_pc_breakpoint(uint16 pc);
 int atrd_debug_pause_check(int allowRestore);
 
 int atrd_is_performing_snapshot_restore();
+extern volatile int atrd_input_tasks_flag;
+int atrd_has_pending_input_tasks();
 int atrd_check_snapshot_restore();
 void atrd_check_snapshot_interval();
 

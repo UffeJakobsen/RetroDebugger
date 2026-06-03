@@ -25,6 +25,8 @@
 #include "CViewAtariScreen.h"
 #include "CViewNesScreen.h"
 #include "CDebugInterfaceC64.h"
+#include "c64model.h"
+#include "CDebugInterfaceC64U.h"
 #include "CDebugInterfaceAtari.h"
 #include "CDebugInterfaceNes.h"
 #include "SYS_DefaultConfig.h"
@@ -66,6 +68,7 @@ u8 c64SettingsSelectEmulator = EMULATOR_TYPE_UNKNOWN;
 bool c64SettingsRunVice = true;
 bool c64SettingsRunAtari800 = false;
 bool c64SettingsRunNestopia = false;
+bool c64SettingsRunC64U = false;
 
 bool c64SettingsKeepSymbolsLabels = false;
 bool c64SettingsKeepSymbolsWatches = true;
@@ -193,9 +196,13 @@ CSlrString *c64SettingsPathToNES = NULL;
 CSlrString *c64SettingsDefaultNESFolder = NULL;
 CSlrString *c64SettingsPathToNESRoms = NULL;
 
+CSlrString *c64SettingsPathToXRNS = NULL;
+CSlrString *c64SettingsDefaultXRNSFolder = NULL;
+
 CSlrString *c64SettingsDefaultMemoryDumpFolder = NULL;
 
 CSlrString *c64SettingsPathToC64MemoryMapFile = NULL;
+CSlrString *c64SettingsPathToCustomStartupSnapshot = NULL;
 CSlrString *c64SettingsPathToAtari800MemoryMapFile = NULL;
 
 CSlrString *c64SettingsPathToSymbols = NULL;
@@ -222,6 +229,17 @@ bool c64SettingsAlwaysUnpauseEmulationAfterReset = true;
 
 float c64SettingsScreenGridLinesAlpha = 0.3f;
 uint8 c64SettingsScreenGridLinesColorScheme = 0;	// 0=red, 1=green, 2=blue, 3=black, 4=dark gray 5=light gray 6=white 7=yellow
+
+// VIC display marker line colors — defaults match prior hardcoded behaviour
+// (badline cyan @ 0.3 alpha, IRQ yellow @ 0.225 alpha = 0.3 * 0.75)
+float c64SettingsVicDisplayIrqLineColorR = 1.0f;
+float c64SettingsVicDisplayIrqLineColorG = 1.0f;
+float c64SettingsVicDisplayIrqLineColorB = 0.0f;
+float c64SettingsVicDisplayIrqLineColorA = 0.225f;
+float c64SettingsVicDisplayBadLineColorR = 0.0f;
+float c64SettingsVicDisplayBadLineColorG = 1.0f;
+float c64SettingsVicDisplayBadLineColorB = 1.0f;
+float c64SettingsVicDisplayBadLineColorA = 0.3f;
 float c64SettingsScreenRasterViewfinderScale = 1.5f; //5.0f; //1.5f;	// TODO: remove c64SettingsScreenRasterViewfinderScale and add variable setting in CViewC64Screen
 
 float c64SettingsScreenRasterCrossLinesAlpha = 0.5f;
@@ -245,7 +263,7 @@ bool c64SettingsVicDisplayApplyScroll = false;
 
 bool c64SettingsAutoJmpAlwaysToLoadedPRGAddress = false;	// will jump to loaded address when PRG is loaded from menu
 bool c64SettingsAutoJmpFromInsertedDiskFirstPrg = true;	// will load first PRG from attached disk
-int c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC;
+int c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
 int c64SettingsAutoJmpWaitAfterReset = 1300;				// this is to let c64 drive finish reset
 
 bool c64SettingsForceUnpause = false;						// unpause debugger on jmp if code is stopped
@@ -283,6 +301,10 @@ bool c64SettingsDisassemblyUseNearLabels = true;
 bool c64SettingsDisassemblyUseNearLabelsForJumps = false;
 int c64SettingsDisassemblyNearLabelMaxOffset = 6;
 bool c64SettingsDisassemblyColorizeHexOpcodes = false;
+bool c64SettingsDisassemblyShowEffectiveAddress = false;
+int c64SettingsDisassemblyEAInstructionBudget = 128;
+int c64SettingsDisassemblyEAJsrDepthLimit = 4;
+bool c64SettingsDisassemblyEAHideUnknown = false;
 
 int c64SettingsMenusColorTheme = 0;
 
@@ -310,9 +332,34 @@ u8 c64SettingsAtariVideoSystem = ATARI_VIDEO_SYSTEM_PAL;
 u8 c64SettingsAtariMachineType = 4;
 u8 c64SettingsAtariRamSizeOption = 9;
 
+// C64 Ultimate
+CSlrString *c64SettingsC64UHostname = NULL;
+int c64SettingsC64UHttpPort = 80;
+int c64SettingsC64UTcpPort = 64;
+int c64SettingsC64UVideoPort = 11000;
+CSlrString *c64SettingsC64UPassword = NULL;
+bool c64SettingsC64UAutoConnect = false;
+int c64SettingsC64UMemoryRefreshRate = 4;
+bool c64SettingsC64UAutoRefreshMemory = false;
+bool c64SettingsC64URefreshIORange = false;   // default: skip $D000-$DFFF PEEK (has side effects)
+CSlrString *c64SettingsC64ULocalIP = NULL;
+int c64SettingsC64UTraceMode = 0;       // 0=Auto
+int c64SettingsC64UTraceBufferSize = 4; // 4 million entries
+bool c64SettingsC64UAudioEnabled = true;
+int c64SettingsC64UAudioBufferMs = 500;
+bool c64SettingsC64UUseMulticast = false;
+bool c64SettingsC64UHelperAssisted = false;
+int c64SettingsC64UFtpPort = 21;
+int c64SettingsC64UTelnetPort = 23;
+
 // websockets server
 bool c64SettingsRunDebuggerServerWebSockets = false;
 int c64SettingsRunDebuggerServerWebSocketsPort = 0x0DEB;
+
+// MCP server
+bool c64SettingsRunMCPServer = false;
+int c64SettingsMCPServerMode = 0;
+int c64SettingsMCPLogOutput = 0;
 
 ////
 void storeSettingBlock(CByteBuffer *byteBuffer, u8 value)
@@ -430,12 +477,16 @@ void C64DebuggerStoreSettings()
 	storeSettingString(byteBuffer, "PathNES", c64SettingsPathToNES);
 	storeSettingString(byteBuffer, "FolderNESRoms", c64SettingsPathToNESRoms);
 
+	storeSettingString(byteBuffer, "FolderXRNS", c64SettingsDefaultXRNSFolder);
+	storeSettingString(byteBuffer, "PathXRNS", c64SettingsPathToXRNS);
+
 	storeSettingBool(byteBuffer, "UsePipeIntegration", c64SettingsUsePipeIntegration);
 	
 	storeSettingBool(byteBuffer, "AutoJmpAlwaysToLoadedPRGAddress", c64SettingsAutoJmpAlwaysToLoadedPRGAddress);
 	storeSettingBool(byteBuffer, "AutoJmpFromInsertedDiskFirstPrg", c64SettingsAutoJmpFromInsertedDiskFirstPrg);
 
 	storeSettingString(byteBuffer, "PathMemMapFile", c64SettingsPathToC64MemoryMapFile);
+	storeSettingString(byteBuffer, "PathToCustomStartupSnapshot", c64SettingsPathToCustomStartupSnapshot);
 
 	storeSettingString(byteBuffer, "AudioOutDevice", c64SettingsAudioOutDevice);
 	storeSettingBool(byteBuffer, "RestartAudioOnEmulationReset", c64SettingsRestartAudioOnEmulationReset);
@@ -466,6 +517,7 @@ void C64DebuggerStoreSettings()
 	storeSettingBool(byteBuffer, "RunViceEmulation", c64SettingsRunVice);
 	storeSettingBool(byteBuffer, "RunAtari800Emulation", c64SettingsRunAtari800);
 	storeSettingBool(byteBuffer, "RunNestopiaEmulation", c64SettingsRunNestopia);
+	storeSettingBool(byteBuffer, "RunC64UEmulation", c64SettingsRunC64U);
 
 	
 #if !defined(WIN32)
@@ -555,6 +607,7 @@ void C64DebuggerStoreSettings()
 
 	storeSettingFloat(byteBuffer, "GridLinesAlpha", c64SettingsScreenGridLinesAlpha);
 	storeSettingU8(byteBuffer, "GridLinesColor", c64SettingsScreenGridLinesColorScheme);
+	// VIC display marker line colors stored via gApplicationDefaultConfig — see C64DebuggerRestoreSettings
 	storeSettingFloat(byteBuffer, "ViewfinderScale", c64SettingsScreenRasterViewfinderScale);
 	storeSettingFloat(byteBuffer, "CrossLinesAlpha", c64SettingsScreenRasterCrossLinesAlpha);
 	storeSettingU8(byteBuffer, "CrossLinesColor", c64SettingsScreenRasterCrossLinesColorScheme);
@@ -604,6 +657,26 @@ void C64DebuggerStoreSettings()
 	storeSettingI32(byteBuffer, "SnapshotsManagerLimit", c64SettingsSnapshotsLimit);
 	storeSettingU8(byteBuffer, "SnapshotsManagerSaveZlibCompressionLevel", c64SettingsTimelineSaveZlibCompressionLevel);
 
+	// C64 Ultimate
+	storeSettingString(byteBuffer, "C64UHostname", c64SettingsC64UHostname);
+	storeSettingI32(byteBuffer, "C64UHttpPort", c64SettingsC64UHttpPort);
+	storeSettingI32(byteBuffer, "C64UTcpPort", c64SettingsC64UTcpPort);
+	storeSettingI32(byteBuffer, "C64UVideoPort", c64SettingsC64UVideoPort);
+	storeSettingString(byteBuffer, "C64UPassword", c64SettingsC64UPassword);
+	storeSettingBool(byteBuffer, "C64UAutoConnect", c64SettingsC64UAutoConnect);
+	storeSettingI32(byteBuffer, "C64UMemoryRefreshRate", c64SettingsC64UMemoryRefreshRate);
+	storeSettingBool(byteBuffer, "C64UAutoRefreshMemory", c64SettingsC64UAutoRefreshMemory);
+	storeSettingBool(byteBuffer, "C64URefreshIORange", c64SettingsC64URefreshIORange);
+	storeSettingString(byteBuffer, "C64ULocalIP", c64SettingsC64ULocalIP);
+	storeSettingI32(byteBuffer, "C64UTraceMode", c64SettingsC64UTraceMode);
+	storeSettingI32(byteBuffer, "C64UTraceBufferSize", c64SettingsC64UTraceBufferSize);
+	storeSettingBool(byteBuffer, "C64UAudioEnabled", c64SettingsC64UAudioEnabled);
+	storeSettingI32(byteBuffer, "C64UAudioBufferMs", c64SettingsC64UAudioBufferMs);
+	storeSettingBool(byteBuffer, "C64UUseMulticast", c64SettingsC64UUseMulticast);
+	storeSettingBool(byteBuffer, "C64UHelperAssisted", c64SettingsC64UHelperAssisted);
+	storeSettingI32(byteBuffer, "C64UFtpPort", c64SettingsC64UFtpPort);
+	storeSettingI32(byteBuffer, "C64UTelnetPort", c64SettingsC64UTelnetPort);
+
 	storeSettingBlock(byteBuffer, C64DEBUGGER_BLOCK_EOF);
 
 	// new settings
@@ -612,6 +685,9 @@ void C64DebuggerStoreSettings()
 	gApplicationDefaultConfig->SetBoolSkipConfigSave("EmulatorScreenBypassKeyboardShortcuts", &c64SettingsEmulatorScreenBypassKeyboardShortcuts);
 	gApplicationDefaultConfig->SetBoolSkipConfigSave("RunDebuggerServerWebSockets", &c64SettingsRunDebuggerServerWebSockets);
 	gApplicationDefaultConfig->SetIntSkipConfigSave("RunDebuggerServerWebSocketsPort", &c64SettingsRunDebuggerServerWebSocketsPort);
+	gApplicationDefaultConfig->SetBoolSkipConfigSave("RunMCPServer", &c64SettingsRunMCPServer);
+	gApplicationDefaultConfig->SetIntSkipConfigSave("MCPServerMode", &c64SettingsMCPServerMode);
+	gApplicationDefaultConfig->SetIntSkipConfigSave("MCPLogOutput", &c64SettingsMCPLogOutput);
 
 #if !defined(DEBUG_SETTINGS_FILE_PATH)
 	LOGD("C64D_SETTINGS_FILE_PATH is set to=%s", C64D_SETTINGS_FILE_PATH);
@@ -687,16 +763,41 @@ void C64DebuggerRestoreSettings(uint8 settingsBlockType)
 	
 	// restore new style settings:
 	gApplicationDefaultConfig->GetBool("DisassemblyPressCtrlToSetBreakpoint", &c64SettingsPressCtrlToSetBreakpoint, false);
-	gApplicationDefaultConfig->GetBool("AlwaysUnpauseEmulationAfterReset", &c64SettingsAlwaysUnpauseEmulationAfterReset, true);
+	gApplicationDefaultConfig->GetBool("AlwaysUnpauseEmulationAfterReset", &c64SettingsAlwaysUnpauseEmulationAfterReset, false);
 	gApplicationDefaultConfig->GetBool("EmulatorScreenBypassKeyboardShortcuts", &c64SettingsEmulatorScreenBypassKeyboardShortcuts, true);
 	
 	gApplicationDefaultConfig->GetBool("DisassemblyUseNearLabels", &c64SettingsDisassemblyUseNearLabels, true);
 	gApplicationDefaultConfig->GetBool("DisassemblyUseNearLabelsForJumps", &c64SettingsDisassemblyUseNearLabelsForJumps, false);
 	gApplicationDefaultConfig->GetInt("DisassemblyNearLabelMaxOffset", &c64SettingsDisassemblyNearLabelMaxOffset, 6);
 	gApplicationDefaultConfig->GetBool("DisassemblyColorizeHexOpcodes", &c64SettingsDisassemblyColorizeHexOpcodes, false);
+	gApplicationDefaultConfig->GetBool("DisassemblyShowEffectiveAddress", &c64SettingsDisassemblyShowEffectiveAddress, false);
+	gApplicationDefaultConfig->GetInt("DisassemblyEAInstructionBudget", &c64SettingsDisassemblyEAInstructionBudget, 128);
+	gApplicationDefaultConfig->GetInt("DisassemblyEAJsrDepthLimit", &c64SettingsDisassemblyEAJsrDepthLimit, 4);
+	gApplicationDefaultConfig->GetBool("DisassemblyEAHideUnknown", &c64SettingsDisassemblyEAHideUnknown, false);
+
+	// VIC display marker line colors (right-click popup configurable)
+	gApplicationDefaultConfig->GetFloat("VicDispIrqLineR", &c64SettingsVicDisplayIrqLineColorR, 1.0f);
+	gApplicationDefaultConfig->GetFloat("VicDispIrqLineG", &c64SettingsVicDisplayIrqLineColorG, 1.0f);
+	gApplicationDefaultConfig->GetFloat("VicDispIrqLineB", &c64SettingsVicDisplayIrqLineColorB, 0.0f);
+	gApplicationDefaultConfig->GetFloat("VicDispIrqLineA", &c64SettingsVicDisplayIrqLineColorA, 0.225f);
+	gApplicationDefaultConfig->GetFloat("VicDispBadLineR", &c64SettingsVicDisplayBadLineColorR, 0.0f);
+	gApplicationDefaultConfig->GetFloat("VicDispBadLineG", &c64SettingsVicDisplayBadLineColorG, 1.0f);
+	gApplicationDefaultConfig->GetFloat("VicDispBadLineB", &c64SettingsVicDisplayBadLineColorB, 1.0f);
+	gApplicationDefaultConfig->GetFloat("VicDispBadLineA", &c64SettingsVicDisplayBadLineColorA, 0.3f);
 
 	gApplicationDefaultConfig->GetBool("RunDebuggerServerWebSockets", &c64SettingsRunDebuggerServerWebSockets, false);
 	gApplicationDefaultConfig->GetInt("RunDebuggerServerWebSocketsPort", &c64SettingsRunDebuggerServerWebSocketsPort, 0x0DEB);
+	gApplicationDefaultConfig->GetBool("RunMCPServer", &c64SettingsRunMCPServer, false);
+	gApplicationDefaultConfig->GetInt("MCPServerMode", &c64SettingsMCPServerMode, 0);
+	gApplicationDefaultConfig->GetInt("MCPLogOutput", &c64SettingsMCPLogOutput, 0);
+
+	// C64 Ultimate: ensure string settings have defaults if not loaded from file
+	if (c64SettingsC64UHostname == NULL)
+		c64SettingsC64UHostname = new CSlrString("192.168.1.64");
+	if (c64SettingsC64UPassword == NULL)
+		c64SettingsC64UPassword = new CSlrString("");
+	if (c64SettingsC64ULocalIP == NULL)
+		c64SettingsC64ULocalIP = new CSlrString("");
 }
 
 void C64DebuggerReadSettingsValues(CByteBuffer *byteBuffer, uint8 settingsBlockType)
@@ -831,6 +932,12 @@ void C64DebuggerSetSetting(const char *name, void *value)
 	{
 		bool v = *((bool*)value);
 		c64SettingsRunNestopia = v;
+		return;
+	}
+	else if (!strcmp(name, "RunC64UEmulation"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsRunC64U = v;
 		return;
 	}
 	
@@ -1153,10 +1260,37 @@ void C64DebuggerSetSetting(const char *name, void *value)
 		{
 			int v = *((int*)value);
 			c64SettingsC64Model = v;
-			
+
 			if (viewC64->debugInterfaceC64)
 			{
 				viewC64->debugInterfaceC64->SetC64ModelType(c64SettingsC64Model);
+			}
+
+			// Auto-switch snapshot mode to match the new model (only if a default snapshot mode is selected)
+			if (c64SettingsAutoJmpDoReset >= MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL
+				&& c64SettingsAutoJmpDoReset <= MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC)
+			{
+				switch (v)
+				{
+					case C64MODEL_C64_PAL:
+					case C64MODEL_C64_OLD_PAL:
+						c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
+						break;
+					case C64MODEL_C64C_PAL:
+						c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL;
+						break;
+					case C64MODEL_C64_NTSC:
+					case C64MODEL_C64_OLD_NTSC:
+						c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC;
+						break;
+					case C64MODEL_C64C_NTSC:
+						c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC;
+						break;
+					// For models without a dedicated snapshot (SX-64, PAL-N, JAP, GS, PET64, ULTIMAX),
+					// don't change the snapshot mode — user keeps their current selection
+					default:
+						break;
+				}
 			}
 			return;
 		}
@@ -1172,6 +1306,17 @@ void C64DebuggerSetSetting(const char *name, void *value)
 			int v = *((int*)value);
 			c64SettingsVicPalette = v;
 			C64SetPaletteNum(v);
+
+			// Also update C64U video stream LUT if active
+			if (viewC64->debugInterfaceC64U != NULL)
+			{
+				uint8 rgb[16][3];
+				if (C64GetPaletteRGB(v, rgb))
+				{
+					CDebugInterfaceC64U *c64u = (CDebugInterfaceC64U *)viewC64->debugInterfaceC64U;
+					c64u->RebuildVideoLUT(rgb);
+				}
+			}
 			return;
 		}
 
@@ -1742,12 +1887,37 @@ void C64DebuggerSetSetting(const char *name, void *value)
 	}
 #endif
 
+	if (!strcmp(name, "FolderXRNS"))
+	{
+		if (c64SettingsDefaultXRNSFolder != NULL)
+			delete c64SettingsDefaultXRNSFolder;
+
+		c64SettingsDefaultXRNSFolder = new CSlrString((CSlrString*)value);
+		return;
+	}
+	else if (!strcmp(name, "PathXRNS"))
+	{
+		if (c64SettingsPathToXRNS != NULL)
+			delete c64SettingsPathToXRNS;
+
+		c64SettingsPathToXRNS = new CSlrString((CSlrString*)value);
+		return;
+	}
+
 	if (!strcmp(name, "PathMemMapFile"))
 	{
 		if (c64SettingsPathToC64MemoryMapFile != NULL)
 			delete c64SettingsPathToC64MemoryMapFile;
-		
+
 		c64SettingsPathToC64MemoryMapFile = new CSlrString((CSlrString*)value);
+		return;
+	}
+	else if (!strcmp(name, "PathToCustomStartupSnapshot"))
+	{
+		if (c64SettingsPathToCustomStartupSnapshot != NULL)
+			delete c64SettingsPathToCustomStartupSnapshot;
+
+		c64SettingsPathToCustomStartupSnapshot = new CSlrString((CSlrString*)value);
 		return;
 	}
 	else if (!strcmp(name, "DisassemblyExecuteAware"))
@@ -2081,6 +2251,119 @@ void C64DebuggerSetSetting(const char *name, void *value)
 		return;
 	}
 	
+	// C64 Ultimate
+	else if (!strcmp(name, "C64UHostname"))
+	{
+		if (c64SettingsC64UHostname != NULL)
+			delete c64SettingsC64UHostname;
+		c64SettingsC64UHostname = new CSlrString((CSlrString*)value);
+		return;
+	}
+	else if (!strcmp(name, "C64UHttpPort"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UHttpPort = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UTcpPort"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UTcpPort = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UVideoPort"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UVideoPort = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UPassword"))
+	{
+		if (c64SettingsC64UPassword != NULL)
+			delete c64SettingsC64UPassword;
+		c64SettingsC64UPassword = new CSlrString((CSlrString*)value);
+		return;
+	}
+	else if (!strcmp(name, "C64UAutoConnect"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsC64UAutoConnect = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UMemoryRefreshRate"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UMemoryRefreshRate = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UAutoRefreshMemory"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsC64UAutoRefreshMemory = v;
+		return;
+	}
+	else if (!strcmp(name, "C64URefreshIORange"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsC64URefreshIORange = v;
+		return;
+	}
+	else if (!strcmp(name, "C64ULocalIP"))
+	{
+		if (c64SettingsC64ULocalIP != NULL)
+			delete c64SettingsC64ULocalIP;
+		c64SettingsC64ULocalIP = new CSlrString((CSlrString*)value);
+		return;
+	}
+	else if (!strcmp(name, "C64UTraceMode"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UTraceMode = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UTraceBufferSize"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UTraceBufferSize = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UAudioEnabled"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsC64UAudioEnabled = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UAudioBufferMs"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UAudioBufferMs = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UUseMulticast"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsC64UUseMulticast = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UHelperAssisted"))
+	{
+		bool v = *((bool*)value);
+		c64SettingsC64UHelperAssisted = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UFtpPort"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UFtpPort = v;
+		return;
+	}
+	else if (!strcmp(name, "C64UTelnetPort"))
+	{
+		int v = *((int*)value);
+		c64SettingsC64UTelnetPort = v;
+		return;
+	}
+
 	LOGError("C64DebuggerSetSetting: unknown setting '%s'", name);
 }
 

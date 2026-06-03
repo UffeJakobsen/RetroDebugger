@@ -30,17 +30,17 @@
 #include "vicetypes.h"
 
 typedef struct doodle_data_s {
-    BYTE *colormap;
+    uint8_t *colormap;
     int xsize;
     int ysize;
     const char *filename;
 } doodle_data_t;
 
 typedef struct doodle_color_sort_s {
-    BYTE color;
+    uint8_t color;
     int amount;
 } doodle_color_sort_t;
 
-extern void gfxoutput_init_doodle(void);
+void gfxoutput_init_doodle(void);
 
 #endif

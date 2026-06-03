@@ -51,9 +51,9 @@ static autostart_prg_t *inject_prg;
 
 static autostart_prg_t * load_prg(const char *file_name, fileio_info_t *finfo, log_t log)
 {
-    DWORD ptr;
-    DWORD end;
-    BYTE lo, hi;
+    uint32_t ptr;
+    uint32_t end;
+    uint8_t lo, hi;
     int i;
     autostart_prg_t *prg;
 
@@ -76,7 +76,7 @@ static autostart_prg_t * load_prg(const char *file_name, fileio_info_t *finfo, l
     if (autostart_basic_load) {
         mem_get_basic_text(&prg->start_addr, NULL);
     } else {
-        prg->start_addr = (WORD)hi << 8 | (WORD)lo;
+        prg->start_addr = (uint16_t)hi << 8 | (uint16_t)lo;
     }
     prg->size -= 2; /* skip load addr */
 
@@ -160,7 +160,7 @@ int autostart_prg_with_virtual_fs(const char *file_name,
     }
     resources_set_int("VirtualDevices", 1);
     resources_set_int("FSDevice8ConvertP00", 1);
-    file_system_detach_disk(8);
+    file_system_detach_disk(8, 0);
     resources_set_int("FileSystemDevice8", ATTACH_DEVICE_FS);
 
     lib_free(directory);
@@ -195,7 +195,7 @@ int autostart_prg_with_disk_image(const char *file_name,
     int i;
     int old_tde_state;
     int file_name_size;
-    BYTE data;
+    uint8_t data;
     unsigned int disk_image_type;
     int result, result2;
 
@@ -258,7 +258,7 @@ int autostart_prg_with_disk_image(const char *file_name,
         }
 
         /* attach disk image */
-        if (file_system_attach_disk(drive, image_name) < 0) {
+        if (file_system_attach_disk(drive, 0, image_name) < 0) {
             log_error(log, "Could not attach disk image: %s", image_name);
             break;
         }
@@ -276,7 +276,7 @@ int autostart_prg_with_disk_image(const char *file_name,
         }
 
         /* open file on disk */
-        if (vdrive_iec_open(vdrive, (const BYTE *)fh->name, file_name_size, secondary, NULL) != SERIAL_OK) {
+        if (vdrive_iec_open(vdrive, (const uint8_t *)fh->name, file_name_size, secondary, NULL) != SERIAL_OK) {
             log_error(log, "Could not open file");
             break;
         }
@@ -286,10 +286,10 @@ int autostart_prg_with_disk_image(const char *file_name,
         for (i = -2; i < (int)prg->size; i++) {
             switch (i) {
             case -2: 
-                data = (BYTE)prg->start_addr; 
+                data = (uint8_t)prg->start_addr; 
                 break;
             case -1: 
-                data = (BYTE)(prg->start_addr >> 8); 
+                data = (uint8_t)(prg->start_addr >> 8); 
                 break;
             default: 
                 data = prg->data[i]; 
@@ -326,7 +326,7 @@ int autostart_prg_with_disk_image(const char *file_name,
 int autostart_prg_perform_injection(log_t log)
 {
     unsigned int i;
-    WORD start, end;
+    uint16_t start, end;
 
     autostart_prg_t *prg = inject_prg;
 
@@ -341,12 +341,12 @@ int autostart_prg_perform_injection(log_t log)
 
     /* store data in emu memory */
     for (i = 0; i < prg->size; i++) {
-        mem_inject((WORD)(prg->start_addr + i), prg->data[i]);
+        mem_inject((uint16_t)(prg->start_addr + i), prg->data[i]);
     }
 
     /* now simulate a basic load */
     mem_get_basic_text(&start, &end);
-    end = (WORD)(prg->start_addr + prg->size);
+    end = (uint16_t)(prg->start_addr + prg->size);
     mem_set_basic_text(start, end);
 
     /* clean up injected prog */

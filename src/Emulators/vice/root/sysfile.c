@@ -39,13 +39,12 @@
 #include "log.h"
 #include "resources.h"
 #include "sysfile.h"
-#include "translate.h"
 #include "util.h"
 
 /* #define DBGSYSFILE */
 
 #ifdef DBGSYSFILE
-#define DBG(x)  printf x
+#define DBG(x)  log_printf x
 #else
 #define DBG(x)
 #endif
@@ -112,6 +111,11 @@ static int set_system_path(const char *val, void *param)
     return 0;
 }
 
+const char *get_system_path(void)
+{
+    return expanded_system_path;
+}
+
 static const resource_string_t resources_string[] = {
     { "Directory", "$$", RES_EVENT_NO, NULL,
       &system_path, set_system_path, NULL },
@@ -121,11 +125,9 @@ static const resource_string_t resources_string[] = {
 /* Command-line options.  */
 
 static const cmdline_option_t cmdline_options[] = {
-    { "-directory", SET_RESOURCE, 1,
+    { "-directory", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "Directory", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_PATH, IDCLS_DEFINE_SYSTEM_FILES_PATH,
-      NULL, NULL },
+      "<Path>", "Define search path to locate system files" },
     CMDLINE_LIST_END
 };
 
@@ -167,7 +169,7 @@ int sysfile_cmdline_options_init(void)
    return an open stdio stream for that file.  If `complete_path_return' is
    not NULL, `*complete_path_return' points to a malloced string with the
    complete path if the file was found or is NULL if not.  */
-FILE *sysfile_open(const char *name, char **complete_path_return,
+FILE *sysfile_open(const char *name, const char *subpath, char **complete_path_return,
                    const char *open_mode)
 {
     char *p = NULL;
@@ -178,7 +180,7 @@ FILE *sysfile_open(const char *name, char **complete_path_return,
         return NULL;
     }
 
-    p = findpath(name, expanded_system_path, IOUTIL_ACCESS_R_OK);
+    p = findpath(name, expanded_system_path, subpath, IOUTIL_ACCESS_R_OK);
 
     if (p == NULL) {
         if (complete_path_return != NULL) {
@@ -201,9 +203,9 @@ FILE *sysfile_open(const char *name, char **complete_path_return,
 
 /* As `sysfile_open', but do not open the file.  Just return 0 if the file is
    found and is readable, or -1 if an error occurs.  */
-int sysfile_locate(const char *name, char **complete_path_return)
+int sysfile_locate(const char *name, const char *subpath, char **complete_path_return)
 {
-    FILE *f = sysfile_open(name, complete_path_return, MODE_READ);
+    FILE *f = sysfile_open(name, subpath, complete_path_return, MODE_READ);
 
     if (f != NULL) {
         fclose(f);
@@ -220,7 +222,7 @@ int sysfile_locate(const char *name, char **complete_path_return)
  * into the end of the memory range.
  * If minsize < 0, load it at the start.
  */
-int sysfile_load(const char *name, BYTE *dest, int minsize, int maxsize)
+int sysfile_load(const char *name, const char *subpath, uint8_t *dest, int minsize, int maxsize)
 {
     FILE *fp = NULL;
     size_t rsize = 0;
@@ -244,7 +246,7 @@ int sysfile_load(const char *name, BYTE *dest, int minsize, int maxsize)
         return rsize;
     }
 
-    fp = sysfile_open(name, &complete_path, MODE_READ);
+    fp = sysfile_open(name, subpath, &complete_path, MODE_READ);
 
     if (fp == NULL) {
         /* Try to open the file from the current directory. */
@@ -254,7 +256,7 @@ int sysfile_load(const char *name, BYTE *dest, int minsize, int maxsize)
         char *local_name = NULL;
 
         local_name = util_concat(working_dir_prefix, name, NULL);
-        fp = sysfile_open((const char *)local_name, &complete_path, MODE_READ);
+        fp = sysfile_open((const char *)local_name, subpath, &complete_path, MODE_READ);
         lib_free(local_name);
         local_name = NULL;
 

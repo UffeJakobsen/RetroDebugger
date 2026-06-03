@@ -301,11 +301,19 @@ void CViewSnapshots::OpenDialogSaveSnapshot()
 		{
 			selectedSnapshotExtensions = &snapshotExtensionsNES;
 		}
+		else
+		{
+			// Emulator type doesn't support snapshots (e.g. C64U), try next
+			continue;
+		}
 		break;
 	}
-	
+
+	if (selectedSnapshotExtensions == NULL)
+		return;
+
 	CSlrString *defaultFileName = new CSlrString("snapshot");
-	
+
 	CSlrString *windowTitle = new CSlrString("Save snapshot");
 	viewC64->ShowDialogSaveFile(this, selectedSnapshotExtensions, defaultFileName, c64SettingsDefaultSnapshotsFolder, windowTitle);
 	delete windowTitle;
@@ -340,9 +348,16 @@ void CViewSnapshots::OpenDialogLoadSnapshot()
 		{
 			selectedSnapshotExtensions = &snapshotExtensionsNES;
 		}
+		else
+		{
+			continue;
+		}
 		break;
 	}
-	
+
+	if (selectedSnapshotExtensions == NULL)
+		return;
+
 	CSlrString *windowTitle = new CSlrString("Load snapshot");
 	viewC64->ShowDialogOpenFile(this, selectedSnapshotExtensions, c64SettingsDefaultSnapshotsFolder, windowTitle);
 	delete windowTitle;	

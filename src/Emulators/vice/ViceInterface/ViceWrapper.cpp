@@ -10,6 +10,7 @@ extern "C" {
 #include "raster.h"
 #include "videoarch.h"
 #include "drivetypes.h"
+#include "drive.h"
 #include "gcr.h"
 #include "c64.h"
 #include "cia.h"
@@ -24,6 +25,7 @@ extern "C" {
 #include "SND_Main.h"
 #include "SYS_Main.h"
 #include "SYS_Types.h"
+#include <atomic>
 #include "C64SettingsStorage.h"
 #include "SYS_CommandLine.h"
 #include "CGuiMain.h"
@@ -41,7 +43,37 @@ extern "C" {
 #include "CDebugEventsHistory.h"
 #include "SND_SoundEngine.h"
 
-volatile int c64d_debug_mode = DEBUGGER_MODE_RUNNING;
+std::atomic<int> c64d_debug_mode{DEBUGGER_MODE_RUNNING};
+static int pauseRefreshDone = 0;  // Flag to ensure refresh happens only once when pausing
+
+// Diagnostic: track who last changed c64d_debug_mode and detect unexpected transitions
+const char *c64d_debug_mode_last_setter = "init";
+static int c64d_debug_mode_prev_value = DEBUGGER_MODE_RUNNING;
+
+void c64d_debug_mode_trace(int newMode, const char *setter)
+{
+	int prev = c64d_debug_mode_prev_value;
+	c64d_debug_mode_prev_value = newMode;
+	c64d_debug_mode_last_setter = setter;
+
+	// Log all transitions to help diagnose stepping hangs
+	if (prev != newMode)
+	{
+		LOGD("c64d_debug_mode: %d -> %d [%s] (clk=%d)", prev, newMode, setter, (int)c64d_maincpu_clk);
+	}
+}
+
+// C-compatible accessors for c64d_debug_mode (std::atomic<int>)
+// These must be used from C code instead of direct variable access
+extern "C" int c64d_debug_mode_get(void)
+{
+	return c64d_debug_mode.load(std::memory_order_acquire);
+}
+
+extern "C" void c64d_debug_mode_store(int newMode)
+{
+	c64d_debug_mode.store(newMode, std::memory_order_release);
+}
 
 int c64d_patch_kernal_fast_boot_flag = 0;
 int c64d_setting_run_sid_when_in_warp = 1;
@@ -71,8 +103,8 @@ uint8 c64d_mem_access_value = 0;
 uint8 c64d_mem_access_is_write = 0;
 
 volatile int c64d_start_frame_for_snapshots_manager = 0;
-volatile unsigned int c64d_maincpu_previous_instruction_clk = 0;
-volatile unsigned int c64d_maincpu_previous2_instruction_clk = 0;
+volatile CLOCK c64d_maincpu_previous_instruction_clk = 0;
+volatile CLOCK c64d_maincpu_previous2_instruction_clk = 0;
 
 uint16 viceCurrentC64PC;
 uint16 viceCurrentDiskPC[4];
@@ -89,7 +121,7 @@ extern "C" {
 extern int c64d_profiler_is_active;
 extern FILE *c64d_profiler_file_out;
 
-BYTE c64d_peek_c64(WORD addr);
+uint8_t c64d_peek_c64(uint16_t addr);
 void c64d_mem_write_c64_no_mark(unsigned int addr, unsigned char value);
 void c64d_get_vic_simple_state(struct C64StateVIC *simpleStateVic);
 }
@@ -164,12 +196,18 @@ void c64d_mark_c64_cell_read(uint16 addr)
 		}
 	}
 
+	// Cache the peek result for addr so it can be reused between the watch block
+	// and the breakpoint block without calling c64d_peek_c64(addr) twice.
+	u8 readValue = 0;
+	bool valueRead = false;
+
 	// Memory access watch tracking: always skip bogus reads so the VIC editor
 	// layer only marks cycles with real data accesses, not dummy page-offset reads
 	if (c64d_mem_access_watch[addr] && !isBogusPageOffsetRead)
 	{
 		c64d_mem_access_addr = addr;
-		c64d_mem_access_value = c64d_peek_c64(addr);
+		readValue = c64d_peek_c64(addr); valueRead = true;
+		c64d_mem_access_value = readValue;
 		c64d_mem_access_is_write = 0;
 	}
 
@@ -183,22 +221,27 @@ void c64d_mark_c64_cell_read(uint16 addr)
 	if (debugInterfaceVice->snapshotsManager->IsPerformingSnapshotRestore())
 		return;
 
-	if (!isBogusPageOffsetRead || !c64dSkipBogusPageOffsetReadOnSTA)
+	// Skip mutex + breakpoint evaluation when no data breakpoints exist (common case).
+	// The map check is O(1) and avoids the mutex lock/unlock overhead on every memory access.
+	CDebugSymbolsSegment *segment = debugInterfaceVice->symbols->currentSegment;
+	if (segment && !segment->breakpointsData->breakpoints.empty())
 	{
-		debugInterfaceVice->LockMutex();
-
-		CDebugSymbolsSegment *segment = debugInterfaceVice->symbols->currentSegment;
-		if (segment)
+		if (!isBogusPageOffsetRead || !c64dSkipBogusPageOffsetReadOnSTA)
 		{
-			u8 value = c64d_peek_c64(addr);
-			CDebugBreakpointData *breakpoint = segment->breakpointsData->EvaluateBreakpoint(addr, value, MEMORY_BREAKPOINT_ACCESS_READ);
+			debugInterfaceVice->LockMutex();
+
+			if (!valueRead) { readValue = c64d_peek_c64(addr); }
+			CDebugBreakpointData *breakpoint = segment->breakpointsData->EvaluateBreakpoint(addr, readValue, MEMORY_BREAKPOINT_ACCESS_READ);
 			if (breakpoint != NULL)
 			{
+				LOGD("DIAG: mem READ breakpoint fired at addr=%04x during mode=%d", addr, c64d_debug_mode.load(std::memory_order_relaxed));
+				c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "mem-read-bp");
 				debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 				segment->symbols->debugEventsHistory->CreateEventBreakpoint(breakpoint, MEMORY_BREAKPOINT_ACCESS_READ, segment);
 			}
+
+			debugInterfaceVice->UnlockMutex();
 		}
-		debugInterfaceVice->UnlockMutex();
 	}
 }
 
@@ -212,24 +255,28 @@ void c64d_mark_c64_cell_write(uint16 addr, uint8 value)
 	}
 
 	debugInterfaceVice->symbols->memory->CellWrite(addr, value, viceCurrentC64PC, vicii.raster_line, vicii.raster_cycle);
-	
+
 	// skip checking breakpoints when quick fast-forward/restoring snapshot
 	if (debugInterfaceVice->snapshotsManager->IsPerformingSnapshotRestore())
 		return;
-	
-	debugInterfaceVice->LockMutex();
-	
+
+	// Skip mutex + breakpoint evaluation when no data breakpoints exist (common case)
 	CDebugSymbolsSegment *segment = debugInterfaceVice->symbols->currentSegment;
-	if (segment)
+	if (segment && !segment->breakpointsData->breakpoints.empty())
 	{
+		debugInterfaceVice->LockMutex();
+
 		CDebugBreakpointData *breakpoint = segment->breakpointsData->EvaluateBreakpoint(addr, value, MEMORY_BREAKPOINT_ACCESS_WRITE);
 		if (breakpoint != NULL)
 		{
+			LOGD("DIAG: mem WRITE breakpoint fired at addr=%04x during mode=%d", addr, c64d_debug_mode.load(std::memory_order_relaxed));
+			c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "mem-write-bp");
 			debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 			segment->symbols->debugEventsHistory->CreateEventBreakpoint(breakpoint, MEMORY_BREAKPOINT_ACCESS_WRITE, segment);
 		}
+
+		debugInterfaceVice->UnlockMutex();
 	}
-	debugInterfaceVice->UnlockMutex();
 }
 
 void c64d_mark_c64_cell_execute(uint16 addr, uint8 opcode)
@@ -252,10 +299,11 @@ void c64d_mark_drive1541_cell_read(uint16 addr)
 	
 	CDebugSymbolsSegmentDrive1541 *segment = (CDebugSymbolsSegmentDrive1541*) debugInterfaceVice->symbolsDrive1541->currentSegment;
 	
-	if (segment && segment->breakOnMemory)
+	if (segment && segment->breakOnMemory
+		&& !segment->breakpointsData->breakpoints.empty())
 	{
 		debugInterfaceVice->LockMutex();
-	
+
 		u8 value = c64d_peek_drive(segment->driveNum, addr);
 
 		CDebugBreakpointData *breakpoint = segment->breakpointsData->EvaluateBreakpoint(addr, value, MEMORY_BREAKPOINT_ACCESS_READ);
@@ -280,10 +328,11 @@ void c64d_mark_drive1541_cell_write(uint16 addr, uint8 value)
 	
 	CDebugSymbolsSegmentDrive1541 *segment = (CDebugSymbolsSegmentDrive1541*) debugInterfaceVice->symbolsDrive1541->currentSegment;
 	
-	if (segment && segment->breakOnMemory)
+	if (segment && segment->breakOnMemory
+		&& !segment->breakpointsData->breakpoints.empty())
 	{
 		debugInterfaceVice->LockMutex();
-		
+
 		CDebugBreakpointData *breakpoint = segment->breakpointsData->EvaluateBreakpoint(addr, value, MEMORY_BREAKPOINT_ACCESS_WRITE);
 		if (breakpoint)
 		{
@@ -344,6 +393,8 @@ float c64d_float_palette_red[16];
 float c64d_float_palette_green[16];
 float c64d_float_palette_blue[16];
 
+uint32_t c64d_palette_rgba[16];
+
 void c64d_set_palette(uint8 *palette)
 {
 	int j = 0;
@@ -356,6 +407,11 @@ void c64d_set_palette(uint8 *palette)
 		c64d_float_palette_red[i] = (float)c64d_palette_red[i] / 255.0f;
 		c64d_float_palette_green[i] = (float)c64d_palette_green[i] / 255.0f;
 		c64d_float_palette_blue[i] = (float)c64d_palette_blue[i] / 255.0f;
+
+		c64d_palette_rgba[i] = (uint32_t)c64d_palette_red[i]
+			| ((uint32_t)c64d_palette_green[i] << 8)
+			| ((uint32_t)c64d_palette_blue[i] << 16)
+			| 0xFF000000;
 	}
 }
 
@@ -373,6 +429,11 @@ void c64d_set_palette_vice(uint8 *palette)
 		c64d_float_palette_red[i] = (float)c64d_palette_red[i] / 255.0f;
 		c64d_float_palette_green[i] = (float)c64d_palette_green[i] / 255.0f;
 		c64d_float_palette_blue[i] = (float)c64d_palette_blue[i] / 255.0f;
+
+		c64d_palette_rgba[i] = (uint32_t)c64d_palette_red[i]
+			| ((uint32_t)c64d_palette_green[i] << 8)
+			| ((uint32_t)c64d_palette_blue[i] << 16)
+			| 0xFF000000;
 	}
 }
 
@@ -402,10 +463,8 @@ int c64d_set_vicii_border_mode(int borderMode)
 
 void c64d_clear_screen()
 {
-	debugInterfaceVice->LockRenderScreenMutex();
-	
 	uint8 *destScreenPtr = (uint8 *)debugInterfaceVice->screenImageData->resultData;
-	
+
 	for (int y = 0; y < 512; y++)
 	{
 		for (int x = 0; x < 512; x++)
@@ -416,10 +475,10 @@ void c64d_clear_screen()
 			*destScreenPtr++ = 0xFF;
 		}
 	}
-	
+
 	uint8 *screenBuffer = vicii.raster.canvas->draw_buffer->draw_buffer;
 	uint8 *srcScreenPtr = screenBuffer;
-	
+
 	for (int y = 0; y < 100; y++)
 	{
 		for (int x = 0; x < 384; x++)
@@ -428,8 +487,7 @@ void c64d_clear_screen()
 		}
 	}
 
-	debugInterfaceVice->UnlockRenderScreenMutex();
-
+	debugInterfaceVice->PublishScreenImage();
 }
 
 int c64d_screen_num_skip_top_lines()
@@ -451,22 +509,74 @@ int c64d_screen_num_skip_top_lines()
 	return 16;
 }
 
+extern "C" int c64d_vic_count_nonzero_in_drawbuffer()
+{
+	if (vicii.raster.canvas == NULL || vicii.raster.canvas->draw_buffer == NULL)
+		return -1;
+	uint8 *buf = vicii.raster.canvas->draw_buffer->draw_buffer;
+	if (buf == NULL)
+		return -1;
+	int width  = vicii.raster.canvas->draw_buffer->visible_width;
+	int height = vicii.raster.canvas->draw_buffer->visible_height;
+	int count = 0;
+	for (int i = 0; i < width * height; i++)
+		if (buf[i] != 0) count++;
+	return count;
+}
+
+extern "C" int c64d_vic_read_interior_pixel(int x, int y)
+{
+	// Interior screen (320×200) → draw_buffer offset.
+	//
+	//   screenImage path: copy starts at row `skipTopLines` of
+	//     draw_buffer into screenImageData row 0 (full width 384).
+	//   GetInteriorScreenImage: reads screenImageData(x+32, y+35) for
+	//     interior (x, y).
+	//
+	// So interior (x, y) → draw_buffer[(y + 35 + skipTopLines) * 384
+	//   + (x + 32)]. With NORMAL_BORDERS skipTopLines = 16, that's
+	//   draw_buffer[(y + 51) * 384 + (x + 32)].
+	if (x < 0 || x >= 320 || y < 0 || y >= 200)
+		return -1;
+	if (vicii.raster.canvas == NULL || vicii.raster.canvas->draw_buffer == NULL)
+		return -1;
+	uint8 *buf = vicii.raster.canvas->draw_buffer->draw_buffer;
+	if (buf == NULL)
+		return -1;
+	int width   = vicii.raster.canvas->draw_buffer->visible_width;
+	int skipTop = c64d_screen_num_skip_top_lines();
+	const int offsetX = 32;
+	const int offsetY = 35;
+	int dbx = x + offsetX;
+	int dby = y + offsetY + skipTop;
+	return buf[dby * width + dbx];
+}
+
 void c64d_refresh_screen_no_callback()
 {
-//	LOGD("c64d_refresh_screen_no_callback");
+	// During debug stepping, the atomic refresh in c64d_debug_pause_check()
+	// handles screen updates (partial lines + completed lines). A full-frame
+	// copy from draw_buffer would overwrite the current raster line with stale
+	// data from the previous frame, causing a visible blink between steps.
+	// Use acquire to ensure we see unpause notifications from other threads
+	if (c64d_debug_mode.load(std::memory_order_acquire) != DEBUGGER_MODE_RUNNING)
+	{
+		return;
+	}
 	//raster_t //vicii.raster
 	//struct video_canvas_s //raster->canvas
 	//canvas->draw_buffer->draw_buffer
-	
+
 	if (debugInterfaceVice->snapshotsManager->SkipRefreshOfVideoFrame())
 		return;
-	
-	debugInterfaceVice->LockRenderScreenMutex();
+
+	// In running mode, screenImageData points to the current producer buffer
+	// which only the emulation thread writes to — no lock needed.
 
 	uint8 *screenBuffer = vicii.raster.canvas->draw_buffer->draw_buffer;
-	
+
 	volatile int superSample = debugInterfaceVice->screenSupersampleFactor;
-	
+
 	if (superSample == 1)
 	{
 		// dest screen width is 512
@@ -476,22 +586,18 @@ void c64d_refresh_screen_no_callback()
 		int skipTopLines = c64d_screen_num_skip_top_lines();
 		int screenWidth = vicii.raster.canvas->draw_buffer->visible_width;
 		int screenHeight = vicii.raster.canvas->draw_buffer->visible_height; //-skipTopLines;
-		
+
 		uint8 *srcScreenPtr = screenBuffer + (skipTopLines*screenWidth);
-		uint8 *destScreenPtr = (uint8 *)debugInterfaceVice->screenImageData->resultData;
-		
+		uint32_t *destScreenPtr32 = (uint32_t *)debugInterfaceVice->screenImageData->resultData;
+
 		for (int y = 0; y < screenHeight; y++)
 		{
 			for (int x = 0; x < screenWidth; x++)
 			{
-				u8 v = *srcScreenPtr++;
-				*destScreenPtr++ = c64d_palette_red[v];
-				*destScreenPtr++ = c64d_palette_green[v];
-				*destScreenPtr++ = c64d_palette_blue[v];
-				*destScreenPtr++ = 255;
+				*destScreenPtr32++ = c64d_palette_rgba[*srcScreenPtr++];
 			}
-			
-			destScreenPtr += (512-screenWidth)*4;
+
+			destScreenPtr32 += (512-screenWidth);
 		}
 	}
 	else
@@ -506,7 +612,7 @@ void c64d_refresh_screen_no_callback()
 
 		uint8 *srcScreenPtr = screenBuffer + (skipTopLines*screenWidth);
 		uint8 *destScreenPtr = (uint8 *)debugInterfaceVice->screenImageData->resultData;
-		
+
 		for (int y = 0; y < screenHeight; y++)
 		{
 			for (int j = 0; j < superSample; j++)
@@ -516,7 +622,7 @@ void c64d_refresh_screen_no_callback()
 				for (int x = 0; x < screenWidth; x++)
 				{
 					u8 v = *pScreenPtrSrc++;
-					
+
 					for (int i = 0; i < superSample; i++)
 					{
 						*pScreenPtrDest++ = c64d_palette_red[v];
@@ -525,22 +631,79 @@ void c64d_refresh_screen_no_callback()
 						*pScreenPtrDest++ = 255;
 					}
 				}
-				
+
 				destScreenPtr += (512)*superSample*4;
 			}
-			
+
 			srcScreenPtr += screenWidth;
 		}
 	}
-	
-	debugInterfaceVice->UnlockRenderScreenMutex();
+
+	// Publish the completed frame: swap producer with ready buffer
+	debugInterfaceVice->PublishScreenImage();
 }
 
 void c64d_refresh_screen()
 {
-//	LOGD("c64d_refresh_screen");
+//	LOGD("c64d_refresh_screen: raster_line=%d debug_mode=%d", vicii.raster_line, c64d_debug_mode);
 	c64d_refresh_screen_no_callback();
 	debugInterfaceVice->DoFrame();
+}
+
+// Internal: fast row-by-row refresh of completed lines from draw_buffer into screenImageData.
+// Paints screen lines 0..numLines-1 from draw_buffer, starting at draw_buffer line skipTopLines.
+// Called from emulator thread only — writes to the producer buffer (no mutex needed).
+static void c64d_refresh_lines_fast_locked(int numLines, int skipTopLines, int screenWidth)
+{
+	if (numLines <= 0)
+		return;
+
+	uint8 *screenBuffer = vicii.raster.canvas->draw_buffer->draw_buffer;
+	volatile int superSample = debugInterfaceVice->screenSupersampleFactor;
+
+	if (superSample == 1)
+	{
+		// Fast path: direct pointer arithmetic, row-by-row, sequential memory access
+		uint8 *srcScreenPtr = screenBuffer + (skipTopLines * screenWidth);
+		uint32_t *destScreenPtr32 = (uint32_t *)debugInterfaceVice->screenImageData->resultData;
+
+		for (int y = 0; y < numLines; y++)
+		{
+			for (int x = 0; x < screenWidth; x++)
+			{
+				*destScreenPtr32++ = c64d_palette_rgba[*srcScreenPtr++];
+			}
+			destScreenPtr32 += (512 - screenWidth);
+		}
+	}
+	else
+	{
+		// Supersample path: row-by-row with pixel replication
+		uint8 *srcScreenPtr = screenBuffer + (skipTopLines * screenWidth);
+		uint8 *destScreenPtr = (uint8 *)debugInterfaceVice->screenImageData->resultData;
+
+		for (int y = 0; y < numLines; y++)
+		{
+			for (int j = 0; j < superSample; j++)
+			{
+				uint8 *pScreenPtrSrc = srcScreenPtr;
+				uint8 *pScreenPtrDest = destScreenPtr;
+				for (int x = 0; x < screenWidth; x++)
+				{
+					u8 v = *pScreenPtrSrc++;
+					for (int i = 0; i < superSample; i++)
+					{
+						*pScreenPtrDest++ = c64d_palette_red[v];
+						*pScreenPtrDest++ = c64d_palette_green[v];
+						*pScreenPtrDest++ = c64d_palette_blue[v];
+						*pScreenPtrDest++ = 255;
+					}
+				}
+				destScreenPtr += 512 * superSample * 4;
+			}
+			srcScreenPtr += screenWidth;
+		}
+	}
 }
 
 // this is called when debug is paused to refresh only part of screen
@@ -549,45 +712,69 @@ void c64d_refresh_previous_lines()
 	if (debugInterfaceVice->snapshotsManager->SkipRefreshOfVideoFrame())
 		return;
 
-//	LOGD("c64d_refresh_previous_lines");
-	debugInterfaceVice->LockRenderScreenMutex();
-	
 	int skipTopLines = c64d_screen_num_skip_top_lines();
 	int screenWidth = vicii.raster.canvas->draw_buffer->visible_width;
-	int screenHeight = vicii.raster.canvas->draw_buffer->visible_height; //-skipTopLines
-	
-	int rasterY = vicii.raster_line - skipTopLines;
-	
-	rasterY--;
-	
-	// draw previous completed raster lines
-	uint8 *screenBuffer = vicii.raster.canvas->draw_buffer->draw_buffer;
-	
-//	LOGD("..... rasterY=%x", rasterY);
-	
-	for (int x = 0; x < screenWidth; x++)
+	int numLines = vicii.raster_line - skipTopLines - 1;
+
+	c64d_refresh_lines_fast_locked(numLines, skipTopLines, screenWidth);
+	debugInterfaceVice->PublishScreenImage();
+}
+
+// Full-screen refresh into producer buffer + publish, works regardless of pause state.
+// Used after snapshot restore to update screen with new VIC state.
+void c64d_refresh_screen_paused()
+{
+	if (debugInterfaceVice->snapshotsManager->SkipRefreshOfVideoFrame())
+		return;
+
+	int skipTopLines = c64d_screen_num_skip_top_lines();
+	int screenWidth = vicii.raster.canvas->draw_buffer->visible_width;
+	int screenHeight = vicii.raster.canvas->draw_buffer->visible_height;
+
+	c64d_refresh_lines_fast_locked(screenHeight, skipTopLines, screenWidth);
+	debugInterfaceVice->PublishScreenImage();
+}
+
+// Paint the current partial raster line from dbuf into screenImageData.
+// Called from emulator thread only — writes to the producer buffer (no mutex needed).
+static void c64d_refresh_dbuf_line_locked(int rasterY, int screenWidth)
+{
+	if (rasterY < 0)
+		return;
+
+	int borderMode = debugInterfaceVice->GetViciiBorderMode();
+	int lineOffset;
+
+	switch(borderMode)
 	{
-		for (int y = 0; y < rasterY; y++)
+		default:
+		case VICII_NORMAL_BORDERS:  lineOffset = 104;     break;
+		case VICII_FULL_BORDERS:    lineOffset = 104-16;  break;
+		case VICII_DEBUG_BORDERS:   lineOffset = 0;       break;
+		case VICII_NO_BORDERS:      lineOffset = 104+32;  break;
+	}
+
+	volatile int superSample = debugInterfaceVice->screenSupersampleFactor;
+
+	for (int l = 0; l < vicii.dbuf_offset; l++)
+	{
+		int x = l - lineOffset;
+		if (x < 0 || x > screenWidth)
+			continue;
+
+		u8 v = vicii.dbuf[l];
+
+		for (int i = 0; i < superSample; i++)
 		{
-			int offset = x + ((y+skipTopLines) * screenWidth);
-			
-			u8 v = screenBuffer[offset];
-			
-			//LOGD("r=%d g=%d b=%d", r, g, b);
-			
-			for (int i = 0; i < debugInterfaceVice->screenSupersampleFactor; i++)
+			for (int j = 0; j < superSample; j++)
 			{
-				for (int j = 0; j < debugInterfaceVice->screenSupersampleFactor; j++)
-				{
-					debugInterfaceVice->screenImageData->SetPixelResultRGBA(x * debugInterfaceVice->screenSupersampleFactor + j,
-																   y * debugInterfaceVice->screenSupersampleFactor + i,
-																   c64d_palette_red[v], c64d_palette_green[v], c64d_palette_blue[v], 255);
-				}
+				debugInterfaceVice->screenImageData->SetPixelResultRGBA(
+					x * superSample + j,
+					rasterY * superSample + i,
+					c64d_palette_red[v], c64d_palette_green[v], c64d_palette_blue[v], 255);
 			}
 		}
 	}
-	
-	debugInterfaceVice->UnlockRenderScreenMutex();
 }
 
 void c64d_refresh_dbuf()
@@ -595,78 +782,15 @@ void c64d_refresh_dbuf()
 	if (debugInterfaceVice->snapshotsManager->SkipRefreshOfVideoFrame())
 		return;
 
-//	return;
-//	LOGD("c64d_refresh_dbuf");
 	int skipTopLines = c64d_screen_num_skip_top_lines();
 	int screenWidth = vicii.raster.canvas->draw_buffer->visible_width;
-	int screenHeight = vicii.raster.canvas->draw_buffer->visible_height; //-skipTopLines
-
 	int rasterY = vicii.raster_line - skipTopLines;
 
-	if (rasterY < 0 || rasterY > screenHeight)
-	{
+	if (rasterY < 0 || rasterY > vicii.raster.canvas->draw_buffer->visible_height)
 		return;
-	}
 
-	if (vicii.raster_cycle > 61)
-		return;
-	
-	if (vicii.raster_cycle == 0 && vicii.dbuf_offset == 504)
-		return;
-	
-	debugInterfaceVice->LockRenderScreenMutex();
-	
-//	LOGD(".... rasterY=%x vicii.dbuf_offset + 8=%d", rasterY, (vicii.dbuf_offset + 8));
-//	LOGD(".... rasterX=%x raster_cycle=%d", vicii.raster_cycle*8, vicii.raster_cycle);
-
-	int borderMode = debugInterfaceVice->GetViciiBorderMode();
-	int lineOffset;
-	
-	switch(borderMode)
-	{
-		default:
-		case VICII_NORMAL_BORDERS:
-			lineOffset = 104;
-			break;
-		case VICII_FULL_BORDERS:
-			lineOffset = 104-16;
-			break;
-		case VICII_DEBUG_BORDERS:
-			lineOffset = 0;
-			break;
-		case VICII_NO_BORDERS:
-			lineOffset = 104+32;
-			break;
-	}
-	
-	int maxX = 0;
-	
-	for (int l = 0; l < vicii.dbuf_offset; l++)	//+8
-	{
-		int x = l - lineOffset;
-		if (x < 0 || x > screenWidth)
-			continue;
-		
-		if (maxX < x)
-			maxX = x;
-		
-		u8 v = vicii.dbuf[l];
-		
-		for (int i = 0; i < debugInterfaceVice->screenSupersampleFactor; i++)
-		{
-			for (int j = 0; j < debugInterfaceVice->screenSupersampleFactor; j++)
-			{
-				debugInterfaceVice->screenImageData->SetPixelResultRGBA(x * debugInterfaceVice->screenSupersampleFactor + j,
-															   rasterY * debugInterfaceVice->screenSupersampleFactor + i,
-															   c64d_palette_red[v], c64d_palette_green[v], c64d_palette_blue[v], 255);
-			}
-		}
-	}
-	
-//	LOGD("........ maxX=%d", maxX);
-
-	
-	debugInterfaceVice->UnlockRenderScreenMutex();
+	c64d_refresh_dbuf_line_locked(rasterY, screenWidth);
+	debugInterfaceVice->PublishScreenImage();
 }
 
 extern "C" {
@@ -729,13 +853,15 @@ void c64d_c64_check_pc_breakpoint(uint16 pc)
 	
 	if ((int)pc == segment->breakpointsPC->temporaryBreakpointPC)
 	{
+		LOGD("DIAG: temp PC breakpoint hit at pc=%04x during mode=%d", pc, c64d_debug_mode.load(std::memory_order_relaxed));
+		c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "temp-pc-bp");
 		debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 		segment->breakpointsPC->temporaryBreakpointPC = -1;
 	}
-	else
+	else if (!segment->breakpointsPC->breakpoints.empty())
 	{
 		debugInterfaceVice->LockMutex();
-		
+
 		CDebugBreakpointAddr *addrBreakpoint = segment->breakpointsPC->EvaluateBreakpoint(pc);
 		if (addrBreakpoint != NULL)
 		{
@@ -774,6 +900,8 @@ void c64d_c64_check_pc_breakpoint(uint16 pc)
 
 			if (IS_SET(addrBreakpoint->actions, ADDR_BREAKPOINT_ACTION_STOP))
 			{
+				LOGD("DIAG: PC breakpoint hit at pc=%04x during mode=%d",
+					 pc, c64d_debug_mode.load(std::memory_order_relaxed));
 				debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 				segment->symbols->debugEventsHistory->CreateEventBreakpoint(addrBreakpoint, ADDR_BREAKPOINT_ACTION_STOP, segment);
 			}
@@ -796,7 +924,8 @@ void c64d_drive1541_check_pc_breakpoint(uint16 pc)
 		segment->breakpointsPC->temporaryBreakpointPC = -1;
 		viceCurrentDiskPC[0] = pc;
 	}
-	else if (segment->breakOnPC)
+	else if (segment->breakOnPC
+		&& !segment->breakpointsPC->breakpoints.empty())
 	{
 		debugInterfaceVice->LockMutex();
 		CDebugBreakpointAddr *addrBreakpoint = segment->breakpointsPC->EvaluateBreakpoint(pc);
@@ -821,8 +950,8 @@ extern "C"
 {
 	void c64d_get_maincpu_regs(uint8 *a, uint8 *x, uint8 *y, uint8 *p, uint8 *sp, uint16 *pc,
 							   uint8 *instructionCycle);
-	void c64d_get_exrom_game(BYTE *exrom, BYTE *game);
-	void c64d_get_ultimax_phi(BYTE *ultimax_phi1, BYTE *ultimax_phi2);
+	void c64d_get_exrom_game(uint8_t *exrom, uint8_t *game);
+	void c64d_get_ultimax_phi(uint8_t *ultimax_phi1, uint8_t *ultimax_phi2);
 };
 
 vicii_cycle_state_t *c64d_get_vicii_state_for_raster_cycle(int rasterLine, int rasterCycle)
@@ -836,7 +965,7 @@ vicii_cycle_state_t *c64d_get_vicii_state_for_raster_line(int rasterLine)
 }
 
 extern "C" {
-	BYTE c64d_peek_memory0001();
+	uint8_t c64d_peek_memory0001();
 };
 
 /* Profiler call */
@@ -1039,6 +1168,69 @@ void c64d_c64_set_vicii_record_state_mode(uint8 recordMode)
 	c64d_vicii_record_state_mode = recordMode;
 }
 
+// ---- Multi-frame VIC state recorder ----
+// Diagnostic ring of full per-cycle frame snapshots. Allocated on
+// _start, freed on _stop. Hooked into c64d_c64_vicii_start_frame
+// below: every time VICE begins a new frame, we copy the just-
+// completed viciiStateForCycle[312][64] grid into the next ring slot.
+typedef vicii_cycle_state_t viciiFrameGrid_t[312][64];
+static viciiFrameGrid_t *gViciiMultiFrame = NULL;
+static int gViciiMultiFrameCapacity = 0;
+static int gViciiMultiFrameCount    = 0;
+static bool gViciiMultiFrameSkipFirst = false;
+
+void c64d_vicii_multiframe_start(int numFrames)
+{
+	c64d_vicii_multiframe_stop();
+	if (numFrames <= 0) return;
+	if (numFrames > 8) numFrames = 8;
+	gViciiMultiFrame = (viciiFrameGrid_t *)malloc(sizeof(viciiFrameGrid_t) * numFrames);
+	if (gViciiMultiFrame == NULL) return;
+	gViciiMultiFrameCapacity = numFrames;
+	gViciiMultiFrameCount    = 0;
+	// Skip the first start_of_frame after _start because viciiStateForCycle
+	// at that point holds a partial / mid-frame state from when we were
+	// called. Wait one frame so the NEXT start_of_frame sees a complete
+	// frame's worth of recorded cycles.
+	gViciiMultiFrameSkipFirst = true;
+}
+
+void c64d_vicii_multiframe_stop()
+{
+	if (gViciiMultiFrame) free(gViciiMultiFrame);
+	gViciiMultiFrame = NULL;
+	gViciiMultiFrameCapacity = 0;
+	gViciiMultiFrameCount    = 0;
+	gViciiMultiFrameSkipFirst = false;
+}
+
+int c64d_vicii_multiframe_get_count()    { return gViciiMultiFrameCount; }
+int c64d_vicii_multiframe_get_capacity() { return gViciiMultiFrameCapacity; }
+
+vicii_cycle_state_t *c64d_vicii_multiframe_get(int frameIdx, int rasterLine, int rasterCycle)
+{
+	if (gViciiMultiFrame == NULL) return NULL;
+	if (frameIdx < 0 || frameIdx >= gViciiMultiFrameCount) return NULL;
+	if (rasterLine < 0 || rasterLine >= 312) return NULL;
+	if (rasterCycle < 0 || rasterCycle >= 64) return NULL;
+	return &(gViciiMultiFrame[frameIdx][rasterLine][rasterCycle]);
+}
+
+static void c64d_vicii_multiframe_capture_completed_frame()
+{
+	if (gViciiMultiFrame == NULL) return;
+	if (gViciiMultiFrameCount >= gViciiMultiFrameCapacity) return;
+	if (gViciiMultiFrameSkipFirst)
+	{
+		gViciiMultiFrameSkipFirst = false;
+		return;
+	}
+	memcpy(&(gViciiMultiFrame[gViciiMultiFrameCount]),
+	       viciiStateForCycle,
+	       sizeof(viciiStateForCycle));
+	gViciiMultiFrameCount++;
+}
+
 //unsigned int viciiFrameCycleNum = 0;
 
 void c64d_c64_vicii_start_frame()
@@ -1056,6 +1248,11 @@ void c64d_c64_vicii_start_frame()
 //
 	c64d_start_frame_for_snapshots_manager = 1;
 	debugInterfaceVice->DoVSync();
+
+	// Multi-frame VIC state recorder hook — must run AFTER DoVSync so
+	// the captured frame matches what the rest of the c64d pipeline
+	// sees as "the previous frame".
+	c64d_vicii_multiframe_capture_completed_frame();
 }
 
 void c64d_c64_vicii_cycle()
@@ -1092,8 +1289,8 @@ void c64d_c64_vicii_cycle()
 			unsigned int sprite_dma = vicii.sprite_dma;
 			unsigned int raster_irq_line = vicii.raster_irq_line;
 			
-			fprintf(c64d_profiler_file_out, "vic %u %u %d %d %d %d %d\n",
-					c64d_maincpu_clk, frameNum, raster_line, raster_cycle, bad_line,
+			fprintf(c64d_profiler_file_out, "vic %llu %u %d %d %d %d %d\n",
+					(unsigned long long)c64d_maincpu_clk, frameNum, raster_line, raster_cycle, bad_line,
 					sprite_dma, raster_irq_line);
 		}
 	}
@@ -1243,18 +1440,20 @@ void c64d_c64_check_raster_breakpoint(uint16 rasterLine)
 
 //	LOGD("c64d_c64_check_raster_breakpoint rasterLine=%d", rasterLine);
 	CDebugSymbolsSegmentC64 *segment = (CDebugSymbolsSegmentC64 *) debugInterfaceVice->symbols->currentSegment;
-	debugInterfaceVice->LockMutex();
-	if (segment && segment->breakOnRaster)
+	if (segment && segment->breakOnRaster
+		&& !segment->breakpointsRasterLine->breakpoints.empty())
 	{
+		debugInterfaceVice->LockMutex();
 		CDebugBreakpointAddr *breakpoint = segment->breakpointsRasterLine->EvaluateBreakpoint(rasterLine);
 		if (breakpoint != NULL)
 		{
+			LOGD("DIAG: raster breakpoint fired at line=%d during mode=%d", rasterLine, c64d_debug_mode.load(std::memory_order_relaxed));
+			c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "raster-bp");
 			debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 			segment->symbols->debugEventsHistory->CreateEventBreakpoint(breakpoint, ADDR_BREAKPOINT_ACTION_STOP_ON_RASTER, segment);
-			//			TheCPU->lastValidPC = TheCPU->pc;
 		}
+		debugInterfaceVice->UnlockMutex();
 	}
-	debugInterfaceVice->UnlockMutex();
 }
 
 int c64d_drive1541_is_checking_irq_breakpoints_enabled()
@@ -1331,7 +1530,9 @@ void c64d_c64_check_irqvic_breakpoint()
 	CDebugSymbolsSegmentC64 *segment = (CDebugSymbolsSegmentC64*) debugInterfaceVice->symbols->currentSegment;
 	if (segment && segment->breakOnC64IrqVIC)
 	{
-		debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED); //C64_DEBUG_RUN_ONE_INSTRUCTION);
+		LOGD("DIAG: VIC IRQ breakpoint fired during mode=%d", c64d_debug_mode.load(std::memory_order_relaxed));
+		c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "irq-vic-bp");
+		debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 	}
 }
 
@@ -1343,6 +1544,8 @@ void c64d_c64_check_irqcia_breakpoint(int ciaNum)
 	CDebugSymbolsSegmentC64 *segment = (CDebugSymbolsSegmentC64*) debugInterfaceVice->symbols->currentSegment;
 	if (segment && segment->breakOnC64IrqCIA)
 	{
+		LOGD("DIAG: CIA%d IRQ breakpoint fired during mode=%d", ciaNum, c64d_debug_mode.load(std::memory_order_relaxed));
+		c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "irq-cia-bp");
 		debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 	}
 }
@@ -1355,6 +1558,8 @@ void c64d_c64_check_irqnmi_breakpoint()
 	CDebugSymbolsSegmentC64 *segment = (CDebugSymbolsSegmentC64*) debugInterfaceVice->symbols->currentSegment;
 	if (segment && segment->breakOnC64IrqNMI)
 	{
+		LOGD("DIAG: NMI breakpoint fired during mode=%d", c64d_debug_mode.load(std::memory_order_relaxed));
+		c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "irq-nmi-bp");
 		debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 	}
 }
@@ -1377,37 +1582,101 @@ void c64d_debug_pause_check(int allowRestore)
 		if (c64d_is_performing_snapshot_restore())
 			return;
 	}
-	
-	if (c64d_debug_mode == DEBUGGER_MODE_PAUSED)
-	{		
-		c64d_refresh_previous_lines();
-		c64d_refresh_dbuf();
-		c64d_refresh_cia();
-		
-		while (c64d_debug_mode == DEBUGGER_MODE_PAUSED)
-		{
-			if (allowRestore)
-			{
-				c64d_check_cpu_snapshot_manager_restore();
-			}
-			else
-			{
-				if (c64d_is_performing_snapshot_restore())
-				{
-					vsync_do_vsync(vicii.raster.canvas, 0, 1);
-					return;
-				}
-			}
-			
-			if (debugInterfaceVice->sidDataToRestore)
-			{
-				debugInterfaceVice->sidDataToRestore->RestoreSids();
-				debugInterfaceVice->sidDataToRestore = NULL;
-			}
 
-			vsync_do_vsync(vicii.raster.canvas, 0, 1);
-			//mt_SYS_Sleep(50);
+	// Use relaxed load for initial check - we're in emulation thread, no inter-thread visibility needed yet
+	int currentMode = c64d_debug_mode.load(std::memory_order_acquire);
+	if (currentMode == DEBUGGER_MODE_PAUSED)
+	{
+		LOGD("pause_check: entering pause loop (set by: %s, allowRestore=%d, clk=%d)",
+			 c64d_debug_mode_last_setter, allowRestore, (int)c64d_maincpu_clk);
+		// Only refresh once when entering pause mode, not on every pause check
+		if (!pauseRefreshDone)
+		{
+			pauseRefreshDone = 1;
+
+			// Refresh all completed lines + current partial line into the producer
+			// buffer, then publish for the render thread to pick up via triple-buffer.
+			// No mutex needed — the producer buffer is only written by this thread.
+			if (!debugInterfaceVice->snapshotsManager->SkipRefreshOfVideoFrame())
+			{
+				int skipTopLines = c64d_screen_num_skip_top_lines();
+				int screenWidth = vicii.raster.canvas->draw_buffer->visible_width;
+				int screenHeight = vicii.raster.canvas->draw_buffer->visible_height;
+				int rasterY = vicii.raster_line - skipTopLines;
+
+				// Refresh the FULL screen from draw_buffer. With triple-buffer,
+				// the producer buffer may contain stale data from 2 publishes ago,
+				// so we must repaint all lines (not just 0..rasterY) to avoid
+				// a visible flash of old screen content below the raster cursor.
+				// draw_buffer has correct data: current frame above raster,
+				// previous frame below raster.
+				c64d_refresh_lines_fast_locked(screenHeight, skipTopLines, screenWidth);
+
+				// Render current partial line from dbuf on top of the full refresh.
+				if (rasterY >= 0 && rasterY <= screenHeight && vicii.raster_cycle >= 1)
+				{
+					c64d_refresh_dbuf_line_locked(rasterY, screenWidth);
+				}
+
+				debugInterfaceVice->PublishScreenImage();
+			}
+			c64d_refresh_cia();
 		}
+
+		{
+			std::unique_lock<std::mutex> lock(debugInterfaceVice->pauseMutex);
+			while (c64d_debug_mode.load(std::memory_order_acquire) == DEBUGGER_MODE_PAUSED)
+			{
+				// Use 16ms timeout (~60fps) to keep audio processing frequent while paused
+				bool signaled = debugInterfaceVice->pauseCV.wait_for(lock, std::chrono::milliseconds(16),
+					[]{ return c64d_debug_mode.load(std::memory_order_acquire) != DEBUGGER_MODE_PAUSED; });
+
+				if (!signaled)
+				{
+					// Timeout: process audio and handle snapshot/SID restore while paused
+					lock.unlock();
+
+					if (allowRestore)
+					{
+						c64d_check_cpu_snapshot_manager_restore();
+					}
+					else
+					{
+						if (c64d_is_performing_snapshot_restore())
+						{
+							if (debugInterfaceVice->ShouldProcessPausedVSync())
+							{
+								vsync_do_vsync(vicii.raster.canvas, 0, 1);
+							}
+							return;
+						}
+					}
+
+					if (debugInterfaceVice->sidDataToRestore)
+					{
+						debugInterfaceVice->sidDataToRestore->RestoreSids();
+						debugInterfaceVice->sidDataToRestore = NULL;
+					}
+
+
+					if (debugInterfaceVice->ShouldProcessPausedVSync())
+					{
+						// Process audio while debugger-paused. When the C64 emulator is
+						// disabled from the menu, audio is bypassed and must not feed VSync.
+						vsync_do_vsync(vicii.raster.canvas, 0, 1);
+					}
+
+					lock.lock();
+				}
+				// signaled=true: predicate passed, outer while exits
+			}
+		}
+
+		// Reset flag when exiting pause mode
+		pauseRefreshDone = 0;
+		debugInterfaceVice->RefreshSync();
+		LOGD("pause_check: exited pause loop, mode now=%d (set by: %s, clk=%d)",
+			 c64d_debug_mode.load(std::memory_order_relaxed), c64d_debug_mode_last_setter, (int)c64d_maincpu_clk);
 	}
 }
 
@@ -1420,15 +1689,41 @@ int c64d_is_performing_snapshot_restore()
 	return 0;
 }
 		
-int c64d_check_snapshot_restore()
+// Fast C-level flag for the CPU hot loop — avoids C++ pointer dereferences per cycle.
+// Set by C++ code when replay/recording is toggled or tasks are added.
+volatile int c64d_vice_input_tasks_flag = 0;
+volatile int c64d_input_latch_immediate = 0;
+
+int c64d_has_pending_input_tasks()
+{
+	return c64d_vice_input_tasks_flag;
+}
+
+int c64d_check_snapshot_restore(int allowSnapshotRestore)
 {
 	debugInterfaceVice->snapshotsManager->CheckMainCpuCycle();
-	
-	if (debugInterfaceVice->snapshotsManager->CheckSnapshotRestore())
+
+	// Execute pending tasks and replay input events at current cycle
+	debugInterfaceVice->ExecuteDebugInterruptTasks();
+
+	// Clear the fast flag if no more work pending
+	if (!debugInterfaceVice->hasPendingCpuDebugInterruptTasks.load(std::memory_order_acquire)
+		&& !debugInterfaceVice->snapshotsManager->isReplayInputEventsEnabled
+		&& !debugInterfaceVice->snapshotsManager->isStoreInputEventsEnabled)
+	{
+		c64d_vice_input_tasks_flag = 0;
+	}
+
+	// Only execute the actual snapshot restore at an instruction boundary
+	// (allowSnapshotRestore=1). Doing it from the per-cycle hook would restore
+	// mid-instruction, leaving reg_pc stale (no IMPORT_REGISTERS here) and
+	// jamming the CPU. The boundary path (c64d_check_cpu_snapshot_manager_restore)
+	// will pick up the pending restore on the next instruction.
+	if (allowSnapshotRestore && debugInterfaceVice->snapshotsManager->CheckSnapshotRestore())
 	{
 		return 1;
 	}
-	
+
 	return 0;
 }
 
@@ -1540,7 +1835,7 @@ void c64d_sid_channels_data(int sidNumber, int v1, int v2, int v3, short mix)
 int c64d_is_drive_dirty_for_snapshot()
 {
 //	LOGD("c64d_is_drive_dirty_for_snapshot:");
-	for (int dnr = 0; dnr < DRIVE_NUM; dnr++)
+	for (int dnr = 0; dnr < NUM_DISK_UNITS; dnr++)
 	{
 		drive_s *drive = drive_context[dnr]->drive;
 //		LOGD(".... dnr=%d drive=%x GCR=%d P64=%d", dnr, drive, drive->GCR_dirty_track_for_snapshot, drive->P64_dirty_for_snapshot);
@@ -1559,7 +1854,7 @@ int c64d_is_drive_dirty_for_snapshot()
 
 void c64d_clear_drive_dirty_for_snapshot()
 {
-	for (int dnr = 0; dnr < DRIVE_NUM; dnr++)
+	for (int dnr = 0; dnr < NUM_DISK_UNITS; dnr++)
 	{
 		drive_s *drive = drive_context[dnr]->drive;
 		drive->GCR_dirty_track_for_snapshot = 0;
@@ -1613,12 +1908,12 @@ int c64d_snapshot_write_module(snapshot_t *s, int store_screen)
 		return -1;
 	}
 	
-	if (SMW_DW(m, c64d_maincpu_clk) < 0) {
+	if (SMW_DW(m, (uint32_t)c64d_maincpu_clk) < 0) {
 		snapshot_module_close(m);
 		return -1;
 	}
 	
-	if (SMW_DW(m, debugInterfaceVice->emulationFrameCounter) < 0) {
+	if (SMW_DW(m, debugInterfaceVice->emulationFrameCounter.load()) < 0) {
 		snapshot_module_close(m);
 		return -1;
 	}
@@ -1631,7 +1926,7 @@ int c64d_snapshot_write_module(snapshot_t *s, int store_screen)
 	if (store_screen)
 	{
 		// store screen data
-		WORD screenHeight = debugInterfaceVice->GetScreenSizeY();
+		uint16_t screenHeight = debugInterfaceVice->GetScreenSizeY();
 		if (SMW_W(m, screenHeight) < 0) {
 			snapshot_module_close(m);
 			return -1;
@@ -1677,7 +1972,7 @@ int c64d_snapshot_write_module(snapshot_t *s, int store_screen)
 int c64d_snapshot_read_module(snapshot_t *s)
 {
 	LOGD("c64d_snapshot_read_module");
-	BYTE major_version, minor_version;
+	uint8_t major_version, minor_version;
 	snapshot_module_t *m;
 	
 	m = snapshot_module_open(s, "DEBUGGER", &major_version, &minor_version);
@@ -1690,20 +1985,28 @@ int c64d_snapshot_read_module(snapshot_t *s)
 		return -1;
 	}
 	
-	if (SMR_DW_UINT(m, (unsigned int *)&c64d_maincpu_clk) < 0) {
-		snapshot_module_close(m);
-		return -1;
+	{
+		unsigned int clk_lo32;
+		if (SMR_DW_UINT(m, &clk_lo32) < 0) {
+			snapshot_module_close(m);
+			return -1;
+		}
+		c64d_maincpu_clk = (CLOCK)clk_lo32;
 	}
 	
-	if (SMR_DW_UINT(m, &(debugInterfaceVice->emulationFrameCounter)) < 0) {
-		snapshot_module_close(m);
-		return -1;
+	{
+		unsigned int emulationFrameCounter;
+		if (SMR_DW_UINT(m, &emulationFrameCounter) < 0) {
+			snapshot_module_close(m);
+			return -1;
+		}
+		debugInterfaceVice->emulationFrameCounter.store(emulationFrameCounter);
 	}
 	
 	if (minor_version > 0)
 	{
 		// restore screen data
-		BYTE restore_screen;
+		uint8_t restore_screen;
 		if (SMR_B(m, &restore_screen) < 0) {
 			snapshot_module_close(m);
 			return -1;
@@ -1711,7 +2014,7 @@ int c64d_snapshot_read_module(snapshot_t *s)
 		
 		if (restore_screen)
 		{
-			WORD screenHeight = -1;
+			uint16_t screenHeight = -1;
 			if (SMR_W(m, &screenHeight) < 0)
 			{
 				snapshot_module_close(m);
@@ -1724,13 +2027,11 @@ int c64d_snapshot_read_module(snapshot_t *s)
 				return -1;
 			}
 			
-			debugInterfaceVice->LockRenderScreenMutex();
 			c64d_refresh_screen_no_callback();
-			debugInterfaceVice->UnlockRenderScreenMutex();
 		}
 		
 		// restore vicii states?
-		BYTE restore_vicii_states;
+		uint8_t restore_vicii_states;
 		if (SMR_B(m, &restore_vicii_states) < 0) {
 			snapshot_module_close(m);
 			return -1;
@@ -1751,13 +2052,18 @@ int c64d_snapshot_read_module(snapshot_t *s)
 	return 0;
 }
 
-unsigned int c64d_get_vice_maincpu_clk()
+CLOCK c64d_get_vice_maincpu_clk()
 {
-//	LOGD("c64d_get_vice_maincpu_clk: %d", maincpu_clk);
 	return maincpu_clk;
 }
 
-unsigned int c64d_get_vice_maincpu_current_instruction_clk()
+CLOCK c64d_get_vice_drivecpu_clk(int driveNum)
+{
+	if (driveNum < 0 || driveNum >= NUM_DISK_UNITS) return 0;
+	return drive_clk[driveNum];
+}
+
+CLOCK c64d_get_vice_maincpu_current_instruction_clk()
 {
 	return c64d_maincpu_current_instruction_clk;
 }

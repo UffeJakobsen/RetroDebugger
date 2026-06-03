@@ -33,6 +33,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
+#endif
 
 #include "gfxoutput.h"
 #include "lib.h"
@@ -41,12 +45,18 @@
 #include "palette.h"
 #include "resources.h"
 #include "screenshot.h"
-#include "translate.h"
 #include "uiapi.h"
 #include "video.h"
 
+/* #define DEBUG_SCREENSHOT */
 
-static log_t screenshot_log = LOG_ERR;
+#ifdef DEBUG_SCREENSHOT
+#define DBG(x) log_printf x
+#else
+#define DBG(x)
+#endif
+
+static log_t screenshot_log = LOG_DEFAULT;
 static gfxoutputdrv_t *recording_driver;
 static struct video_canvas_s *recording_canvas;
 
@@ -77,27 +87,23 @@ int screenshot_init(void)
  */
 void screenshot_shutdown(void)
 {
-    if (reopen_recording_drivername != NULL) {
-        lib_free(reopen_recording_drivername);
-    }
-    if (reopen_filename != NULL) {
-        lib_free(reopen_filename);
-    }
+    lib_free(reopen_recording_drivername);
+    lib_free(reopen_filename);
 }
 
 
 
 /*-----------------------------------------------------------------------*/
 
-static void screenshot_line_data(screenshot_t *screenshot, BYTE *data,
+static void screenshot_line_data(screenshot_t *screenshot, uint8_t *data,
                                  unsigned int line, unsigned int mode)
 {
     unsigned int i;
-    BYTE *line_base;
-    BYTE color;
+    uint8_t *line_base;
+    uint8_t color;
 
     if (line > screenshot->height) {
-        log_error(screenshot_log, "Invalild line `%i' request.", line);
+        log_error(screenshot_log, "Invalild line `%u' request.", line);
         return;
     }
 
@@ -131,7 +137,7 @@ static void screenshot_line_data(screenshot_t *screenshot, BYTE *data,
             }
             break;
         default:
-            log_error(screenshot_log, "Invalid mode %i.", mode);
+            log_error(screenshot_log, "Invalid mode %u.", mode);
     }
 }
 
@@ -190,13 +196,15 @@ int screenshot_save(const char *drvname, const char *filename,
     screenshot_t screenshot;
     gfxoutputdrv_t *drv;
     int result;
-    /* printf("screenshot_save(%s, %s, ...)\n", drvname, filename); */
+
+    DBG(("screenshot_save(%s, %s, ...)", drvname, filename));
+
     if ((drv = gfxoutput_get_driver(drvname)) == NULL) {
         return -1;
     }
 
     if (recording_driver == drv) {
-        ui_error(translate_text(IDGS_SORRY_NO_MULTI_RECORDING));
+        ui_error("Sorry. Multiple recording is not supported.");
         return -1;
     }
 
@@ -209,13 +217,13 @@ int screenshot_save(const char *drvname, const char *filename,
         recording_driver = drv;
         recording_canvas = canvas;
 
-        reopen_recording_drivername = lib_stralloc(drvname);
+        reopen_recording_drivername = lib_strdup(drvname);
         reopen_recording_canvas = canvas;
-        reopen_filename = lib_stralloc(filename);
+        reopen_filename = lib_strdup(filename);
     }
 
     result = screenshot_save_core(&screenshot, drv, filename);
-
+    DBG(("screenshot_save_core result:%d", result));
     if (result < 0) {
         recording_driver = NULL;
         recording_canvas = NULL;
@@ -225,7 +233,7 @@ int screenshot_save(const char *drvname, const char *filename,
 }
 
 #ifdef FEATURE_CPUMEMHISTORY
-int memmap_screenshot_save(const char *drvname, const char *filename, int x_size, int y_size, BYTE *gfx, BYTE *palette)
+int memmap_screenshot_save(const char *drvname, const char *filename, int x_size, int y_size, uint8_t *gfx, uint8_t *palette)
 {
     gfxoutputdrv_t *drv;
 
@@ -241,13 +249,17 @@ int memmap_screenshot_save(const char *drvname, const char *filename, int x_size
 }
 #endif
 
+/* called for each frame */
 int screenshot_record(void)
 {
     screenshot_t screenshot;
+    int result;
 
     if (recording_driver == NULL) {
         return 0;
     }
+
+    /* DBG(("screenshot_record")); */
 
     /* Retrive framebuffer and screen geometry.  */
     if (recording_canvas != NULL) {
@@ -261,7 +273,15 @@ int screenshot_record(void)
         return -1;
     }
 
-    return screenshot_save_core(&screenshot, NULL, NULL);
+    result = screenshot_save_core(&screenshot, NULL, NULL);
+    DBG(("screenshot_record result:%d", result));
+    if (result < 0) {
+        /*log_error(screenshot_log, "Video recording failed, stopping...");*/
+        screenshot_stop_recording();
+        ui_display_recording(UI_RECORDING_STATUS_NONE);
+    }
+
+    return result;
 }
 
 void screenshot_stop_recording(void)

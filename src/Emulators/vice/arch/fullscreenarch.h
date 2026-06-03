@@ -38,7 +38,7 @@ typedef struct fullscreenconfig_s fullscreenconfig_t;
 
 struct ui_menu_entry_s;
 
-extern void fullscreen_resume(void);
+void fullscreen_resume(void);
 
 #define FULLSCREEN_MODE_AUTO   0
 #define FULLSCREEN_MODE_CUSTOM 1

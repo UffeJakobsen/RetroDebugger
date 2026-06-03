@@ -26,6 +26,61 @@
 
 #include <math.h>
 
+// TODO: Address/Label/Value cell text should be vertically centered against the
+// Format combo and trash button on the same row. Attempts using
+// AlignTextToFramePadding(), explicit SetCursorPosY with FramePadding.y offset,
+// pushing CellPadding.y=0 + TableNextRow(min_row_height), and rendering via
+// DrawList->AddText with a reserved InvisibleButton/Dummy slot all FAILED to
+// visibly centre the text — ImGui still rendered it anchored to the top of the
+// cell for reasons we could not determine. Left as top-aligned for now.
+
+static bool TrashIconButton(const char *id)
+{
+	ImGuiStyle &style = ImGui::GetStyle();
+	const float size = ImGui::GetFrameHeight();
+	const ImVec2 padBackup = style.FramePadding;
+	style.FramePadding = ImVec2(0.0f, 0.0f);
+	const bool clicked = ImGui::Button(id, ImVec2(size, size));
+	style.FramePadding = padBackup;
+
+	const ImVec2 bmin = ImGui::GetItemRectMin();
+	const ImVec2 bmax = ImGui::GetItemRectMax();
+	const float w = bmax.x - bmin.x;
+	const float h = bmax.y - bmin.y;
+	const float cx = bmin.x + w * 0.5f;
+	const float cy = bmin.y + h * 0.5f;
+	const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+	ImDrawList *dl = ImGui::GetWindowDrawList();
+
+	const float bw = w * 0.34f;  // body half-width
+	const float bh = h * 0.32f;  // body half-height
+	const float lidY = cy - bh * 0.55f;
+	const float bodyTop = lidY + 1.5f;
+	const float bodyBot = cy + bh;
+	const float bodyL = cx - bw * 0.80f;
+	const float bodyR = cx + bw * 0.80f;
+
+	// Lid (wider horizontal line)
+	dl->AddLine(ImVec2(cx - bw, lidY), ImVec2(cx + bw, lidY), col, 1.5f);
+	// Handle (small arch above lid)
+	const float handleW = bw * 0.45f;
+	const float handleY = lidY - h * 0.10f;
+	dl->AddLine(ImVec2(cx - handleW, handleY), ImVec2(cx + handleW, handleY), col, 1.5f);
+	dl->AddLine(ImVec2(cx - handleW, handleY), ImVec2(cx - handleW, lidY),   col, 1.5f);
+	dl->AddLine(ImVec2(cx + handleW, handleY), ImVec2(cx + handleW, lidY),   col, 1.5f);
+	// Body sides (trapezoid-ish — slight taper)
+	dl->AddLine(ImVec2(bodyL,                bodyTop), ImVec2(bodyL + w*0.03f, bodyBot), col, 1.5f);
+	dl->AddLine(ImVec2(bodyR,                bodyTop), ImVec2(bodyR - w*0.03f, bodyBot), col, 1.5f);
+	// Body bottom
+	dl->AddLine(ImVec2(bodyL + w*0.03f, bodyBot), ImVec2(bodyR - w*0.03f, bodyBot), col, 1.5f);
+	// Vertical slits inside
+	dl->AddLine(ImVec2(cx - bw*0.38f, bodyTop + 2), ImVec2(cx - bw*0.38f, bodyBot - 2), col, 1.0f);
+	dl->AddLine(ImVec2(cx,            bodyTop + 2), ImVec2(cx,            bodyBot - 2), col, 1.0f);
+	dl->AddLine(ImVec2(cx + bw*0.38f, bodyTop + 2), ImVec2(cx + bw*0.38f, bodyBot - 2), col, 1.0f);
+
+	return clicked;
+}
+
 CViewDataWatch::CViewDataWatch(const char *name, float posX, float posY, float posZ, float sizeX, float sizeY,
 							   CDebugSymbols *symbols, CViewDataMap *viewMemoryMap)
 : CGuiView(name, posX, posY, posZ, sizeX, sizeY)
@@ -62,29 +117,26 @@ void CViewDataWatch::RenderImGui()
 
 	CDebugSymbolsDataWatch *watchToDelete = NULL;
 
-	// address | label | representation | value
+	// address | label | value | format | delete
 	if (ImGui::BeginTable(buf, 5, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_Sortable | ImGuiTableFlags_Borders))
 	{
-		ImGui::TableNextColumn();
-		ImGui::Text("Address");
-		ImGui::TableNextColumn();
-		ImGui::Text("Label");
-		ImGui::TableNextColumn();
-		ImGui::Text("Value");
-		ImGui::TableNextColumn();
-		ImGui::Text("Format");
-		ImGui::TableNextColumn();
-		ImGui::Text("");
+		const float trashColWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.x * 2.0f;
+		ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed,   ImGui::CalcTextSize("FFFFFF").x);
+		ImGui::TableSetupColumn("Label",   ImGuiTableColumnFlags_WidthStretch, 1.0f);
+		ImGui::TableSetupColumn("Value",   ImGuiTableColumnFlags_WidthStretch, 1.0f);
+		ImGui::TableSetupColumn("Format",  ImGuiTableColumnFlags_WidthStretch, 1.6f);
+		ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoSort, trashColWidth);
+		ImGui::TableHeadersRow();
 
 		for (std::map<int, CDebugSymbolsDataWatch *>::iterator it = symbolsSegment->watches.begin();
 			 it != symbolsSegment->watches.end(); it++)
 		{
 			CDebugSymbolsDataWatch *watch = it->second;
-			
+
 			ImGui::TableNextColumn();
 			sprintf(buf, "%04X", watch->address);
 			ImGui::Text(buf);
-			
+
 			ImGui::TableNextColumn();
 			CDebugSymbolsCodeLabel *codeLabel = symbolsSegment->FindLabel(watch->address);
 			if (codeLabel)
@@ -95,15 +147,55 @@ void CViewDataWatch::RenderImGui()
 			{
 				ImGui::Text("");
 			}
-			
+
 			ImGui::TableNextColumn();
-			
+
 			if (watch->representation == WATCH_REPRESENTATION_TEXT)
 			{
 				// TODO: WATCH_REPRESENTATION_TEXT   petsci, atasci?
 			}
 			else
 			{
+				// determine byte span of this watch
+				int numBytes = 1;
+				switch (watch->representation)
+				{
+					case WATCH_REPRESENTATION_HEX_16_LITTLE_ENDIAN:
+					case WATCH_REPRESENTATION_HEX_16_BIG_ENDIAN:
+					case WATCH_REPRESENTATION_UNSIGNED_DEC_16_LITTLE_ENDIAN:
+					case WATCH_REPRESENTATION_UNSIGNED_DEC_16_BIG_ENDIAN:
+					case WATCH_REPRESENTATION_SIGNED_DEC_16_LITTLE_ENDIAN:
+					case WATCH_REPRESENTATION_SIGNED_DEC_16_BIG_ENDIAN:
+						numBytes = 2; break;
+					case WATCH_REPRESENTATION_HEX_32_LITTLE_ENDIAN:
+					case WATCH_REPRESENTATION_HEX_32_BIG_ENDIAN:
+					case WATCH_REPRESENTATION_UNSIGNED_DEC_32_LITTLE_ENDIAN:
+					case WATCH_REPRESENTATION_UNSIGNED_DEC_32_BIG_ENDIAN:
+					case WATCH_REPRESENTATION_SIGNED_DEC_32_LITTLE_ENDIAN:
+					case WATCH_REPRESENTATION_SIGNED_DEC_32_BIG_ENDIAN:
+						numBytes = 4; break;
+					default: break;
+				}
+
+				// pick strongest recent-access fade color across the byte range
+				if (symbols->memory)
+				{
+					float hr = 0.0f, hg = 0.0f, hb = 0.0f, ha = 0.0f;
+					for (int i = 0; i < numBytes; i++)
+					{
+						CDebugMemoryCell *c = symbols->memory->GetMemoryCell(watch->address + i);
+						if (!c) continue;
+						u8 v = dataAdapter->AdapterReadByteModulus(watch->address + i);
+						c->UpdateCellColors(v, false, 0);
+						if (c->sa > ha) { hr = c->sr; hg = c->sg; hb = c->sb; ha = c->sa; }
+					}
+					if (ha > 0.0f)
+					{
+						ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg,
+							ImGui::ColorConvertFloat4ToU32(ImVec4(hr, hg, hb, ha)));
+					}
+				}
+
 				u32 value = 0;
 				switch(watch->representation)
 				{
@@ -195,13 +287,14 @@ void CViewDataWatch::RenderImGui()
 			}
 
 			ImGui::TableNextColumn();
-			
+
 			sprintf(buf, "##DataWatchCombo%x", watch);
+			ImGui::SetNextItemWidth(-FLT_MIN);
 			ImGui::Combo(buf, &(watch->representation), "Hex 8-bits\0Hex 16-bits LE\0Hex 16-bits BE\0Hex 32-bits LE\0Hex 32-bits BE\0Unsigned Dec 8-bits\0Unsigned Dec 16-bits LE\0Unsigned Dec 16-bits BE\0Unsigned Dec 32-bits LE\0Unsigned Dec 32-bits BE\0Signed Dec 8-bits\0Signed Dec 16-bits LE\0Signed Dec 16-bits BE\0Signed Dec 32-bits LE\0Signed Dec 32-bits BE\0Binary\0\0"); //Text\0\0");
 
 			ImGui::TableNextColumn();
-			sprintf(buf, "X##%x", watch);
-			if (ImGui::Button(buf))
+			sprintf(buf, "##del%x", watch);
+			if (TrashIconButton(buf))
 			{
 				watchToDelete = watch;
 			}
@@ -215,83 +308,136 @@ void CViewDataWatch::RenderImGui()
 		symbols->currentSegment->DeleteWatch(watchToDelete->address);
 	}
 
-	// shold we evaluate Enter press as adding the watch or closing the combo?
-	bool skipClosePopupByEnterPressInThisFrame = false;
-
 	if (ImGui::Button("+") || (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)))
 	{
 		ImGui::OpenPopup("addWatchPopup");
-		
+
 		addWatchPopupAddr = 0;
 		addWatchPopupSymbol[0] = '\0';
 		comboFilterTextBuf[0] = 0;
-		
+
 		imGuiOpenPopupFrame = 0;
-		skipClosePopupByEnterPressInThisFrame = true;
 	}
 	
 	if (ImGui::BeginPopup("addWatchPopup"))
 	{
 		ImGui::Text("Add watch point");
 		ImGui::Separator();
-		
+
+		sprintf(buf, "##addWatchPopupAddress%x", this);
+
+		const char **hints = symbols->currentSegment ? symbols->currentSegment->codeLabelsArray : NULL;
+		int numHints = symbols->currentSegment ? symbols->currentSegment->numCodeLabelsInArray : 0;
+
 		if (imGuiOpenPopupFrame < 2)
 		{
 			ImGui::SetKeyboardFocusHere();
 			imGuiOpenPopupFrame++;
 		}
 
-		sprintf(buf, "##addWatchPopupAddress%x", this);
+		ImGui::SetNextItemWidth(220.0f);
+		bool inputActivated = ImGui::InputText(buf, comboFilterTextBuf, IM_ARRAYSIZE(comboFilterTextBuf),
+											   ImGuiInputTextFlags_EnterReturnsTrue);
 
-		bool buttonAddClicked = false;
-		if (symbols->currentSegment)
+		ImGui::SameLine();
+		bool buttonAddClicked = ImGui::Button("Add");
+
+		// build filtered list of matching label indices
+		const bool filterIsHex = (comboFilterTextBuf[0] != 0) && FUN_IsHexNumber(comboFilterTextBuf);
+		char needleLower[MAX_LABEL_TEXT_BUFFER_SIZE];
+		int nlen = 0;
+		for (int i = 0; comboFilterTextBuf[i] != 0 && i < (int)sizeof(needleLower) - 1; i++)
 		{
-			const char **hints = symbols->currentSegment->codeLabelsArray;
-			int numHints = symbols->currentSegment->numCodeLabelsInArray;
-			
-			// https://github.com/ocornut/imgui/issues/1658   | IM_ARRAYSIZE(hints)
-			if( ComboFilter(buf, comboFilterTextBuf, IM_ARRAYSIZE(comboFilterTextBuf), hints, numHints, comboFilterState, this) )
+			char c = comboFilterTextBuf[i];
+			needleLower[nlen++] = (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+		}
+		needleLower[nlen] = 0;
+
+		const int kMaxMatches = 512;
+		int matchIdx[kMaxMatches];
+		int matchCount = 0;
+		if (hints != NULL && numHints > 0 && !filterIsHex)
+		{
+			for (int n = 0; n < numHints && matchCount < kMaxMatches; n++)
 			{
-				LOGD("SELECTED %d comboTextBuf='%s'", comboFilterState.activeIdx, comboFilterTextBuf);
-				skipClosePopupByEnterPressInThisFrame = false;	/// true
-				
-				// if that is not address then replace by selected symbol
-				if (FUN_IsHexNumber(comboFilterTextBuf))
+				const char *hay = hints[n];
+				if (hay == NULL) continue;
+
+				bool match = true;
+				if (nlen > 0)
 				{
-					FUN_ToUpperCaseStr(comboFilterTextBuf);
-					addWatchPopupAddr = FUN_HexStrToValue(comboFilterTextBuf);
+					match = false;
+					for (const char *p = hay; *p && !match; p++)
+					{
+						const char *h = p;
+						const char *q = needleLower;
+						while (*h && *q)
+						{
+							char hc = *h;
+							if (hc >= 'A' && hc <= 'Z') hc += 32;
+							if (hc != *q) break;
+							h++; q++;
+						}
+						if (*q == 0) match = true;
+					}
 				}
-				else if (hints != NULL && numHints > 0)
-				{
-					strcpy(comboFilterTextBuf, hints[comboFilterState.activeIdx]);
-				}
-			}
-			
-			ImGui::SameLine();
-			if (ImGui::Button("Add"))
-			{
-				buttonAddClicked = true;
+				if (match) matchIdx[matchCount++] = n;
 			}
 		}
-		
-		/*
-		ImGui::InputScalar(addBreakpointPopupAddrStr, ImGuiDataType_::ImGuiDataType_U32, &addBreakpointPopupAddr, NULL, NULL, addressFormatStr, addBreakpointPopupAddrInputFlags);
-		
-		if (addBreakpointPopupShowSymbolField)
+
+		// clamp active index to current match range
+		if (comboFilterState.activeIdx >= matchCount) comboFilterState.activeIdx = matchCount > 0 ? matchCount - 1 : 0;
+		if (comboFilterState.activeIdx < 0) comboFilterState.activeIdx = 0;
+
+		// arrow-key navigation (single-line InputText doesn't consume up/down)
+		bool arrowScrolled = false;
+		if (matchCount > 0)
 		{
-			sprintf(buf, "Symbol##%x", this);
-			if (ImGui::InputText(buf, addBreakpointPopupSymbol, 255, ImGuiInputTextFlags_EnterReturnsTrue))
+			if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
 			{
-				LOGTODO("search for symbol......");
-				// search for symbol
-				
-				ImGui::CloseCurrentPopup();
+				if (comboFilterState.activeIdx < matchCount - 1) comboFilterState.activeIdx++;
+				arrowScrolled = true;
+			}
+			if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+			{
+				if (comboFilterState.activeIdx > 0) comboFilterState.activeIdx--;
+				arrowScrolled = true;
 			}
 		}
-		 */
-		
-		bool finalizeAddingBreakpoint = buttonAddClicked
-			|| (!skipClosePopupByEnterPressInThisFrame && ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter));
+
+		// render list (always visible when hints exist, even when no filter typed)
+		if (hints != NULL && numHints > 0)
+		{
+			ImGui::BeginChild("##watchHints", ImVec2(280.0f, 160.0f), true);
+			for (int i = 0; i < matchCount; i++)
+			{
+				int n = matchIdx[i];
+				const char *hay = hints[n];
+				const bool is_selected = (i == comboFilterState.activeIdx);
+				ImGui::PushID(n);
+				if (ImGui::Selectable(hay, is_selected))
+				{
+					strcpy(comboFilterTextBuf, hay);
+					comboFilterState.activeIdx = i;
+					inputActivated = true;
+				}
+				if (is_selected && arrowScrolled)
+				{
+					ImGui::SetScrollHereY();
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndChild();
+		}
+
+		// if Enter pressed in the input and a highlighted match exists, use it
+		if (inputActivated && matchCount > 0 && !filterIsHex
+			&& comboFilterState.activeIdx >= 0 && comboFilterState.activeIdx < matchCount)
+		{
+			strcpy(comboFilterTextBuf, hints[matchIdx[comboFilterState.activeIdx]]);
+		}
+
+		bool finalizeAddingBreakpoint = buttonAddClicked || inputActivated;
 		
 		if (finalizeAddingBreakpoint)
 		{
@@ -360,17 +506,17 @@ bool CViewDataWatch::ComboFilterShouldOpenPopupCallback(const char *label, char 
 	{
 		return false;
 	}
-	
+
 	if (hints == NULL)
 	{
 		return false;
 	}
-	
+
 	if (num_hints == 0)
 	{
 		return false;
 	}
-	
+
 	return (buffer[0] != 0) && strcmp(buffer, hints[s->activeIdx]);
 }
 

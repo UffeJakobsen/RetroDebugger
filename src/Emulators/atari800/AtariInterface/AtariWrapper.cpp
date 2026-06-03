@@ -183,9 +183,13 @@ extern volatile UWORD CPU_regPC;
 int atrd_debug_pause_check(int allowRestore)
 {
 //	LOGD("atrd_debug_pause_check, atrd_debug_mode=%d", atrd_debug_mode);
-	
+
 	int shouldSkipOneInstructionStep = atrd_check_maincpu_cycle();
-	
+
+	// Always execute pending tasks and replay input events (needed for input replay
+	// and task-based joystick injection even when allowRestore=0)
+	debugInterfaceAtari->ExecuteDebugInterruptTasks();
+
 	if (allowRestore)
 	{
 		atrd_check_cpu_snapshot_manager_restore();
@@ -243,17 +247,32 @@ int atrd_check_maincpu_cycle()
 	return FALSE;
 }
 
+// Fast C-level flag for the CPU hot loop
+volatile int atrd_input_tasks_flag = 0;
+
+int atrd_has_pending_input_tasks()
+{
+	return atrd_input_tasks_flag;
+}
+
 int atrd_check_snapshot_restore()
 {
-//	LOGD("atrd_check_snapshot_restore");
-	
 	debugInterfaceAtari->snapshotsManager->CheckMainCpuCycle();
-	
+	debugInterfaceAtari->ExecuteDebugInterruptTasks();
+
+	// Clear fast flag if no more work pending
+	if (!debugInterfaceAtari->hasPendingCpuDebugInterruptTasks.load(std::memory_order_acquire)
+		&& !debugInterfaceAtari->snapshotsManager->isReplayInputEventsEnabled
+		&& !debugInterfaceAtari->snapshotsManager->isStoreInputEventsEnabled)
+	{
+		atrd_input_tasks_flag = 0;
+	}
+
 	if (debugInterfaceAtari->snapshotsManager->CheckSnapshotRestore())
 	{
 		return 1;
 	}
-	
+
 	return 0;
 }
 
@@ -493,7 +512,7 @@ bool atrd_store_snapshot_to_bytebuffer_synced(CByteBuffer *byteBuffer)
 	int ret = StateSav_SaveAtariStateToByteBuffer(byteBuffer, TRUE);
 	atrdStateBuffer = NULL;
 	
-	byteBuffer->PutU32(debugInterfaceAtari->emulationFrameCounter);
+	byteBuffer->PutU32(debugInterfaceAtari->emulationFrameCounter.load());
 
 	byteBuffer->PutU32(atrdMainCpuCycle);
 	byteBuffer->PutU32(atrdMainCpuDebugCycle);
@@ -672,5 +691,4 @@ void atrd_mutex_unlock()
 {
 	debugInterfaceAtari->UnlockMutex();
 }
-
 

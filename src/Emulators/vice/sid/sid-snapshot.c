@@ -66,9 +66,9 @@ static int intended_sid_engine = -1;
 
    type  | name     | version | description
    ----------------------------------------
-   BYTE  | sids     |   1.2+  | amount of extra sids
-   BYTE  | sound    |   1.2+  | sound active flag
-   BYTE  | engine   |   1.2+  | sound engine
+   uint8_t  | sids     |   1.2+  | amount of extra sids
+   uint8_t  | sound    |   1.2+  | sound active flag
+   uint8_t  | engine   |   1.2+  | sound engine
    ARRAY | sid data |   1.1+  | 32 BYTES of SID registers
  */
 
@@ -76,7 +76,7 @@ static int intended_sid_engine = -1;
 
    type  | name     | version | description
    ----------------------------------------
-   WORD  | address  |   1.2+  | SID address
+   uint16_t  | address  |   1.2+  | SID address
    ARRAY | sid data |   1.2+  | 32 BYTES of SID registers
  */
 
@@ -84,7 +84,7 @@ static int intended_sid_engine = -1;
 
    type  | name     | version | description
    ----------------------------------------
-   WORD  | address  |   1.2+  | SID address
+   uint16_t  | address  |   1.2+  | SID address
    ARRAY | sid data |   1.2+  | 32 BYTES of SID registers
  */
 
@@ -127,7 +127,7 @@ static int sid_snapshot_write_module_simple(snapshot_t *s, int sidnr)
 
     /* Added in 1.2, for the 1st SID module the amount of SIDs is saved 1st */
     if (!sidnr) {
-        if (SMW_B(m, (BYTE)sids) < 0) {
+        if (SMW_B(m, (uint8_t)sids) < 0) {
             goto fail;
         }
     }
@@ -135,7 +135,7 @@ static int sid_snapshot_write_module_simple(snapshot_t *s, int sidnr)
     /* Added in 1.2, for the 2nd SID module the address is saved */
     if (sidnr == 1) {
         resources_get_int("SidStereoAddressStart", &sid_address);
-        if (SMW_W(m, (WORD)sid_address) < 0) {
+        if (SMW_W(m, (uint16_t)sid_address) < 0) {
             goto fail;
         }
     }
@@ -143,7 +143,7 @@ static int sid_snapshot_write_module_simple(snapshot_t *s, int sidnr)
     /* Added in 1.2, for the 3rd SID module the address is saved */
     if (sidnr == 2) {
         resources_get_int("SidTripleAddressStart", &sid_address);
-        if (SMW_W(m, (WORD)sid_address) < 0) {
+        if (SMW_W(m, (uint16_t)sid_address) < 0) {
             goto fail;
         }
     }
@@ -153,8 +153,8 @@ static int sid_snapshot_write_module_simple(snapshot_t *s, int sidnr)
     /* Changed in 1.3, sound and sid_engine are only saved in the 1st SID module */
     if (!sidnr) {
         if (0
-            || SMW_B(m, (BYTE)sound) < 0
-            || SMW_B(m, (BYTE)sid_engine) < 0) {
+            || SMW_B(m, (uint8_t)sound) < 0
+            || SMW_B(m, (uint8_t)sid_engine) < 0) {
             goto fail;
         }
 	}
@@ -175,9 +175,9 @@ void c64d_unlock_sound_mutex(char *whoLocked);
 
 static int sid_snapshot_read_module_simple(snapshot_t *s, int sidnr)
 {
-    BYTE major_version, minor_version;
+    uint8_t major_version, minor_version;
     snapshot_module_t *m;
-    BYTE tmp[34];
+    uint8_t tmp[34];
     const char *snap_module_name_simple = NULL;
     int sids = 0;
     int sid_address;
@@ -202,7 +202,7 @@ static int sid_snapshot_read_module_simple(snapshot_t *s, int sidnr)
     }
 
     /* Do not accept versions higher than current */
-    if (major_version > SNAP_MAJOR_SIMPLE || minor_version > SNAP_MINOR_SIMPLE) {
+    if (snapshot_version_is_bigger(major_version, minor_version, SNAP_MAJOR_SIMPLE, SNAP_MINOR_SIMPLE)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }
@@ -241,7 +241,7 @@ static int sid_snapshot_read_module_simple(snapshot_t *s, int sidnr)
             goto fail;
         }
         memcpy(sid_get_siddata(sidnr), &tmp[2], 32);
-		
+
 		c64d_lock_sound_mutex("vice::sid_snapshot_read_module_simple");
         sound_open();
 		c64d_unlock_sound_mutex("vice::sid_snapshot_read_module_simple");
@@ -250,7 +250,7 @@ static int sid_snapshot_read_module_simple(snapshot_t *s, int sidnr)
     }
 
     /* Handle 1.2 snapshots differently */
-    if (SNAPVAL(major_version, minor_version, 1, 2)) {
+    if (snapshot_version_is_equal(major_version, minor_version, 1, 2)) {
         if (!sidnr) {
             if (SMR_B_INT(m, &sids) < 0) {
                 goto fail;
@@ -316,7 +316,7 @@ static int sid_snapshot_read_module_simple(snapshot_t *s, int sidnr)
             intended_sid_engine = res_engine;
             set_sid_engine_with_fallback(res_engine);
             memcpy(sid_get_siddata(0), &tmp[2], 32);
-						
+
 			c64d_lock_sound_mutex("vice::sid_snapshot_read_module_simple 3");
             sound_open();
 			c64d_unlock_sound_mutex("vice::sid_snapshot_read_module_simple 3");
@@ -336,24 +336,24 @@ fail:
 
    type   | name            | description
    --------------------------------------
-   DWORD  | factor          | speed factor
+   uint32_t  | factor          | speed factor
    ARRAY  | d               | 32 BYTES of register data
-   BYTE   | has3            | voice 3 enable flag
-   BYTE   | vol             | 4-bit volume value
+   uint8_t   | has3            | voice 3 enable flag
+   uint8_t   | vol             | 4-bit volume value
    ARRAY  | adrs            | 16 DWORDS of ADSR counter step values for each adsr values
    ARRAY  | sz              | 16 DWORDS of sustain values compared to 31-bit ADSR counter
-   DWORD  | speed1          | internal constant used for sample rate dependent calculations
-   BYTE   | update          | structure needs updating flag
-   BYTE   | newsid          | new SID flag
-   BYTE   | laststore       | last store
-   BYTE   | laststorebit    | last store bit
-   DWORD  | laststoreclk    | CLOCK of the last store
-   DWORD  | emulatefilter   | emulate filters flag
+   uint32_t  | speed1          | internal constant used for sample rate dependent calculations
+   uint8_t   | update          | structure needs updating flag
+   uint8_t   | newsid          | new SID flag
+   uint8_t   | laststore       | last store
+   uint8_t   | laststorebit    | last store bit
+   uint32_t  | laststoreclk    | CLOCK of the last store
+   uint32_t  | emulatefilter   | emulate filters flag
    DOUBLE | filterDy        | filter Dy
    DOUBLE | filterResDy     | filter Res Dy
-   BYTE   | filterType      | filter type
-   BYTE   | filterCurType   | current filter type
-   WORD   | filterValue     | filter value
+   uint8_t   | filterType      | filter type
+   uint8_t   | filterCurType   | current filter type
+   uint16_t   | filterValue     | filter value
    ARRAY  | voice nr        | 3 DWORDS of voice numbers
    ARRAY  | voice f         | 3 DWORDS of voice counter value data
    ARRAY  | voice fs        | 3 DWORDS of voice counter step data
@@ -393,7 +393,7 @@ static int sid_snapshot_write_fastsid_module(snapshot_module_t *m, int sidnr)
         || SMW_BA(m, sid_state.d, 32) < 0
         || SMW_B(m, sid_state.has3) < 0
         || SMW_B(m, sid_state.vol) < 0
-        || SMW_DWA(m, (DWORD *)sid_state.adrs, 16) < 0
+        || SMW_DWA(m, (uint32_t *)sid_state.adrs, 16) < 0
         || SMW_DWA(m, sid_state.sz, 16) < 0
         || SMW_DW(m, sid_state.speed1) < 0
         || SMW_B(m, sid_state.update) < 0
@@ -412,7 +412,7 @@ static int sid_snapshot_write_fastsid_module(snapshot_module_t *m, int sidnr)
         || SMW_DWA(m, sid_state.v_fs, 3) < 0
         || SMW_BA(m, sid_state.v_noise, 3) < 0
         || SMW_DWA(m, sid_state.v_adsr, 3) < 0
-        || SMW_DWA(m, (DWORD *)sid_state.v_adsrs, 3) < 0
+        || SMW_DWA(m, (uint32_t *)sid_state.v_adsrs, 3) < 0
         || SMW_DWA(m, sid_state.v_adsrz, 3) < 0
         || SMW_BA(m, sid_state.v_sync, 3) < 0
         || SMW_BA(m, sid_state.v_filter, 3) < 0
@@ -449,7 +449,7 @@ static int sid_snapshot_write_fastsid_module(snapshot_module_t *m, int sidnr)
 static int sid_snapshot_read_fastsid_module(snapshot_module_t *m, int sidnr)
 {
     int i;
-    DWORD dwtmp;
+    uint32_t dwtmp;
     double dbltmp;
 
     sid_fastsid_snapshot_state_t sid_state;
@@ -466,7 +466,7 @@ static int sid_snapshot_read_fastsid_module(snapshot_module_t *m, int sidnr)
         if (SMR_DW(m, &dwtmp) < 0) {
             return -1;
         }
-        sid_state.adrs[i] = (SDWORD)dwtmp;
+        sid_state.adrs[i] = (int32_t)dwtmp;
     }
 
     if (0
@@ -507,7 +507,7 @@ static int sid_snapshot_read_fastsid_module(snapshot_module_t *m, int sidnr)
         if (SMR_DW(m, &dwtmp) < 0) {
             return -1;
         }
-        sid_state.v_adsrs[i] = (SDWORD)dwtmp;
+        sid_state.v_adsrs[i] = (int32_t)dwtmp;
     }
 
     if (0
@@ -562,8 +562,8 @@ static int sid_snapshot_read_fastsid_module(snapshot_module_t *m, int sidnr)
    type  | name                       | description
    ------------------------------------------------
    ARRAY | regs                       | 32 BYTES of SID registers
-   BYTE  | bus value                  | bus value
-   DWORD | bus value ttl              | bus value ttl
+   uint8_t  | bus value                  | bus value
+   uint32_t | bus value ttl              | bus value ttl
    ARRAY | accumulator                | 3 DWORDS of accumulator data
    ARRAY | shift register             | 3 DWORDS of shift register data
    ARRAY | rate counter               | 3 WORDS of rate counter data
@@ -578,9 +578,9 @@ static int sid_snapshot_read_fastsid_module(snapshot_module_t *m, int sidnr)
    ARRAY | shift register reset       | 3 DWORDS of shift register reset data
    ARRAY | floating output ttl        | 3 DWORDS of floating output ttl data
    ARRAY | pulse output               | 3 WORDS of pulse output data
-   BYTE  | write pipeline             | write pipeline
-   BYTE  | write address              | write address
-   BYTE  | voice mask                 | voice mask
+   uint8_t  | write pipeline             | write pipeline
+   uint8_t  | write address              | write address
+   uint8_t  | voice mask                 | voice mask
  */
 
 #ifdef HAVE_RESID
@@ -672,8 +672,8 @@ static int sid_snapshot_read_resid_module(snapshot_module_t *m, int sidnr)
 
    type  | name              | description
    ---------------------------------------
-   BYTE  | ntsc              | NTSC flag
-   DWORD | cycles per second | cycles per second
+   uint8_t  | ntsc              | NTSC flag
+   uint32_t | cycles per second | cycles per second
    ARRAY | registers         | 32 BYTES of register data
  */
 
@@ -717,12 +717,12 @@ static int sid_snapshot_read_cw3_module(snapshot_module_t *m, int sidnr)
    type  | name               | version | description
    --------------------------------------------------
    ARRAY | registers          |   1.2+  | 32 BYTES of register data
-   DWORD | main clock         |   1.2+  | main clock
-   DWORD | alarm clock        |   1.2+  | alarm clock
-   DWORD | last access clock  |   1.2+  | last access clock
-   DWORD | last access ms     |   1.2+  | last access ms
-   DWORD | last access chipno |   1.2+  | last access chipno
-   DWORD | chip used          |   1.2+  | chip used
+   uint32_t | main clock         |   1.2+  | main clock
+   uint32_t | alarm clock        |   1.2+  | alarm clock
+   uint32_t | last access clock  |   1.2+  | last access clock
+   uint32_t | last access ms     |   1.2+  | last access ms
+   uint32_t | last access chipno |   1.2+  | last access chipno
+   uint32_t | chip used          |   1.2+  | chip used
    ARRAY | device map         |   1.2+  | 2 DWORDS of device map data
    ARRAY | extra device map   |   1.3   | 2 DWORDS of device map data
  */
@@ -748,7 +748,7 @@ static int sid_snapshot_write_hs_module(snapshot_module_t *m, int sidnr)
     return 0;
 }
 
-static int sid_snapshot_read_hs_module(snapshot_module_t *m, int sidnr, BYTE vmajor, BYTE vminor)
+static int sid_snapshot_read_hs_module(snapshot_module_t *m, int sidnr, uint8_t vmajor, uint8_t vminor)
 {
     sid_hs_snapshot_state_t sid_state;
 
@@ -789,7 +789,7 @@ static int sid_snapshot_read_hs_module(snapshot_module_t *m, int sidnr, BYTE vma
    type  | name      | description
    -------------------------------
    ARRAY | registers | 32 BYTES of register data
-   BYTE  | ctr port  | control port state
+   uint8_t  | ctr port  | control port state
  */
 
 #ifdef HAVE_PARSID
@@ -949,12 +949,12 @@ fail:
 
 static int sid_snapshot_read_module_extended(snapshot_t *s, int sidnr)
 {
-    BYTE major_version, minor_version;
+    uint8_t major_version, minor_version;
     snapshot_module_t *m;
     int sid_engine;
     const char *snap_module_name_extended = NULL;
     int i;
-    BYTE *siddata;
+    uint8_t *siddata;
 
     resources_get_int("SidEngine", &sid_engine);
 
@@ -977,11 +977,11 @@ static int sid_snapshot_read_module_extended(snapshot_t *s, int sidnr)
         siddata = sid_get_siddata(sidnr);
         for (i = 0; i < 32; ++i) {
             if (!sidnr) {
-                sid_store((WORD)i, siddata[i]);
+                sid_store((uint16_t)i, siddata[i]);
             } else if (sidnr == 1) {
-                sid2_store((WORD)i, siddata[i]);
+                sid2_store((uint16_t)i, siddata[i]);
             } else {
-                sid3_store((WORD)i, siddata[i]);
+                sid3_store((uint16_t)i, siddata[i]);
             }
         }
         return 0;
@@ -993,13 +993,14 @@ static int sid_snapshot_read_module_extended(snapshot_t *s, int sidnr)
         return -1;
     }
 
-    if (!snapshot_version_at_least(major_version, minor_version, 1, 3)) {
+    /* reject snapshot modules older than what we can handle (the snapshot is too old) */
+    if (snapshot_version_is_smaller(major_version, minor_version, 1, 3)) {
         snapshot_set_error(SNAPSHOT_MODULE_INCOMPATIBLE);
         goto fail;
     }
 
     /* Do not accept versions higher than current */
-    if (major_version > SNAP_MAJOR_EXTENDED || minor_version > SNAP_MINOR_EXTENDED) {
+    if (snapshot_version_is_bigger(major_version, minor_version, SNAP_MAJOR_EXTENDED, SNAP_MINOR_EXTENDED)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }
@@ -1078,7 +1079,7 @@ int sid_snapshot_write_module(snapshot_t *s)
 			}
 		}
 	}
-	
+
     return 0;
 }
 

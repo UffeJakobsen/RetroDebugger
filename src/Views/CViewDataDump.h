@@ -24,6 +24,7 @@ class CViewDataDump : public CGuiView, CGuiEditHexCallback, CDataAddressEditBoxC
 public:
 	CViewDataDump(const char *name, float posX, float posY, float posZ, float sizeX, float sizeY,
 				  CDebugSymbols *symbols, CViewDataMap *viewMemoryMap, CViewDisassembly *viewDisassembly);
+	virtual ~CViewDataDump();
 	
 	virtual bool KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper);
 	virtual bool KeyDownRepeat(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper);
@@ -32,6 +33,9 @@ public:
 	virtual bool DoScrollWheel(float deltaX, float deltaY);
 
 	virtual bool DoTap(float x, float y);
+	virtual bool DoMove(float x, float y, float distX, float distY, float diffX, float diffY);
+	virtual bool FinishMove(float x, float y, float distX, float distY, float accelerationX, float accelerationY);
+	virtual bool DoFinishTap(float x, float y);
 	virtual bool DoRightClick(float x, float y);
 
 	CDebugSymbols *symbols;
@@ -72,6 +76,8 @@ public:
 	void ScrollDataPageDown();
 	
 	bool FindDataPosition(float x, float y, int *dataPositionX, int *dataPositionY, int *dataPositionAddr);
+	bool FindDataPositionHex(float x, float y, int *dataPositionX, int *dataPositionY, int *dataPositionAddr);
+	bool FindDataPositionCharacter(float x, float y, int *dataPositionX, int *dataPositionY, int *dataPositionAddr);
 	int GetAddrFromDataPosition(int dataPositionX, int dataPositionY);
 	
 	virtual void SetPosition(float posX, float posY, float sizeX, float sizeY);
@@ -110,6 +116,7 @@ public:
 
 	// editing values
 	bool isEditingValue;
+	bool isCharacterEditing;
 	CGuiEditHex *editBoxHex;
 	virtual void GuiEditHexEnteredValue(CGuiEditHex *editHex, u32 lastKeyCode, bool isCancelled);
 
@@ -118,6 +125,19 @@ public:
 	virtual void DataAddressEditBoxEnteredValue(CDataAddressEditBox *editBox, u32 lastKeyCode, bool isCancelled);
 	
 	void CancelEditingHexBox();
+	u8 MapKeyToScreenCode(u32 keyCode, bool isShift);
+	char MapScreenCodeToAscii(u8 screenCode);
+	void CopyTextToClipboard();
+	void PasteTextFromClipboard();
+
+	// Selection
+	int selectionStartAddr;
+	int selectionEndAddr;
+	bool isSelecting;
+	long autoScrollLastTime;
+	bool GetSelectionRange(int *fromAddr, int *toAddr);
+	bool IsAddressSelected(int addr);
+	void ClearSelection();
 
 	CSlrString *strTemp;
 	
@@ -125,6 +145,12 @@ public:
 	
 	int numberOfCharactersToShow;
 	void UpdateCharacters(bool useColors, u8 colorD021, u8 colorD022, u8 colorD023, u8 colorD800);
+
+	// Character dirty-tracking for texture rebind optimization
+	uint8 *prevCharacterDataBuf;
+	int prevCharacterDataBufSize;
+	u8 prevCharColorD021, prevCharColorD022, prevCharColorD023, prevCharColorD800;
+	bool prevCharUseColors;
 	
 	int numberOfSpritesToShow;
 	void UpdateSprites(bool useColors, u8 colorD021, u8 colorD025, u8 colorD026, u8 colorD027);

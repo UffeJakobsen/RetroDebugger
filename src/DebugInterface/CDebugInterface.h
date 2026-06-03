@@ -14,8 +14,12 @@
 #include "CStackAnnotation.h"
 #include "json.hpp"
 
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 #include <map>
 #include <list>
+#include <string>
 
 class CGuiView;
 
@@ -73,7 +77,7 @@ public:
 	
 	bool isSelected;
 	
-	unsigned int emulationFrameCounter;
+	std::atomic<unsigned int> emulationFrameCounter;
 
 	virtual void RunEmulationThread();
 	virtual void RestartAudio();
@@ -85,7 +89,7 @@ public:
 	// all cycles in frame finished, vsync
 	virtual void DoVSync();
 
-	// frame is painted on canvas and ready to be consumed
+	// called on VSync, the frame is painted on canvas and ready to be consumed
 	virtual void DoFrame();
 	
 	//
@@ -101,6 +105,7 @@ public:
 	
 	// tasks to be executed when emulation is about to execute instruction
 	std::list<CDebugInterfaceTask *> cpuDebugInterruptTasks;
+	std::atomic<bool> hasPendingCpuDebugInterruptTasks;
 	virtual void AddCpuDebugInterruptTask(CDebugInterfaceTask *task);
 	virtual void ExecuteDebugInterruptTasks();
 
@@ -120,11 +125,20 @@ public:
 	virtual int GetScreenSizeX();
 	virtual int GetScreenSizeY();
 	
-	CImageData *screenImageData;
+	CImageData *screenImageData;     // in running mode: points to current producer buffer; in stepping mode: used with mutex
+	CImageData *screenImageDataBuf[3];
+	std::atomic<int> screenReadyIndex;
+	int screenConsumerIndex;
+	int screenProducerIndex;
+	std::atomic<bool> isSteppingMode;
+	std::atomic<bool> screenNewFramePublished;
 	virtual void CreateScreenData();
 	int screenSupersampleFactor;
 	virtual void SetSupersampleFactor(int factor);
 	virtual CImageData *GetScreenImageData();
+	virtual CImageData *AcquireScreenImageForRendering();
+	virtual void ReleaseScreenImageAfterRendering();
+	virtual void PublishScreenImage();
 	
 	// keyboard & joystick mapper
 	virtual bool KeyboardDown(uint32 mtKeyCode);
@@ -132,6 +146,7 @@ public:
 	
 	virtual void JoystickDown(int port, uint32 axis);
 	virtual void JoystickUp(int port, uint32 axis);
+	virtual uint32 GetJoystickState(int port);
 	
 	virtual void MouseDown(float x, float y);
 	virtual void MouseMove(float x, float y);
@@ -142,7 +157,8 @@ public:
 
 	// state
 	virtual int GetCpuPC();
-	
+	virtual void GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S);
+
 	virtual void GetWholeMemoryMap(uint8 *buffer);
 	virtual void GetWholeMemoryMapFromRam(uint8 *buffer);
 	
@@ -204,6 +220,7 @@ public:
 	virtual void StepOverInstruction();
 	virtual void StepOneCycle();
 	virtual void StepOverSubroutine();
+	virtual bool RunEmulationForOneFrame();
 	
 	virtual void RunContinueEmulation();
 
@@ -247,6 +264,9 @@ public:
 	std::list<CDebuggerEmulatorPlugin *> plugins;
 	void RegisterPlugin(CDebuggerEmulatorPlugin *plugin);
 	void RemovePlugin(CDebuggerEmulatorPlugin *plugin);
+	bool HandleOpenFileShortcut();
+	void AddOpenFileExtensions(std::list<std::string> *extensions, bool isKeyboardShortcut);
+	bool OpenFile(CSlrString *path, bool isKeyboardShortcut);
 	
 	// views
 	CViewEmulatorScreen *viewScreen;
@@ -285,9 +305,23 @@ public:
 	CStackAnnotationData mainCpuStack;
 	virtual const char *GetIrqSourceName(u8 source);
 
+	// Pause/resume signaling
+	std::mutex pauseMutex;
+	std::condition_variable pauseCV;
+	void NotifyPauseChanged();
+
+	// Synchronous single-frame stepping
+	std::mutex frameStepMutex;
+	std::condition_variable frameStepCV;
+	uint64_t frameStepRequestGeneration;
+	uint64_t frameStepCompletedGeneration;
+	uint64_t frameStepTargetFrameNumber;
+	bool frameStepPending;
+	bool frameStepTargetVSyncReached;
+
 	//
 protected:
-	volatile int debugMode;
+	std::atomic<int> debugMode;
 
 };
 

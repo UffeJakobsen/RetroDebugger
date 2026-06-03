@@ -16,7 +16,9 @@ class CDebuggerApiNestopia : public CDebuggerApi
 {
 public:
 	CDebuggerApiNestopia(CDebugInterface *debugInterface);
+	virtual ~CDebuggerApiNestopia();
 	CDebugInterfaceNes *debugInterfaceNes;
+	CImageData *cachedScreenImage;
 	
 	virtual void CreateNewPicture(u8 mode, u8 backgroundColor);
 	virtual void StartThread(CSlrThread *run);

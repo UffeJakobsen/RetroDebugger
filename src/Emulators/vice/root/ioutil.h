@@ -43,18 +43,18 @@
 #define IOUTIL_ERRNO_ENOENT 3
 #define IOUTIL_ERRNO_ERANGE 4
 
-extern int ioutil_access(const char *pathname, int mode);
-extern int ioutil_chdir(const char *path);
-extern int ioutil_errno(unsigned int check);
-extern char *ioutil_getcwd(char *buf, int size);
-extern int ioutil_isatty(int desc);
-extern unsigned int ioutil_maxpathlen(void);
-extern int ioutil_mkdir(const char *pathname, int mode);
-extern int ioutil_remove(const char *name);
-extern int ioutil_rename(const char *oldpath, const char *newpath);
-extern int ioutil_stat(const char *file_name, unsigned int *len, unsigned int *isdir);
+int ioutil_access(const char *pathname, int mode);
+int ioutil_chdir(const char *path);
+int ioutil_errno(unsigned int check);
+char *ioutil_getcwd(char *buf, int size);
+int ioutil_isatty(int desc);
+unsigned int ioutil_maxpathlen(void);
+int ioutil_mkdir(const char *pathname, int mode);
+int ioutil_remove(const char *name);
+int ioutil_rename(const char *oldpath, const char *newpath);
+int ioutil_stat(const char *file_name, unsigned int *len, unsigned int *isdir);
 
-extern char *ioutil_current_dir(void);
+char *ioutil_current_dir(void);
 
 struct ioutil_name_table_s {
     char *name;
@@ -70,8 +70,67 @@ struct ioutil_dir_s {
 };
 typedef struct ioutil_dir_s ioutil_dir_t;
 
-extern ioutil_dir_t *ioutil_opendir(const char *path);
-extern char *ioutil_readdir(ioutil_dir_t *ioutil_dir);
-extern void ioutil_closedir(ioutil_dir_t *ioutil_dir);
+ioutil_dir_t *ioutil_opendir(const char *path);
+char *ioutil_readdir(ioutil_dir_t *ioutil_dir);
+void ioutil_closedir(ioutil_dir_t *ioutil_dir);
+
+/* VICE 3.10 forward-compat: archdep_* aliases for ioutil_* functions.
+   VICE 3.10 removed ioutil and uses archdep_* directly.
+   These aliases allow new VICE 3.10 code to compile with our ioutil backend.
+   Note: archdep_mkdir/stat/rename already exist as real functions in archapi.h
+   (ioutil.c already delegates to them), so no macros needed for those. */
+#define archdep_access      ioutil_access
+#define archdep_chdir       ioutil_chdir
+#define archdep_remove      ioutil_remove
+#define archdep_current_dir ioutil_current_dir
+
+#define ARCHDEP_ACCESS_R_OK  IOUTIL_ACCESS_R_OK
+#define ARCHDEP_ACCESS_W_OK  IOUTIL_ACCESS_W_OK
+#define ARCHDEP_ACCESS_X_OK  IOUTIL_ACCESS_X_OK
+#define ARCHDEP_ACCESS_F_OK  IOUTIL_ACCESS_F_OK
+
+#define ARCHDEP_MKDIR_RWXU   IOUTIL_MKDIR_RWXU
+#define ARCHDEP_MKDIR_RWXUG  IOUTIL_MKDIR_RWXUG
+#define ARCHDEP_MKDIR_RWXUGO IOUTIL_MKDIR_RWXUGO
+
+/* VICE 3.10 uses archdep_dir_t instead of ioutil_dir_t */
+typedef struct ioutil_dir_s archdep_dir_t;
+/* archdep_opendir takes (path, mode) in 3.10; ioutil_opendir only takes (path) */
+static inline archdep_dir_t *archdep_opendir(const char *path, int mode) {
+    (void)mode;
+    return ioutil_opendir(path);
+}
+#define archdep_readdir   ioutil_readdir
+#define archdep_closedir  ioutil_closedir
+/* VICE 3.10 directory position functions — stub implementations.
+   Our ioutil_dir_s already has a counter field used by ioutil_readdir. */
+static inline void archdep_rewinddir(archdep_dir_t *dir) {
+    if (dir) dir->counter = 0;
+}
+static inline int archdep_telldir(archdep_dir_t *dir) {
+    return dir ? dir->counter : 0;
+}
+static inline void archdep_seekdir(archdep_dir_t *dir, int pos) {
+    if (dir) dir->counter = pos;
+}
+
+/* VICE 3.10 archdep_dir.h defines */
+#define ARCHDEP_OPENDIR_ALL_FILES  0
+
+/* VICE 3.10 ARCHDEP_FSDEVICE_DEFAULT_DIR (was FSDEVICE_DEFAULT_DIR) */
+#ifndef ARCHDEP_FSDEVICE_DEFAULT_DIR
+#define ARCHDEP_FSDEVICE_DEFAULT_DIR "."
+#endif
+
+/* VICE 3.10 ARCHDEP_PATH_MAX — also defined in archdep_defs.h, but
+   duplicated here to work around Xcode explicit-module caching */
+#ifndef ARCHDEP_PATH_MAX
+# include <limits.h>
+# ifdef PATH_MAX
+#  define ARCHDEP_PATH_MAX PATH_MAX
+# else
+#  define ARCHDEP_PATH_MAX 4096
+# endif
+#endif
 
 #endif

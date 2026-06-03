@@ -39,7 +39,6 @@
 #include "lib.h"
 #include "log.h"
 #include "resources.h"
-#include "translate.h"
 #include "util.h"
 
 #ifdef DBGLOGGING
@@ -128,25 +127,6 @@ int log_set_silent(int n)
 
 
 
-int log_verbose_init(int argc, char **argv)
-{
-    int i;
-    DBG(("log_verbose_init: %d %s\n", argc, argv[0]));
-    if (argc > 1) {
-        for (i = 1; i < argc; i++) {
-            DBG(("log_verbose_init: %d %s\n", i, argv[i]));
-            if (strcmp("-verbose", argv[i]) == 0) {
-                log_set_verbose(1);
-                break;
-            } else if (strcmp("-silent", argv[1]) == 0) {
-                log_enabled = 0;
-                break;
-            }
-        }
-    }
-    return 0;
-}
-
 #ifndef __X1541__
 static const resource_string_t resources_string[] = {
     { "LogFileName", "", RES_EVENT_NO, NULL,
@@ -173,20 +153,14 @@ void log_resources_shutdown(void)
 }
 
 static const cmdline_option_t cmdline_options[] = {
-    { "-logfile", CALL_FUNCTION, 1,
+    { "-logfile", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       log_logfile_opt, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_SPECIFY_LOG_FILE_NAME,
-      NULL, NULL },
-    { "-verbose", CALL_FUNCTION, 0,
+      "<Name>", "Specify log file name" },
+    { "-verbose", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       log_verbose_opt, (void*)1, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_VERBOSE_LOG_OUTPUT,
-      NULL, NULL },
-    { "-silent", CALL_FUNCTION, 0,
+      NULL, "Enable verbose log output." },
+    { "-silent", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       log_silent_opt, (void*)1, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_LOG_OUTPUT,
       NULL, NULL },
     CMDLINE_LIST_END
 };
@@ -245,7 +219,7 @@ log_t log_open(const char *id)
         logs = lib_realloc(logs, sizeof(*logs) * num_logs);
     }
 
-    logs[new_log] = lib_stralloc(id);
+    logs[new_log] = lib_strdup(id);
 
     /* printf("log_open(%s) = %d\n", id, (int)new_log); */
     return new_log;
@@ -329,7 +303,7 @@ static int log_helper(log_t log, unsigned int level, const char *format,
         return 0;
     }
 
-    if ((logi != LOG_DEFAULT) && (logi != LOG_ERR)) {
+    if (logi != LOG_DEFAULT) {
         if ((logs == NULL) || (logi < 0)|| (logi >= num_logs) || (logs[logi] == NULL)) {
 #ifdef VICE_DEBUG
             log_archdep("log_helper: internal error (invalid id or closed log), messages follows:\n", format, ap);
@@ -338,7 +312,7 @@ static int log_helper(log_t log, unsigned int level, const char *format,
         }
     }
 
-    if ((logi != LOG_DEFAULT) && (logi != LOG_ERR) && (*logs[logi] != '\0')) {
+    if ((logi != LOG_DEFAULT) && (*logs[logi] != '\0')) {
         logtxt = lib_msprintf("%s: %s", logs[logi], level_strings[level]);
     } else {
         logtxt = lib_msprintf("%s", level_strings[level]);
@@ -428,7 +402,7 @@ int log_error(log_t log, const char *format, ...)
 //    return rc;
 }
 
-int log_debug(const char *format, ...)
+int log_debug(log_t log, const char *format, ...)
 {
 	char buffer[8192];
 	va_list args;
@@ -450,7 +424,7 @@ int log_debug(const char *format, ...)
 //    return rc;
 }
 
-int log_verbose(const char *format, ...)
+int log_verbose(log_t log, const char *format, ...)
 {
 	char buffer[8192];
 	va_list args;
@@ -472,6 +446,19 @@ int log_verbose(const char *format, ...)
 //    va_end(ap);
 //
 //    return rc;
+}
+
+int log_printf(const char *format, ...)
+{
+	char buffer[8192];
+	va_list args;
+
+	va_start(args, format);
+	vsnprintf(buffer, 8192, format, args);
+	va_end(args);
+
+	vice_wrapper_log_debug(buffer);
+	return 0;
 }
 
 void log_enable(int on)

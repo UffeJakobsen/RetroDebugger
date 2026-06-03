@@ -1,12 +1,18 @@
 #ifndef GSONG_H
 #define GSONG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef GSONG_C
 extern INSTR ginstr[MAX_INSTR];
 extern unsigned char ltable[MAX_TABLES][MAX_TABLELEN];
 extern unsigned char rtable[MAX_TABLES][MAX_TABLELEN];
 extern unsigned char songorder[MAX_SONGS][MAX_CHN][MAX_SONGLEN+2];
 extern unsigned char pattern[MAX_PATT][MAX_PATTROWS*4+4];
+extern unsigned char arpdata[MAX_PATT][MAX_CHN][MAX_PATTROWS][MAX_ARP_COLS];
+extern int numarpcolumns;
 extern char songname[MAX_STR];
 extern char authorname[MAX_STR];
 extern char copyrightname[MAX_STR];
@@ -30,5 +36,9 @@ void deletepattern(int p);
 void findusedpatterns(void);
 void findduplicatepatterns(void);
 void optimizeeverything(int oi, int ot);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

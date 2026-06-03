@@ -32,10 +32,28 @@
 
 /* Filesystem dependant operators.  */
 #define FSDEVICE_DEFAULT_DIR "."
+#define ARCHDEP_FSDEVICE_DEFAULT_DIR "."
+
+/* VICE 3.10 compat: ARCHDEP_PATH_MAX (also in archdep_defs.h but
+   duplicated here to work around Xcode explicit-module caching) */
+#ifndef ARCHDEP_PATH_MAX
+# include <limits.h>
+# ifdef PATH_MAX
+#  define ARCHDEP_PATH_MAX PATH_MAX
+# else
+#  define ARCHDEP_PATH_MAX 4096
+# endif
+#endif
 #define FSDEV_DIR_SEP_STR    "/"
 #define FSDEV_DIR_SEP_CHR    '/'
 #define FSDEV_EXT_SEP_STR    "."
 #define FSDEV_EXT_SEP_CHR    '.'
+
+/* VICE 3.10 compat: FSDEV_DIR_SEP_* renamed to ARCHDEP_DIR_SEP_* */
+#define ARCHDEP_DIR_SEP_STR  FSDEV_DIR_SEP_STR
+#define ARCHDEP_DIR_SEP_CHR  FSDEV_DIR_SEP_CHR
+#define ARCHDEP_EXT_SEP_STR  FSDEV_EXT_SEP_STR
+#define ARCHDEP_EXT_SEP_CHR  FSDEV_EXT_SEP_CHR
 
 /* Path separator.  */
 #define ARCHDEP_FINDPATH_SEPARATOR_CHAR   ':'
@@ -79,7 +97,7 @@
 /* Default sound fragment size */
 #define ARCHDEP_SOUND_FRAGMENT_SIZE 1
 
-extern const char *archdep_home_path(void);
+const char *archdep_home_path(void);
 
 /* set this path to customize the preference storage */ 
 extern const char *archdep_pref_path;
@@ -103,8 +121,8 @@ extern const char *archdep_pref_path;
     these are used if the monitor is in remote mode. in this case we might
     get SIGPIPE if the connection is unexpectedly closed.
 */
-extern void archdep_signals_init(int do_core_dumps);
-extern void archdep_signals_pipe_set(void);
-extern void archdep_signals_pipe_unset(void);
+void archdep_signals_init(int do_core_dumps);
+void archdep_signals_pipe_set(void);
+void archdep_signals_pipe_unset(void);
 
 #endif

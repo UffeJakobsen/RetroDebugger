@@ -809,8 +809,10 @@ int SIO_ReadSector(int unit, int sector, UBYTE *buffer)
 				if (secinfo->sec_status[secindex] == 0xB7) {
 					for (i=0;i<128;i++) {
 						Log_print("0x%02x",buffer[i]);
-						if (buffer[i] == 0x33)
-							buffer[i] = rand() & 0xFF;
+						if (buffer[i] == 0x33) {
+							extern volatile unsigned int atrdMainCpuCycle;
+							buffer[i] = (atrdMainCpuCycle + i) & 0xFF;
+						}
 					}
 				}
 			}

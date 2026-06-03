@@ -31,104 +31,104 @@
 
 #include "platform_x86_runtime_cpu.h"
 
-extern char *platform_get_compile_time_os(void);
-extern char *platform_get_compile_time_compiler(void);
-extern char *platform_get_compile_time_cpu(void);
-extern char *platform_get_ui(void);
-extern char *platform_get_runtime_os(void);
-extern char *platform_get_runtime_cpu(void);
+char *platform_get_compile_time_os(void);
+char *platform_get_compile_time_compiler(void);
+char *platform_get_compile_time_cpu(void);
+char *platform_get_ui(void);
+char *platform_get_runtime_os(void);
+char *platform_get_runtime_cpu(void);
 
-extern char* platform_get_x86_runtime_cpu(void);
+char* platform_get_x86_runtime_cpu(void);
 
-extern char *platform_get_windows_runtime_os(void);
+char *platform_get_windows_runtime_os(void);
 
-extern char *platform_get_macosx_runtime_os(void);
-extern char *platform_get_macosx_runtime_cpu(void);
+char *platform_get_macosx_runtime_os(void);
+char *platform_get_macosx_runtime_cpu(void);
 
-extern char *platform_get_amigaos3_runtime_os(void);
-extern char *platform_get_amigaos3_runtime_cpu(void);
+char *platform_get_amigaos3_runtime_os(void);
+char *platform_get_amigaos3_runtime_cpu(void);
 
-extern char *platform_get_amigaos4_runtime_os(void);
-extern char *platform_get_amigaos4_runtime_cpu(void);
+char *platform_get_amigaos4_runtime_os(void);
+char *platform_get_amigaos4_runtime_cpu(void);
 
-extern char *platform_get_aros_runtime_os(void);
-extern char *platform_get_aros_runtime_cpu(void);
+char *platform_get_aros_runtime_os(void);
+char *platform_get_aros_runtime_cpu(void);
 
-extern char *platform_get_os2_runtime_os(void);
+char *platform_get_os2_runtime_os(void);
 
-extern int CheckForHaiku(void);
-extern int CheckForZeta(void);
+int CheckForHaiku(void);
+int CheckForZeta(void);
 
-extern char *platform_get_haiku_runtime_os(void);
-extern char *platform_get_zeta_runtime_os(void);
-extern char *platform_get_beos_runtime_os(void);
-extern char *platform_get_beosppc_runtime_cpu(void);
+char *platform_get_haiku_runtime_os(void);
+char *platform_get_zeta_runtime_os(void);
+char *platform_get_beos_runtime_os(void);
+char *platform_get_beosppc_runtime_cpu(void);
 
-extern char *platform_get_sunos_runtime_os(void);
-extern char *platform_get_sunos_runtime_cpu(void);
+char *platform_get_sunos_runtime_os(void);
+char *platform_get_sunos_runtime_cpu(void);
 
-extern char *platform_get_amix_runtime_os(void);
-extern char *platform_get_amix_runtime_cpu(void);
+char *platform_get_amix_runtime_os(void);
+char *platform_get_amix_runtime_cpu(void);
 
-extern char *platform_get_solaris_runtime_os(void);
-extern char *platform_get_solaris_runtime_cpu(void);
+char *platform_get_solaris_runtime_os(void);
+char *platform_get_solaris_runtime_cpu(void);
 
-extern char *platform_get_darwin_runtime_os(void);
-extern char *platform_get_darwin_runtime_cpu(void);
+char *platform_get_darwin_runtime_os(void);
+char *platform_get_darwin_runtime_cpu(void);
 
-extern char *platform_get_nextopenstep_runtime_os(void);
-extern char *platform_get_nextopenstep_runtime_cpu(void);
+char *platform_get_nextopenstep_runtime_os(void);
+char *platform_get_nextopenstep_runtime_cpu(void);
 
-extern char *platform_get_rhapsody_runtime_os(void);
-extern char *platform_get_rhapsody_runtime_cpu(void);
+char *platform_get_rhapsody_runtime_os(void);
+char *platform_get_rhapsody_runtime_cpu(void);
 
-extern char *platform_get_syllable_runtime_os(void);
-extern char *platform_get_syllable_runtime_cpu(void);
+char *platform_get_syllable_runtime_os(void);
+char *platform_get_syllable_runtime_cpu(void);
 
-extern char *platform_get_linux_runtime_os(void);
-extern char *platform_get_linux_runtime_cpu(void);
+char *platform_get_linux_runtime_os(void);
+char *platform_get_linux_runtime_cpu(void);
 
-extern char *platform_get_netbsd_runtime_os(void);
-extern char *platform_get_netbsd_runtime_cpu(void);
+char *platform_get_netbsd_runtime_os(void);
+char *platform_get_netbsd_runtime_cpu(void);
 
-extern char *platform_get_freebsd_runtime_os(void);
-extern char *platform_get_freebsd_runtime_cpu(void);
+char *platform_get_freebsd_runtime_os(void);
+char *platform_get_freebsd_runtime_cpu(void);
 
-extern char *platform_get_dragonfly_runtime_os(void);
-extern char *platform_get_dragonfly_runtime_cpu(void);
+char *platform_get_dragonfly_runtime_os(void);
+char *platform_get_dragonfly_runtime_cpu(void);
 
-extern char *platform_get_openbsd_runtime_os(void);
-extern char *platform_get_openbsd_runtime_cpu(void);
+char *platform_get_openbsd_runtime_os(void);
+char *platform_get_openbsd_runtime_cpu(void);
 
-extern char *platform_get_ultrix_runtime_os(void);
-extern char *platform_get_ultrix_runtime_cpu(void);
+char *platform_get_ultrix_runtime_os(void);
+char *platform_get_ultrix_runtime_cpu(void);
 
-extern char *platform_get_interix_runtime_os(void);
+char *platform_get_interix_runtime_os(void);
 
-extern char *platform_get_cygwin_runtime_os(void);
-extern char *platform_get_cygwin_runtime_cpu(void);
+char *platform_get_cygwin_runtime_os(void);
+char *platform_get_cygwin_runtime_cpu(void);
 
-extern char *platform_get_dos_runtime_os(void);
+char *platform_get_dos_runtime_os(void);
 
-extern char *platform_get_sco_runtime_os(void);
-extern char *platform_get_sco_runtime_cpu(void);
+char *platform_get_sco_runtime_os(void);
+char *platform_get_sco_runtime_cpu(void);
 
-extern char *platform_get_skyos_runtime_os(void);
-extern char *platform_get_skyos_runtime_cpu(void);
+char *platform_get_skyos_runtime_os(void);
+char *platform_get_skyos_runtime_cpu(void);
 
-extern char *platform_get_sortix_runtime_os(void);
-extern char *platform_get_sortix_runtime_cpu(void);
+char *platform_get_sortix_runtime_os(void);
+char *platform_get_sortix_runtime_cpu(void);
 
-extern char *platform_get_qnx4_runtime_os(void);
-extern char *platform_get_qnx4_runtime_cpu(void);
+char *platform_get_qnx4_runtime_os(void);
+char *platform_get_qnx4_runtime_cpu(void);
 
-extern char *platform_get_qnx6_runtime_os(void);
-extern char *platform_get_qnx6_runtime_cpu(void);
+char *platform_get_qnx6_runtime_os(void);
+char *platform_get_qnx6_runtime_cpu(void);
 
-extern char *platform_get_minix_runtime_os(void);
-extern char *platform_get_minix_runtime_cpu(void);
+char *platform_get_minix_runtime_os(void);
+char *platform_get_minix_runtime_cpu(void);
 
-extern char *platform_get_hurd_runtime_os(void);
+char *platform_get_hurd_runtime_os(void);
 
 /* Set the runtime os call for known platforms */
 

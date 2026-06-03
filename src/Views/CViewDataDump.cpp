@@ -35,6 +35,57 @@
 #include "CViewAtariScreen.h"
 #include "CViewNesScreen.h"
 
+// ASCII -> C64 Screen Code mapping tables
+// 0xFF = unmapped key (ignored)
+
+static const u8 kAsciiToC64ScreenCodeUppercase[128] = {
+//  0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x00-0x0F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x10-0x1F
+    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, // 0x20-0x2F: space ! " # $ % & ' ( ) * + , - . /
+    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, // 0x30-0x3F: 0-9 : ; < = > ?
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, // 0x40-0x4F: @ A-O
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0xFF, 0x1D, 0xFF, 0xFF, // 0x50-0x5F: P-Z [ \ ] ^ _
+    0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, // 0x60-0x6F: ` a-o (same as A-O)
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x70-0x7F: p-z (same as P-Z)
+};
+
+static const u8 kAsciiToC64ScreenCodeLowercase[128] = {
+//  0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x00-0x0F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x10-0x1F
+    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, // 0x20-0x2F: space ! " # $ % & ' ( ) * + , - . /
+    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, // 0x30-0x3F: 0-9 : ; < = > ?
+    0x00, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, // 0x40-0x4F: @ A-O (uppercase glyphs in lowercase mode)
+    0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x1B, 0xFF, 0x1D, 0xFF, 0xFF, // 0x50-0x5F: P-Z [ \ ] ^ _
+    0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, // 0x60-0x6F: ` a-o (lowercase)
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x70-0x7F: p-z (lowercase)
+};
+
+static const u8 kAsciiToAtariScreenCode[128] = {
+//  0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x00-0x0F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x10-0x1F
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, // 0x20-0x2F: space ! " # $ % & ' ( ) * + , - . /
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, // 0x30-0x3F: 0-9 : ; < = > ?
+    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, // 0x40-0x4F: @ A-O
+    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, // 0x50-0x5F: P-Z [ \ ] ^ _
+    0xFF, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, // 0x60-0x6F: ` a-o
+    0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x70-0x7F: p-z
+};
+
+static const u8 kAsciiPassthrough[128] = {
+//  0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x00-0x0F
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x10-0x1F
+    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, // 0x20-0x2F
+    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, // 0x30-0x3F
+    0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, // 0x40-0x4F
+    0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, // 0x50-0x5F
+    0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, // 0x60-0x6F
+    0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0xFF, // 0x70-0x7F
+};
+
 CViewDataDump::CViewDataDump(const char *name, float posX, float posY, float posZ, float sizeX, float sizeY,
 							 CDebugSymbols *symbols, CViewDataMap *viewMemoryMap, CViewDisassembly *viewDisassembly)
 : CGuiView(name, posX, posY, posZ, sizeX, sizeY)
@@ -97,12 +148,24 @@ CViewDataDump::CViewDataDump(const char *name, float posX, float posY, float pos
 	editBoxHex = new CGuiEditHex(this);
 	editBoxHex->isCapitalLetters = false;
 	isEditingValue = false;
-	
+	isCharacterEditing = false;
+
 	isEditingValueAddr = false;
-	
+
+	selectionStartAddr = -1;
+	selectionEndAddr = -1;
+	isSelecting = false;
+	autoScrollLastTime = 0;
+
 	strTemp = new CSlrString();
 
 	renderDataWithColors = false;
+
+	// Character dirty-tracking init
+	prevCharacterDataBuf = NULL;
+	prevCharacterDataBufSize = 0;
+	prevCharUseColors = false;
+	prevCharColorD021 = prevCharColorD022 = prevCharColorD023 = prevCharColorD800 = 0;
 
 	//
 	AddLayoutParameter(new CLayoutParameterFloat("Font Size", &fontSize));
@@ -164,8 +227,14 @@ CViewDataDump::CViewDataDump(const char *name, float posX, float posY, float pos
 	this->SetPosition(posX, posY, sizeX, sizeY, true);
 }
 
+CViewDataDump::~CViewDataDump()
+{
+	delete[] prevCharacterDataBuf;
+}
+
 void CViewDataDump::SetDataAdapter(CDebugDataAdapter *newDataAdapter)
 {
+	ClearSelection();
 	this->dataAdapter = newDataAdapter;
 	if (this->dataAddressEditBox)
 		delete this->dataAddressEditBox;
@@ -233,26 +302,31 @@ void CViewDataDump::DoLogic()
 
 bool CViewDataDump::FindDataPosition(float x, float y, int *dataPositionX, int *dataPositionY, int *dataPositionAddr)
 {
+	return FindDataPositionHex(x, y, dataPositionX, dataPositionY, dataPositionAddr)
+		|| FindDataPositionCharacter(x, y, dataPositionX, dataPositionY, dataPositionAddr);
+}
+
+bool CViewDataDump::FindDataPositionHex(float x, float y, int *dataPositionX, int *dataPositionY, int *dataPositionAddr)
+{
 	float fontBytesSize40 = (float)(dataAddressEditBox->GetNumDigits()) * fontBytesSize;
 	float fontBytesSize40_gap = fontBytesSize40 + gapAddress;
 	float fontBytesSize20_gap = 2.0*fontBytesSize + gapHexData;
-	float fontBytesSize05 = gapDataCharacters; //0.5f*fontBytesSize;
 
 	float px = posX;
 	float py = posY;
-	
+
 	int addr = dataShowStart;
-	
+
 	int dy = 0;
 	while (true)
 	{
 		px = posX;
 		int a = addr;
-		
+
 		px += fontBytesSize40_gap;
-		
+
 		float nextpy = py + fontCharactersWidth;
-		
+
 		// data bytes
 		for (int dx = 0; dx < numberOfBytesPerLine; dx++)
 		{
@@ -262,27 +336,75 @@ bool CViewDataDump::FindDataPosition(float x, float y, int *dataPositionX, int *
 				*dataPositionX = dx;
 				*dataPositionY = dy;
 				*dataPositionAddr = a;
-				
-				//LOGD("found data position=%d %d %4.4x", *dataPositionX, *dataPositionY, *dataPositionAddr);
 
 				return true;
 			}
-			
+
 			a++;
-			px += fontBytesSize20_gap; //nextpx + 0.5*fontBytesSize;
+			px += fontBytesSize20_gap;
 		}
-		
-		px += fontBytesSize05;
-		
+
 		addr += numberOfBytesPerLine;
-		
+
 		dy++;
-		
+
 		py += fontCharactersWidth;
 		if (py+fontCharactersWidth > posEndY)
 			break;
 	}
-	
+
+	return false;
+}
+
+bool CViewDataDump::FindDataPositionCharacter(float x, float y, int *dataPositionX, int *dataPositionY, int *dataPositionAddr)
+{
+	if (!showDataCharacters)
+		return false;
+
+	float fontBytesSize40 = (float)(dataAddressEditBox->GetNumDigits()) * fontBytesSize;
+	float fontBytesSize40_gap = fontBytesSize40 + gapAddress;
+	float fontBytesSize20_gap = 2.0*fontBytesSize + gapHexData;
+	float fontBytesSize05 = gapDataCharacters;
+
+	float px = posX;
+	float py = posY;
+
+	int addr = dataShowStart;
+
+	int dy = 0;
+	while (true)
+	{
+		// Skip past address + hex bytes to get to character panel start
+		px = posX + fontBytesSize40_gap + numberOfBytesPerLine * fontBytesSize20_gap + fontBytesSize05;
+		int a = addr;
+
+		float nextpy = py + fontCharactersWidth;
+
+		for (int dx = 0; dx < numberOfBytesPerLine; dx++)
+		{
+			float nextpx = px + fontCharactersWidth;
+			if (y >= py && y <= nextpy && x >= px && x <= nextpx)
+			{
+				*dataPositionX = dx;
+				*dataPositionY = dy;
+				*dataPositionAddr = a;
+
+				return true;
+			}
+
+			a++;
+			px += fontCharactersWidth;
+		}
+
+		addr += numberOfBytesPerLine;
+
+		dy++;
+
+		py += fontCharactersWidth;
+		if (py+fontCharactersWidth > posEndY)
+			break;
+	}
+
 	return false;
 }
 
@@ -429,7 +551,13 @@ void CViewDataDump::Render()
 											colorExecuteArgumentR, colorExecuteArgumentG, colorExecuteArgumentB, colorExecuteArgumentA);
 					}
 					BlitFilledRectangle(px, py, posZ, markerSizeX, markerSizeY, cell->sr, cell->sg, cell->sb, cell->sa);
-									
+
+					// Selection highlight (hex panel)
+					if (IsAddressSelected(a))
+					{
+						BlitFilledRectangle(px, py, posZ, fontBytesSize*2.0f, fontCharactersWidth, 0.55f, 0.55f, 1.0f, 1.0f);
+					}
+
 					//BlitTextColor(CSlrString *text, float posX, float posY, float posZ, float scale, float colorR, float colorG, float colorB, float alpha)
 
 					// TODO: refactor refresh of memory map cell colors and skip visibility and update, change so debugmemory has a list of consumers, if no consumers are visible skip this update UpdateCellColors, if any consumer visible do for each cell once per frame
@@ -484,8 +612,17 @@ void CViewDataDump::Render()
 	//							a = cell->ra;
 	//						}
 
-							BlitFilledRectangle(px, py, posZ, fontBytesSize*2.0f, fontCharactersWidth, r, g, b, a);
-							
+							if (isCharacterEditing)
+							{
+								// Outline only — cursor is active in character panel
+								BlitRectangle(px, py, posZ, fontBytesSize*2.0f, fontCharactersWidth, 0.5f, 0.5f, 0.5f, 0.7f);
+							}
+							else
+							{
+								// Filled — cursor is active in hex panel
+								BlitFilledRectangle(px, py, posZ, fontBytesSize*2.0f, fontCharactersWidth, r, g, b, a);
+							}
+
 	//
 	//						viewC64->fontDisassemblyInverted->BlitTextColor(buf, px, py, posZ, fontBytesSize, cell->rb, cell->rg, cell->rr, 1.0f);
 							viewC64->fontDisassemblyInverted->BlitTextColor(buf, px, py, posZ, fontBytesSize, 1.0f, 1.0f, 1.0f, 0.7f);
@@ -538,14 +675,35 @@ void CViewDataDump::Render()
 			{
 				u8 value;
 				bool isAvailable;
-				
+
 				dataAdapter->AdapterReadByte(a, &value, &isAvailable);
-				
+
 				if (isAvailable)
 				{
+					// Selection highlight (character panel)
+					if (IsAddressSelected(a))
+					{
+						BlitFilledRectangle(px, py, posZ, fontCharactersWidth, fontCharactersWidth, 0.55f, 0.55f, 1.0f, 1.0f);
+					}
+
+					// Draw cursor on the character panel
+					if (editCursorPositionY == dy && editCursorPositionX == dx)
+					{
+						if (isCharacterEditing)
+						{
+							// Filled — cursor is active in character panel
+							BlitFilledRectangle(px, py, posZ, fontCharactersWidth, fontCharactersWidth, 1.0f, 0.3f, 0.3f, 0.5f);
+						}
+						else
+						{
+							// Outline only — cursor is active in hex panel
+							BlitRectangle(px, py, posZ, fontCharactersWidth, fontCharactersWidth, 0.5f, 0.5f, 0.5f, 0.7f);
+						}
+					}
+
 					fontCharacters->BlitChar((u16)value, px, py, posZ, fontCharactersSize);
 				}
-				
+
 				px += fontCharactersWidth;
 				a++;
 			}
@@ -668,9 +826,9 @@ void CViewDataDump::UpdateCharacters(bool useColors, u8 colorD021, u8 colorD022,
 {
 	std::list<CSlrImage *>::iterator itImage = charactersImages.begin();
 	std::list<CImageData *>::iterator itImageData =  charactersImageData.begin();
-	
+
 	int addr = currentDataIndex;
-	
+
 	if (addr < 0)
 	{
 		addr = 0;
@@ -680,15 +838,43 @@ void CViewDataDump::UpdateCharacters(bool useColors, u8 colorD021, u8 colorD022,
 		addr = dataAdapter->AdapterGetDataLength()-1;
 	}
 
+	int numChars = (int)charactersImages.size();
+	int requiredBufSize = numChars * 8;
+
+	// Reallocate tracking buffer if number of characters changed
+	if (prevCharacterDataBufSize != requiredBufSize)
+	{
+		delete[] prevCharacterDataBuf;
+		prevCharacterDataBuf = new uint8[requiredBufSize];
+		memset(prevCharacterDataBuf, 0, requiredBufSize);
+		prevCharacterDataBufSize = requiredBufSize;
+	}
+
+	// Check if global colors changed
+	bool globalColorsChanged = (useColors != prevCharUseColors ||
+								colorD021 != prevCharColorD021 ||
+								colorD022 != prevCharColorD022 ||
+								colorD023 != prevCharColorD023 ||
+								colorD800 != prevCharColorD800);
+	if (globalColorsChanged)
+	{
+		prevCharUseColors = useColors;
+		prevCharColorD021 = colorD021;
+		prevCharColorD022 = colorD022;
+		prevCharColorD023 = colorD023;
+		prevCharColorD800 = colorD800;
+	}
+
+	int charIndex = 0;
 	while(itImage != charactersImages.end())
 	{
-		//LOGD("char#=%d dataAddr=%4.4x", zi++, addr);
+		//LOGD("char#=%d dataAddr=%4.4x", charIndex, addr);
 
 		CSlrImage *image = *itImage;
 		CImageData *imageData = *itImageData;
-		
+
 		u8 characterData[8];
-		
+
 		for (int i = 0; i < 8; i++)
 		{
 			u8 v;
@@ -696,7 +882,20 @@ void CViewDataDump::UpdateCharacters(bool useColors, u8 colorD021, u8 colorD022,
 			characterData[i] = v;
 			addr++;
 		}
-		
+
+		uint8 *prevData = prevCharacterDataBuf + charIndex * 8;
+
+		// Skip rebind if neither character data nor colors changed
+		if (!globalColorsChanged && memcmp(characterData, prevData, 8) == 0)
+		{
+			itImage++;
+			itImageData++;
+			charIndex++;
+			continue;
+		}
+
+		memcpy(prevData, characterData, 8);
+
 		// TODO: make this generic
 		if (debugInterface->GetEmulatorType() == EMULATOR_TYPE_C64_VICE)
 		{
@@ -714,12 +913,13 @@ void CViewDataDump::UpdateCharacters(bool useColors, u8 colorD021, u8 colorD022,
 		{
 			ConvertCharacterDataToImage(characterData, imageData);
 		}
-		
+
 		// re-bind image
 		image->ReBindImageData(imageData);
-		
+
 		itImage++;
 		itImageData++;
+		charIndex++;
 	}
 }
 
@@ -796,15 +996,23 @@ bool CViewDataDump::DoTap(float x, float y)
 	{
 		CancelEditingHexBox();
 	}
-	
-	bool found = FindDataPosition(x, y, &dataPositionX, &dataPositionY, &dataPositionAddr);
-	if (found == false)
+
+	// Check which panel was clicked: hex or character
+	bool foundHex = FindDataPositionHex(x, y, &dataPositionX, &dataPositionY, &dataPositionAddr);
+	bool foundChar = false;
+	if (!foundHex)
 	{
-//		isVisibleEditCursor = false;
-		
+		foundChar = FindDataPositionCharacter(x, y, &dataPositionX, &dataPositionY, &dataPositionAddr);
+	}
+
+	if (!foundHex && !foundChar)
+	{
 		guiMain->UnlockMutex();
 		return true;
 	}
+
+	// Set editing mode based on which panel was clicked
+	isCharacterEditing = foundChar;
 	
 //	if (isVisibleEditCursor && dataPositionX == editCursorPositionX && dataPositionY == editCursorPositionY)
 //	{
@@ -886,10 +1094,15 @@ bool CViewDataDump::DoTap(float x, float y)
 	
 	editCursorPositionX = dataPositionX;
 	editCursorPositionY = dataPositionY;
-	
+
 	isEditingValue = false;
 
-	
+	// Start selection
+	selectionStartAddr = dataPositionAddr;
+	selectionEndAddr = dataPositionAddr;
+	isSelecting = true;
+	autoScrollLastTime = 0;
+
 //	isVisibleEditCursor = true;
 
 	guiMain->UnlockMutex();
@@ -928,7 +1141,151 @@ bool CViewDataDump::DoScrollWheel(float deltaX, float deltaY)
 	return false;
 }
 
+bool CViewDataDump::DoMove(float x, float y, float distX, float distY, float diffX, float diffY)
+{
+	if (!isSelecting)
+		return false;
 
+	guiMain->LockMutex();
+
+	int dataPositionX;
+	int dataPositionY;
+	int dataPositionAddr;
+
+	bool found = FindDataPosition(x, y, &dataPositionX, &dataPositionY, &dataPositionAddr);
+
+	if (found)
+	{
+		selectionEndAddr = dataPositionAddr;
+		editCursorPositionX = dataPositionX;
+		editCursorPositionY = dataPositionY;
+	}
+	else
+	{
+		// Auto-scroll when cursor is above or below the view
+		long now = SYS_GetCurrentTimeInMillis();
+		if (autoScrollLastTime == 0 || (now - autoScrollLastTime) >= 70)
+		{
+			if (y < posY)
+			{
+				// Cursor above view — scroll up
+				if (dataShowStart > 0)
+				{
+					ScrollDataUp();
+					// Extend selection to first byte of new top line
+					selectionEndAddr = dataShowStart + dataAdapter->GetDataOffset();
+					editCursorPositionX = 0;
+					editCursorPositionY = 0;
+					autoScrollLastTime = now;
+				}
+			}
+			else if (y > posEndY)
+			{
+				// Cursor below view — scroll down
+				int dataLength = dataAdapter->AdapterGetDataLength();
+				if (dataShowStart + dataShowSize < dataLength)
+				{
+					ScrollDataDown();
+					// Extend selection to last byte of new bottom line
+					int lastLineAddr = dataShowStart + (numberOfLines - 1) * numberOfBytesPerLine;
+					selectionEndAddr = lastLineAddr + numberOfBytesPerLine - 1 + dataAdapter->GetDataOffset();
+					if (selectionEndAddr >= dataLength)
+						selectionEndAddr = dataLength - 1;
+					editCursorPositionX = numberOfBytesPerLine - 1;
+					editCursorPositionY = numberOfLines - 1;
+					autoScrollLastTime = now;
+				}
+			}
+		}
+	}
+
+	guiMain->UnlockMutex();
+	return true;
+}
+
+bool CViewDataDump::FinishMove(float x, float y, float distX, float distY, float accelerationX, float accelerationY)
+{
+	if (!isSelecting)
+		return false;
+
+	isSelecting = false;
+
+	// If start == end, it was a click without drag — clear selection
+	if (selectionStartAddr == selectionEndAddr)
+	{
+		selectionStartAddr = -1;
+		selectionEndAddr = -1;
+	}
+
+	return true;
+}
+
+bool CViewDataDump::DoFinishTap(float x, float y)
+{
+	if (!isSelecting)
+		return false;
+
+	isSelecting = false;
+
+	// Click without drag — clear selection
+	if (selectionStartAddr == selectionEndAddr)
+	{
+		selectionStartAddr = -1;
+		selectionEndAddr = -1;
+	}
+
+	return true;
+}
+
+bool CViewDataDump::GetSelectionRange(int *fromAddr, int *toAddr)
+{
+	if (selectionStartAddr < 0)
+		return false;
+
+	int s = selectionStartAddr;
+	int e = selectionEndAddr;
+	if (s > e)
+	{
+		int tmp = s;
+		s = e;
+		e = tmp;
+	}
+
+	// Clamp to valid data range
+	int dataLength = dataAdapter->AdapterGetDataLength();
+	int addrOffset = dataAdapter->GetDataOffset();
+	if (s < addrOffset)
+		s = addrOffset;
+	if (e >= dataLength + addrOffset)
+		e = dataLength + addrOffset - 1;
+
+	*fromAddr = s;
+	*toAddr = e;
+	return true;
+}
+
+bool CViewDataDump::IsAddressSelected(int addr)
+{
+	if (selectionStartAddr < 0)
+		return false;
+
+	int s = selectionStartAddr;
+	int e = selectionEndAddr;
+	if (s > e)
+	{
+		int tmp = s;
+		s = e;
+		e = tmp;
+	}
+	return (addr >= s && addr <= e);
+}
+
+void CViewDataDump::ClearSelection()
+{
+	selectionStartAddr = -1;
+	selectionEndAddr = -1;
+	isSelecting = false;
+}
 
 void CViewDataDump::ScrollDataUp()
 {
@@ -1076,7 +1433,18 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 		fontCharacters = fonts[selectedCharset];
 		return false;
 	}
-	
+
+	// Tab toggles between hex panel and character panel
+	if (keyCode == MTKEY_TAB)
+	{
+		if (isEditingValue)
+		{
+			CancelEditingHexBox();
+		}
+		isCharacterEditing = !isCharacterEditing;
+		return true;
+	}
+
 	CSlrKeyboardShortcut *keyboardShortcutMemory = guiMain->keyboardShortcuts->FindShortcut(KBZONE_MEMORY, bareKey, isShift, isAlt, isControl, isSuper);
 	
 	// check if editing value and go to address shortcut pressed
@@ -1098,7 +1466,27 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 		dataAddressEditBox->KeyDown(keyCode);
 		return true;
 	}
-	
+
+	// Character panel editing — type text mapped to screen codes
+	if (isCharacterEditing)
+	{
+		// Don't intercept modifier-only keys, navigation, or shortcuts (Cmd/Ctrl+key)
+		if (keyCode >= ' ' && keyCode < 128 && !isControl && !isSuper)
+		{
+			u8 screenCode = MapKeyToScreenCode(keyCode, isShift);
+			if (screenCode != 0xFF)
+			{
+				int addr = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
+				addr -= dataAdapter->GetDataOffset();
+				dataAdapter->AdapterWriteByte(addr, screenCode);
+
+				// Advance cursor to next byte (reuse arrow right logic for wrap/scroll)
+				this->KeyDown(MTKEY_ARROW_RIGHT, false, false, false, false);
+				return true;
+			}
+		}
+	}
+
 	// TODO: HOME should move to first item in current line, ctrl+HOME should move to beginning of document
 	if (keyCode == MTKEY_HOME) // && isControl)
 	{
@@ -1139,7 +1527,10 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 
 	if (keyboardShortcutGlobal == viewC64->mainMenuBar->kbsCopyToClipboard)
 	{
-		this->CopyHexValuesToClipboard();
+		if (isCharacterEditing)
+			this->CopyTextToClipboard();
+		else
+			this->CopyHexValuesToClipboard();
 		return true;
 	}
 
@@ -1151,7 +1542,10 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 
 	if (keyboardShortcutGlobal == viewC64->mainMenuBar->kbsPasteFromClipboard)
 	{
-		this->PasteHexValuesFromClipboard();
+		if (isCharacterEditing)
+			this->PasteTextFromClipboard();
+		else
+			this->PasteHexValuesFromClipboard();
 		return true;
 	}
 	
@@ -1204,6 +1598,14 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 //	}
 //	else
 	{
+		// Clear selection on keyboard navigation
+		// (cmd/ctrl+left/right is the global emulation rewind shortcut, leave it alone)
+		if (keyCode == MTKEY_ARROW_DOWN || keyCode == MTKEY_ARROW_UP
+			|| ((keyCode == MTKEY_ARROW_LEFT || keyCode == MTKEY_ARROW_RIGHT) && !isControl))
+		{
+			ClearSelection();
+		}
+
 		// show editing cursor
 		if (keyCode == MTKEY_ARROW_DOWN)
 		{
@@ -1243,8 +1645,9 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 			}
 			return true;
 		}
-		else if (keyCode == MTKEY_ARROW_LEFT)
+		else if (keyCode == MTKEY_ARROW_LEFT && !isControl)
 		{
+			// cmd/ctrl+left is the global "rewind emulation" shortcut; let it fall through
 			if (editCursorPositionX > 0)
 			{
 				editCursorPositionX--;
@@ -1267,8 +1670,9 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 			}
 			return true;
 		}
-		else if (keyCode == MTKEY_ARROW_RIGHT)
+		else if (keyCode == MTKEY_ARROW_RIGHT && !isControl)
 		{
+			// cmd/ctrl+right is the global "forward emulation" shortcut; let it fall through
 			if (editCursorPositionX < numberOfBytesPerLine-1)
 			{
 				editCursorPositionX++;
@@ -1291,8 +1695,9 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 			}
 			return true;
 		}
-		else if (keyCode == MTKEY_ENTER)
+		else if (keyCode == MTKEY_ENTER && !isCharacterEditing)
 		{
+			ClearSelection();
 			int addr = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
 			addr -= dataAdapter->GetDataOffset();
 			u8 v;
@@ -1301,7 +1706,7 @@ bool CViewDataDump::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isContro
 			isEditingValue = true;
 			return true;
 		}
-		else if ((keyCode >= '0' && keyCode <= '9') || (keyCode >= 'a' && keyCode <= 'f'))
+		else if (!isCharacterEditing && ((keyCode >= '0' && keyCode <= '9') || (keyCode >= 'a' && keyCode <= 'f')))
 		{
 			// mimic start editing
 			this->KeyDown(MTKEY_ENTER, false, false, false, false);
@@ -1371,10 +1776,20 @@ void CViewDataDump::DataAddressEditBoxEnteredValue(CDataAddressEditBox *editBox,
 void CViewDataDump::PasteHexValuesFromClipboard()
 {
 	LOGG("CViewDataDump::PasteHexValuesFromClipboard");
-	
-	int addrCursor = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
-	addrCursor -= dataAdapter->GetDataOffset();
-	
+
+	int addrCursor;
+	int fromAddr, toAddr;
+	if (GetSelectionRange(&fromAddr, &toAddr))
+	{
+		addrCursor = fromAddr - dataAdapter->GetDataOffset();
+		ClearSelection();
+	}
+	else
+	{
+		addrCursor = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
+		addrCursor -= dataAdapter->GetDataOffset();
+	}
+
 	int addr = addrCursor;
 	bool onlyHexFound = true;
 	bool addrFound = false;
@@ -1447,29 +1862,67 @@ void CViewDataDump::PasteHexValuesFromClipboard()
 void CViewDataDump::CopyHexValuesToClipboard()
 {
 	LOGG("CViewDataDump::CopyHexValuesToClipboard");
-	
-	int addrCursor = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
-	addrCursor -= dataAdapter->GetDataOffset();
 
-	u8 val;
-	bool isAvailable;
-	dataAdapter->AdapterReadByte(addrCursor, &val, &isAvailable);
-	if (isAvailable)
+	int fromAddr, toAddr;
+	if (GetSelectionRange(&fromAddr, &toAddr) && fromAddr != toAddr)
 	{
-		char *buf = SYS_GetCharBuf();
-		sprintf(buf, "$%02X", val);
+		// Multi-byte selection: copy as space-separated hex
+		int addrOffset = dataAdapter->GetDataOffset();
+		int count = toAddr - fromAddr + 1;
+		// Each byte: "XX " = 3 chars, plus null
+		char *buf = new char[count * 3 + 1];
+		int pos = 0;
+		for (int a = fromAddr; a <= toAddr; a++)
+		{
+			u8 val;
+			bool isAvailable;
+			dataAdapter->AdapterReadByte(a - addrOffset, &val, &isAvailable);
+			if (isAvailable)
+			{
+				if (pos > 0)
+					buf[pos++] = ' ';
+				sprintf(buf + pos, "%02X", val);
+				pos += 2;
+			}
+		}
+		buf[pos] = '\0';
+
 		CSlrString *str = new CSlrString(buf);
 		SYS_SetClipboardAsSlrString(str);
 		delete str;
 
-		sprintf(buf, "Copied $%02X", val);
-		viewC64->ShowMessageInfo(buf);
-		
-		SYS_ReleaseCharBuf(buf);
+		char msgBuf[64];
+		sprintf(msgBuf, "Copied %d bytes", count);
+		viewC64->ShowMessageInfo(msgBuf);
+
+		delete[] buf;
 	}
 	else
 	{
-		viewC64->ShowMessageError("No data available for copying.");
+		// Single byte at cursor
+		int addrCursor = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
+		addrCursor -= dataAdapter->GetDataOffset();
+
+		u8 val;
+		bool isAvailable;
+		dataAdapter->AdapterReadByte(addrCursor, &val, &isAvailable);
+		if (isAvailable)
+		{
+			char *buf = SYS_GetCharBuf();
+			sprintf(buf, "$%02X", val);
+			CSlrString *str = new CSlrString(buf);
+			SYS_SetClipboardAsSlrString(str);
+			delete str;
+
+			sprintf(buf, "Copied $%02X", val);
+			viewC64->ShowMessageInfo(buf);
+
+			SYS_ReleaseCharBuf(buf);
+		}
+		else
+		{
+			viewC64->ShowMessageError("No data available for copying.");
+		}
 	}
 }
 
@@ -1554,6 +2007,9 @@ void CViewDataDump::RenderContextMenuItems()
 		
 	if (currentSegment)
 	{
+		// Per-address ID so ImGui's InputText internal edit state does not leak
+		// between cells when the context menu popup is reopened at a new address.
+		ImGui::PushID((int)currentDataIndex);
 		if (ImGui::InputText("##dataDumpLabelText", localLabelText, MAX_STRING_LENGTH))
 		{
 			if (label != NULL)
@@ -1576,6 +2032,7 @@ void CViewDataDump::RenderContextMenuItems()
 				currentSegment->AddCodeLabel(currentDataIndex, labelText);
 			}
 		}
+		ImGui::PopID();
 	}
 	
 	FUN_IntToBinaryStr(val, buf2);
@@ -1787,6 +2244,175 @@ void CViewDataDump::CancelEditingHexBox()
 		dataAddressEditBox->CancelEntering();
 		isEditingValueAddr = false;
 	}
+}
+
+u8 CViewDataDump::MapKeyToScreenCode(u32 keyCode, bool isShift)
+{
+	// Resolve shifted symbols (Shift+1 -> '!', etc.)
+	u32 resolvedKey = SYS_GetShiftedKey(keyCode, isShift, false, false, false);
+
+	// Bounds check — only printable ASCII
+	if (resolvedKey < ' ' || resolvedKey >= 128)
+		return 0xFF;
+
+	// Select mapping table based on active charset font
+	const u8 *table;
+	if (fontCharacters == fontDefaultCBM1 || fontCharacters == fontCBM1)
+	{
+		table = kAsciiToC64ScreenCodeUppercase;
+	}
+	else if (fontCharacters == fontDefaultCBM2 || fontCharacters == fontCBM2)
+	{
+		table = kAsciiToC64ScreenCodeLowercase;
+	}
+	else if (fontCharacters == fontAtari)
+	{
+		table = kAsciiToAtariScreenCode;
+	}
+	else
+	{
+		table = kAsciiPassthrough;
+	}
+
+	return table[resolvedKey];
+}
+
+char CViewDataDump::MapScreenCodeToAscii(u8 screenCode)
+{
+	// Select the same mapping table as MapKeyToScreenCode
+	const u8 *table;
+	if (fontCharacters == fontDefaultCBM1 || fontCharacters == fontCBM1)
+	{
+		table = kAsciiToC64ScreenCodeUppercase;
+	}
+	else if (fontCharacters == fontDefaultCBM2 || fontCharacters == fontCBM2)
+	{
+		table = kAsciiToC64ScreenCodeLowercase;
+	}
+	else if (fontCharacters == fontAtari)
+	{
+		table = kAsciiToAtariScreenCode;
+	}
+	else
+	{
+		table = kAsciiPassthrough;
+	}
+
+	// Reverse lookup: find the first ASCII char that maps to this screencode
+	// Prefer printable lowercase for letters when both upper and lower map to same code
+	for (int i = 0x60; i < 128; i++)
+	{
+		if (table[i] == screenCode)
+			return (char)i;
+	}
+	for (int i = 0x20; i < 0x60; i++)
+	{
+		if (table[i] == screenCode)
+			return (char)i;
+	}
+
+	// No mapping found — return '.' as placeholder
+	return '.';
+}
+
+void CViewDataDump::CopyTextToClipboard()
+{
+	LOGG("CViewDataDump::CopyTextToClipboard");
+
+	int fromAddr, toAddr;
+	if (GetSelectionRange(&fromAddr, &toAddr) && fromAddr != toAddr)
+	{
+		int addrOffset = dataAdapter->GetDataOffset();
+		int count = toAddr - fromAddr + 1;
+		char *buf = new char[count + 1];
+		int pos = 0;
+		for (int a = fromAddr; a <= toAddr; a++)
+		{
+			u8 val;
+			bool isAvailable;
+			dataAdapter->AdapterReadByte(a - addrOffset, &val, &isAvailable);
+			if (isAvailable)
+			{
+				buf[pos++] = MapScreenCodeToAscii(val);
+			}
+		}
+		buf[pos] = '\0';
+
+		CSlrString *str = new CSlrString(buf);
+		SYS_SetClipboardAsSlrString(str);
+		delete str;
+
+		char msgBuf[64];
+		sprintf(msgBuf, "Copied %d chars", pos);
+		viewC64->ShowMessageInfo(msgBuf);
+
+		delete[] buf;
+	}
+	else
+	{
+		// Single char at cursor
+		int addrCursor = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
+		addrCursor -= dataAdapter->GetDataOffset();
+
+		u8 val;
+		bool isAvailable;
+		dataAdapter->AdapterReadByte(addrCursor, &val, &isAvailable);
+		if (isAvailable)
+		{
+			char buf[2];
+			buf[0] = MapScreenCodeToAscii(val);
+			buf[1] = '\0';
+			CSlrString *str = new CSlrString(buf);
+			SYS_SetClipboardAsSlrString(str);
+			delete str;
+
+			char msgBuf[64];
+			sprintf(msgBuf, "Copied '%c'", buf[0]);
+			viewC64->ShowMessageInfo(msgBuf);
+		}
+	}
+}
+
+void CViewDataDump::PasteTextFromClipboard()
+{
+	LOGG("CViewDataDump::PasteTextFromClipboard");
+
+	int addrCursor;
+	int fromAddr, toAddr;
+	if (GetSelectionRange(&fromAddr, &toAddr))
+	{
+		addrCursor = fromAddr - dataAdapter->GetDataOffset();
+		ClearSelection();
+	}
+	else
+	{
+		addrCursor = GetAddrFromDataPosition(editCursorPositionX, editCursorPositionY);
+		addrCursor -= dataAdapter->GetDataOffset();
+	}
+
+	CSlrString *pasteStr = SYS_GetClipboardAsSlrString();
+	int addr = addrCursor;
+
+	for (int i = 0; i < pasteStr->GetLength(); i++)
+	{
+		u16 chr = pasteStr->GetChar(i);
+		if (chr < 128)
+		{
+			u8 screenCode = MapKeyToScreenCode(chr, false);
+			if (screenCode != 0xFF)
+			{
+				dataAdapter->AdapterWriteByte(addr, screenCode);
+				addr++;
+			}
+		}
+	}
+
+	if (addr != addrCursor)
+	{
+		ScrollToAddress(addr);
+	}
+
+	delete pasteStr;
 }
 
 void CViewDataDump::Serialize(CByteBuffer *byteBuffer)

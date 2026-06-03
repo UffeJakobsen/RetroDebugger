@@ -70,11 +70,15 @@ public:
 
 	void SelectSid(int sidNum);
 	
-	virtual void RenderStateSID(int sidNum, float posX, float posY, float posZ, CSlrFont *fontBytes, float fontSize);
+	virtual void RenderStateSID(float posX, float posY, float posZ, CSlrFont *fontBytes, float fontSize);
 	void PrintSidWaveform(uint8 wave, char *buf);
 	
 	void UpdateSidButtonsState();
 	void UpdateWaveformsPosition();
+
+	int cachedSidStereo;
+	int cachedSidStereoAddress;
+	int cachedSidTripleAddress;
 	
 	// editing registers
 	bool showRegistersOnly;

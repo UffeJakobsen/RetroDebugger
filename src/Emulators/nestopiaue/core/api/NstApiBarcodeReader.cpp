@@ -63,8 +63,9 @@ namespace Nes
 
 			if (Core::BarcodeReader* const barcodeReader = Query())
 			{
+				// Use deterministic seed for reproducible barcode generation (was std::time(NULL))
 				static uint extra = 0x1234;
-				std::srand( std::time(NULL) + extra++ );
+				std::srand( 0x42 + extra++ );
 
 				if (!barcodeReader->IsDigitsSupported( MIN_DIGITS ))
 				{

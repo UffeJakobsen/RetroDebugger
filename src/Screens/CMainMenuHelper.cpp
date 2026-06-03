@@ -9,6 +9,7 @@
 #include "CViewC64.h"
 #include "CColorsTheme.h"
 #include "CMainMenuHelper.h"
+#include "CDebugInterfaceC64U.h"
 #include "VID_Main.h"
 #include "CGuiMain.h"
 #include "CSlrString.h"
@@ -39,6 +40,7 @@
 #include "CDebugInterfaceNes.h"
 
 #include "C64SettingsStorage.h"
+#include "c64model.h"
 
 #include "CGuiMain.h"
 
@@ -53,11 +55,15 @@
 #define VIEWC64SETTINGS_SAVE_REU	8
 #define VIEWC64SETTINGS_OPEN_ATR	10
 #define VIEWC64SETTINGS_OPEN_ROM	11
+#define VIEWC64SETTINGS_OPEN_CUSTOM_STARTUP_SNAPSHOT	12
 
 CMainMenuHelper::CMainMenuHelper(float posX, float posY, float posZ, float sizeX, float sizeY)
 : CGuiView(posX, posY, posZ, sizeX, sizeY)
 {
 	this->name = "CViewMainMenu";
+	openDialogFunction = VIEWC64SETTINGS_OPEN_NONE;
+	openDialogFileRoutesToPlugins = false;
+	openDialogFileIsKeyboardShortcut = false;
 
 	font = viewC64->fontDefaultCBMShifted;
 	fontScale = 3;
@@ -151,6 +157,9 @@ CMainMenuHelper::CMainMenuHelper(float posX, float posY, float posZ, float sizeX
 	romsFileExtensions.push_back(new CSlrString("rom"));
 	romsFileExtensions.push_back(new CSlrString("bin"));
 
+	// C64 snapshots (for custom startup snapshot)
+	snapshotC64Extensions.push_back(new CSlrString("snap"));
+	snapshotC64Extensions.push_back(new CSlrString("vsf"));
 
 	/// colors
 	tr = viewC64->colorsTheme->colorTextR;
@@ -161,6 +170,7 @@ CMainMenuHelper::CMainMenuHelper(float posX, float posY, float posZ, float sizeX
 
 CMainMenuHelper::~CMainMenuHelper()
 {
+	ClearOpenFileExtensionsWithPlugins();
 }
 
 
@@ -242,24 +252,112 @@ void CMainMenuHelper::OpenDialogSaveReu()
 
 void CMainMenuHelper::OpenDialogOpenFile()
 {
+	OpenDialogOpenFile(false, false);
+}
+
+void CMainMenuHelper::ClearOpenFileExtensionsWithPlugins()
+{
+	for (std::list<CSlrString *>::iterator it = openFileExtensionsWithPlugins.begin(); it != openFileExtensionsWithPlugins.end(); it++)
+	{
+		delete *it;
+	}
+	openFileExtensionsWithPlugins.clear();
+}
+
+static bool CMainMenuHelperHasOpenFileExtension(std::list<CSlrString *> *extensions, CSlrString *extension)
+{
+	for (std::list<CSlrString *>::iterator it = extensions->begin(); it != extensions->end(); it++)
+	{
+		CSlrString *existingExtension = *it;
+		if (existingExtension != NULL && existingExtension->CompareWith(extension))
+			return true;
+	}
+	return false;
+}
+
+static void CMainMenuHelperAddOpenFileExtensionUnique(std::list<CSlrString *> *extensions, const char *extension)
+{
+	if (extension == NULL || extension[0] == 0) return;
+
+	CSlrString *slrExtension = new CSlrString(extension);
+	slrExtension->ConvertToLowerCase();
+	if (CMainMenuHelperHasOpenFileExtension(extensions, slrExtension))
+	{
+		delete slrExtension;
+		return;
+	}
+	extensions->push_back(slrExtension);
+}
+
+static void CMainMenuHelperAddOpenFileExtensionUnique(std::list<CSlrString *> *extensions, CSlrString *extension)
+{
+	if (extension == NULL) return;
+
+	CSlrString *slrExtension = new CSlrString(extension);
+	slrExtension->ConvertToLowerCase();
+	if (CMainMenuHelperHasOpenFileExtension(extensions, slrExtension))
+	{
+		delete slrExtension;
+		return;
+	}
+	extensions->push_back(slrExtension);
+}
+
+void CMainMenuHelper::OpenDialogOpenFile(bool includePluginExtensions, bool isKeyboardShortcut)
+{
 	LOGM("OpenDialogOpenFile");
 	openDialogFunction = VIEWC64SETTINGS_OPEN_FILE;
+	openDialogFileRoutesToPlugins = includePluginExtensions;
+	openDialogFileIsKeyboardShortcut = isKeyboardShortcut;
+	std::list<CSlrString *> *extensions = &openFileExtensions;
+	if (includePluginExtensions)
+	{
+		ClearOpenFileExtensionsWithPlugins();
+		for (std::list<CSlrString *>::iterator it = openFileExtensions.begin(); it != openFileExtensions.end(); it++)
+		{
+			CMainMenuHelperAddOpenFileExtensionUnique(&openFileExtensionsWithPlugins, *it);
+		}
+		std::list<std::string> pluginExtensions;
+		viewC64->AddOpenFileExtensionsFromPlugins(&pluginExtensions, isKeyboardShortcut);
+		for (std::list<std::string>::iterator it = pluginExtensions.begin(); it != pluginExtensions.end(); it++)
+		{
+			CMainMenuHelperAddOpenFileExtensionUnique(&openFileExtensionsWithPlugins, it->c_str());
+		}
+		extensions = &openFileExtensionsWithPlugins;
+	}
 	
 	CSlrString *defaultFolder = viewC64->recentlyOpenedFiles->GetCurrentOpenedFolder();
 	CSlrString *windowTitle = new CSlrString("Open file");
-	viewC64->ShowDialogOpenFile(this, &openFileExtensions, defaultFolder, windowTitle);
+	viewC64->ShowDialogOpenFile(this, extensions, defaultFolder, windowTitle);
 	delete defaultFolder;
 	delete windowTitle;	
+}
+
+bool CMainMenuHelper::TryOpenSelectedFileFromPlugins(CSlrString *path)
+{
+	return openDialogFunction == VIEWC64SETTINGS_OPEN_FILE
+		&& openDialogFileRoutesToPlugins
+		&& viewC64->OpenFileFromPlugins(path, openDialogFileIsKeyboardShortcut);
 }
 
 void CMainMenuHelper::OpenDialogStartJukeboxPlaylist()
 {
 	LOGM("OpenDialogStartJukeboxPlaylist");
 	openDialogFunction = VIEWC64SETTINGS_OPEN_JUKEBOX;
-	
+
 	CSlrString *windowTitle = new CSlrString("Start JukeBox playlist");
 	windowTitle->DebugPrint("windowTitle=");
 	viewC64->ShowDialogOpenFile(this, &jukeboxExtensions, c64SettingsDefaultD64Folder, windowTitle);
+	delete windowTitle;
+}
+
+void CMainMenuHelper::OpenDialogSelectCustomStartupSnapshot()
+{
+	LOGM("OpenDialogSelectCustomStartupSnapshot");
+	openDialogFunction = VIEWC64SETTINGS_OPEN_CUSTOM_STARTUP_SNAPSHOT;
+
+	CSlrString *windowTitle = new CSlrString("Select startup snapshot");
+	viewC64->ShowDialogOpenFile(this, &snapshotC64Extensions, c64SettingsDefaultSnapshotsFolder, windowTitle);
 	delete windowTitle;
 }
 
@@ -298,6 +396,54 @@ void CMainMenuHelper::SystemDialogFileOpenSelected(CSlrString *path)
 		viewC64->InitJukebox(path);
 		//C64DebuggerStoreSettings();
 	}
+	else if (openDialogFunction == VIEWC64SETTINGS_OPEN_CUSTOM_STARTUP_SNAPSHOT)
+	{
+		// Copy snapshot file to settings folder for persistent use
+		char *srcPath = path->GetStdASCII();
+
+		char destPath[4096];
+		sprintf(destPath, "%scustom_startup_snapshot.vsf", gCPathToSettings);
+
+		FILE *srcFile = fopen(srcPath, "rb");
+		if (srcFile)
+		{
+			fseek(srcFile, 0, SEEK_END);
+			long fileSize = ftell(srcFile);
+			fseek(srcFile, 0, SEEK_SET);
+			u8 *data = new u8[fileSize];
+			fread(data, 1, fileSize, srcFile);
+			fclose(srcFile);
+
+			FILE *dstFile = fopen(destPath, "wb");
+			if (dstFile)
+			{
+				fwrite(data, 1, fileSize, dstFile);
+				fclose(dstFile);
+
+				// Store the original path for display
+				if (c64SettingsPathToCustomStartupSnapshot != NULL)
+					delete c64SettingsPathToCustomStartupSnapshot;
+				c64SettingsPathToCustomStartupSnapshot = new CSlrString(path);
+
+				c64SettingsAutoJmpDoReset = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM;
+				C64DebuggerStoreSettings();
+
+				viewC64->ShowMessageInfo("Custom startup snapshot set");
+			}
+			else
+			{
+				LOGError("Failed to write custom startup snapshot to %s", destPath);
+				viewC64->ShowMessageError("Failed to save custom startup snapshot");
+			}
+			delete[] data;
+		}
+		else
+		{
+			LOGError("Failed to open snapshot file %s", srcPath);
+			viewC64->ShowMessageError("Failed to open snapshot file");
+		}
+		delete[] srcPath;
+	}
 
 	if (openDialogFunction == VIEWC64SETTINGS_OPEN_ATR)
 	{
@@ -307,12 +453,20 @@ void CMainMenuHelper::SystemDialogFileOpenSelected(CSlrString *path)
 	else
 	{
 		///
-		
-		LoadFile(path);
+		if (TryOpenSelectedFileFromPlugins(path))
+		{
+			// handled by plugin
+		}
+		else
+		{
+			LoadFile(path);
+		}
 		C64DebuggerStoreSettings();
 	}
 	
 	openDialogFunction = VIEWC64SETTINGS_OPEN_NONE;
+	openDialogFileRoutesToPlugins = false;
+	openDialogFileIsKeyboardShortcut = false;
 }
 
 void CMainMenuHelper::SystemDialogFileSaveSelected(CSlrString *path)
@@ -354,6 +508,13 @@ void CMainMenuHelper::LoadFile(CSlrString *path)
 	{
 		viewC64->StartEmulationThread(viewC64->debugInterfaceC64);
 		loaded = LoadPRG(path, true, true, true, false);
+		// Also send to C64U if running
+		if (viewC64->debugInterfaceC64U && viewC64->debugInterfaceC64U->isRunning)
+		{
+			char *asciiPath = path->GetStdASCII();
+			viewC64->debugInterfaceC64U->LoadExecutable(asciiPath);
+			delete [] asciiPath;
+		}
 	}
 	else if (ext->CompareWith("d64") ||
 			 ext->CompareWith("x64") ||
@@ -362,11 +523,25 @@ void CMainMenuHelper::LoadFile(CSlrString *path)
 	{
 		viewC64->StartEmulationThread(viewC64->debugInterfaceC64);
 		loaded = InsertD64(path, true, c64SettingsAutoJmpFromInsertedDiskFirstPrg, 0, true);
+		// Also send to C64U if running
+		if (viewC64->debugInterfaceC64U && viewC64->debugInterfaceC64U->isRunning)
+		{
+			char *asciiPath = path->GetStdASCII();
+			viewC64->debugInterfaceC64U->MountDisk(asciiPath, 0, false);
+			delete [] asciiPath;
+		}
 	}
 	else if (ext->CompareWith("crt"))
 	{
 		viewC64->StartEmulationThread(viewC64->debugInterfaceC64);
 		loaded = InsertCartridge(path, true);
+		// Also send to C64U if running
+		if (viewC64->debugInterfaceC64U && viewC64->debugInterfaceC64U->isRunning)
+		{
+			char *asciiPath = path->GetStdASCII();
+			((CDebugInterfaceC64U *)viewC64->debugInterfaceC64U)->ScheduleRunCrt(std::string(asciiPath));
+			delete [] asciiPath;
+		}
 	}
 	else if (ext->CompareWith("reu"))
 	{
@@ -1571,7 +1746,8 @@ bool CMainMenuHelper::LoadPRG(CByteBuffer *byteBuffer, bool autoStart, bool show
 	this->loadPrgForceFastReset = forceFastReset;
 	
 	viewC64->debugInterfaceC64->symbols->memory->ClearDebugMarkers();
-	viewC64->debugInterfaceC64->symbolsDrive1541->memory->ClearDebugMarkers();
+	if (viewC64->debugInterfaceC64->symbolsDrive1541)
+		viewC64->debugInterfaceC64->symbolsDrive1541->memory->ClearDebugMarkers();
 
 	if (!this->isRunning)
 	{
@@ -1592,16 +1768,21 @@ void CMainMenuHelper::ThreadRun(void *data)
 	if (loadPrgForceFastReset)
 	{
 		// force fast reset
-		viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
+		// Pause the CPU first to prevent race: machine_powerup()/mem_powerup()
+		// clears RAM from this thread while the CPU thread is still executing
+		// game code from that RAM. Without pause, CPU reads 0x00 (BRK) from
+		// cleared memory and auto-pauses before the pending reset is processed.
+		viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
 		viewC64->debugInterfaceC64->SetPatchKernalFastBoot(true);
-	
+
 		viewC64->debugInterfaceC64->ResetHard();
+		viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
 		SYS_Sleep(350);
-		
+
 		debugInterfaceVice->PrepareDriveForBasicRun();
 
 		viewC64->debugInterfaceC64->SetPatchKernalFastBoot(c64SettingsFastBootKernalPatch);
-		
+
 	}
 	else
 	{
@@ -1611,9 +1792,13 @@ void CMainMenuHelper::ThreadRun(void *data)
 			if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_SOFT
 				|| c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_HARD)
 			{
-				viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
+				// Pause the CPU first to prevent race: machine_powerup()/mem_powerup()
+				// clears RAM from this thread while the CPU thread is still executing
+				// game code from that RAM. Without pause, CPU reads 0x00 (BRK) from
+				// cleared memory and auto-pauses before the pending reset is processed.
+				viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
 				viewC64->debugInterfaceC64->SetPatchKernalFastBoot(true);
-				
+
 				if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_SOFT)
 				{
 					viewC64->debugInterfaceC64->ResetSoft();
@@ -1622,60 +1807,75 @@ void CMainMenuHelper::ThreadRun(void *data)
 				{
 					viewC64->debugInterfaceC64->ResetHard();
 				}
-				
+
+				viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
 				SYS_Sleep(c64SettingsAutoJmpWaitAfterReset);
-				
+
 				viewC64->viewDrive1541Browser->UpdateDriveDiskID();
 				viewC64->debugInterfaceC64->SetPatchKernalFastBoot(c64SettingsFastBootKernalPatch);
 			}
-			else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC)
+			else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL)
 			{
-				LOGD("c64SettingsAutoJmpDoReset is MACHINE_LOAD_SNAPSHOT_BASIC");
-				
-				if (viewC64->debugInterfaceC64->GetC64ModelType() != 0)
+				LoadDefaultSnapshotAndRun("/template/vice310_c64_pal_snap", C64MODEL_C64_PAL);
+			}
+			else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL)
+			{
+				LoadDefaultSnapshotAndRun("/template/vice310_c64c_pal_snap", C64MODEL_C64C_PAL);
+			}
+			else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC)
+			{
+				LoadDefaultSnapshotAndRun("/template/vice310_c64_ntsc_snap", C64MODEL_C64_NTSC);
+			}
+			else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC)
+			{
+				LoadDefaultSnapshotAndRun("/template/vice310_c64c_ntsc_snap", C64MODEL_C64C_NTSC);
+			}
+			else if (c64SettingsAutoJmpDoReset == MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM)
+			{
+				LOGD("c64SettingsAutoJmpDoReset is MACHINE_LOAD_SNAPSHOT_CUSTOM");
+
+				// Load custom snapshot from settings folder
+				char customPath[4096];
+				sprintf(customPath, "%scustom_startup_snapshot.vsf", gCPathToSettings);
+
+				FILE *f = fopen(customPath, "rb");
+				if (f)
 				{
-					viewC64->debugInterfaceC64->ForceRunAndUnJamCpu();
-					int modelId = 0;
-					C64DebuggerSetSetting("C64Model", &modelId);
-					SYS_Sleep(200);
+					fseek(f, 0, SEEK_END);
+					long fileSize = ftell(f);
+					fseek(f, 0, SEEK_SET);
+					u8 *snapshotData = new u8[fileSize];
+					fread(snapshotData, 1, fileSize, f);
+					fclose(f);
+
+					viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
+					guiMain->LockMutex();
+
+					CByteBuffer *byteBuffer = new CByteBuffer(snapshotData, fileSize);
+					viewC64->debugInterfaceC64->LoadFullSnapshot(byteBuffer);
+					delete byteBuffer;
+
+					viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
+					viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
+
+					SetupC64Defaults();
+
+					if (c64SettingsPathToD64)
+					{
+						debugInterfaceVice->InsertD64(c64SettingsPathToD64);
+					}
+
+					viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
+					viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
+					debugInterfaceVice->PrepareDriveForBasicRun();
+
+					guiMain->UnlockMutex();
 				}
-				
-				viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
-
-				guiMain->LockMutex();
-				
-				CSlrFileZlib *fileZlib = RES_GetFileZlib("/template/reset_basic_snapshot", DEPLOY_FILE_TYPE_DATA);
-				u32 fileSize = fileZlib->GetFileSize();
-				u8 *snapshotData = new u8[fileSize];
-				fileZlib->Read(snapshotData, fileSize);
-				CByteBuffer *byteBuffer = new CByteBuffer(snapshotData, fileSize);
-				viewC64->debugInterfaceC64->LoadFullSnapshot(byteBuffer);
-				delete byteBuffer;
-				delete fileZlib;
-				
-				// be sure that snapshot is loaded, run one instruction
-				viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
-				
-				// and then switch to RUNNING
-				viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
-				
-				SetupC64Defaults();
-
-				// and insert disk
-				if (c64SettingsPathToD64)
+				else
 				{
-					debugInterfaceVice->InsertD64(c64SettingsPathToD64);
+					LOGError("Custom startup snapshot not found at %s, falling back to soft reset", customPath);
+					viewC64->debugInterfaceC64->ResetSoft();
 				}
-				// inserting is synched, does not need sleep here
-//				SYS_Sleep(50);
-
-				viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
-				viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
-
-				// prepare drive RAM, set vectors etc
-				debugInterfaceVice->PrepareDriveForBasicRun();
-				
-				guiMain->UnlockMutex();
 			}
 		}
 	}
@@ -1707,6 +1907,47 @@ void CMainMenuHelper::SetupC64Defaults()
 	{
 		viewC64->debugInterfaceC64->EmulatedMouseEnable(c64SettingsEmulatedMouseC64Enabled);
 	}
+}
+
+void CMainMenuHelper::LoadDefaultSnapshotAndRun(const char *snapshotResourcePath, int targetModelId)
+{
+	LOGD("CMainMenuHelper::LoadDefaultSnapshotAndRun: resource=%s targetModel=%d", snapshotResourcePath, targetModelId);
+
+	if (viewC64->debugInterfaceC64->GetC64ModelType() != targetModelId)
+	{
+		viewC64->debugInterfaceC64->ForceRunAndUnJamCpu();
+		int modelId = targetModelId;
+		C64DebuggerSetSetting("C64Model", &modelId);
+		SYS_Sleep(200);
+	}
+
+	viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
+	guiMain->LockMutex();
+
+	CSlrFileZlib *fileZlib = RES_GetFileZlib(snapshotResourcePath, DEPLOY_FILE_TYPE_DATA);
+	u32 fileSize = fileZlib->GetFileSize();
+	u8 *snapshotData = new u8[fileSize];
+	fileZlib->Read(snapshotData, fileSize);
+	CByteBuffer *byteBuffer = new CByteBuffer(snapshotData, fileSize);
+	viewC64->debugInterfaceC64->LoadFullSnapshot(byteBuffer);
+	delete byteBuffer;
+	delete fileZlib;
+
+	viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
+	viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
+
+	SetupC64Defaults();
+
+	if (c64SettingsPathToD64)
+	{
+		debugInterfaceVice->InsertD64(c64SettingsPathToD64);
+	}
+
+	viewC64->debugInterfaceC64->PauseEmulationBlockedWait();
+	viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
+	debugInterfaceVice->PrepareDriveForBasicRun();
+
+	guiMain->UnlockMutex();
 }
 
 void CMainMenuHelper::SetBasicVectors(int endAddr)
@@ -1773,7 +2014,8 @@ bool CMainMenuHelper::LoadPRGNotThreaded(CByteBuffer *byteBuffer, bool autoStart
 //				viewC64->ShowMessage("LoadPRGNotThreaded");
 				
 				viewC64->debugInterfaceC64->symbols->memory->ClearReadWriteDebugMarkers();
-				viewC64->debugInterfaceC64->symbolsDrive1541->memory->ClearReadWriteDebugMarkers();
+				if (viewC64->debugInterfaceC64->symbolsDrive1541)
+					viewC64->debugInterfaceC64->symbolsDrive1541->memory->ClearReadWriteDebugMarkers();
 				
 				
 				viewC64->debugInterfaceC64->MakeJMPToBasicRunC64();
@@ -2007,6 +2249,8 @@ void CMainMenuHelper::ReloadAndRestartPRG()
 
 void CMainMenuHelper::SystemDialogFileOpenCancelled()
 {
+	openDialogFileRoutesToPlugins = false;
+	openDialogFileIsKeyboardShortcut = false;
 }
 
 void CMainMenuHelper::MessageBoxCallback()
@@ -2340,4 +2584,3 @@ void CViewC64MenuItemFloat::Execute()
 {
 	SwitchToNext();
 }
-

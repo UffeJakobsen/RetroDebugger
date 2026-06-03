@@ -37,23 +37,23 @@
 
 #include "uimenu.h"
 
-extern int joy_arch_init(void);
-extern void joystick_close(void);
-extern int joystick_arch_init_resources(void);
-extern void joystick_arch_resources_shutdown(void);
-extern int joystick_init_cmdline_options(void);
+int joy_arch_init(void);
+void joystick_close(void);
+int joystick_arch_init_resources(void);
+void joystick_arch_resources_shutdown(void);
+int joystick_init_cmdline_options(void);
 
 #ifdef HAVE_SDL_NUMJOYSTICKS
-extern void joy_arch_init_default_mapping(int joynum);
-extern int joy_arch_mapping_load(const char *filename);
-extern int joy_arch_mapping_dump(const char *filename);
+void joy_arch_init_default_mapping(int joynum);
+int joy_arch_mapping_load(const char *filename);
+int joy_arch_mapping_dump(const char *filename);
 
 //extern ui_menu_action_t sdljoy_axis_event(Uint8 joynum, Uint8 axis, Sint16 value);
 //extern ui_menu_action_t sdljoy_button_event(Uint8 joynum, Uint8 button, Uint8 value);
 //extern ui_menu_action_t sdljoy_hat_event(Uint8 joynum, Uint8 hat, Uint8 value);
 //extern ui_menu_action_t sdljoy_autorepeat(void);
-//extern BYTE sdljoy_check_axis_movement(SDL_Event e);
-//extern BYTE sdljoy_check_hat_movement(SDL_Event e);
+//extern uint8_t sdljoy_check_axis_movement(SDL_Event e);
+//extern uint8_t sdljoy_check_hat_movement(SDL_Event e);
 //extern void sdljoy_set_joystick(SDL_Event e, int port, int bits);
 //extern void sdljoy_set_hotkey(SDL_Event e, ui_menu_entry_t *value);
 //extern void sdljoy_set_keypress(SDL_Event e, int row, int col);
@@ -62,7 +62,7 @@ extern int joy_arch_mapping_dump(const char *filename);
 
 #endif
 
-extern void sdljoy_swap_ports(void);
+void sdljoy_swap_ports(void);
 
 #define JOYDEV_NONE     0
 #define JOYDEV_NUMPAD   1

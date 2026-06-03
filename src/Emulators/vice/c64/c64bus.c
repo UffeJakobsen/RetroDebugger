@@ -26,23 +26,24 @@
 
 #include "vice.h"
 
+#include "drive.h"
 #include "iecbus.h"
 #include "machine-bus.h"
 #include "parallel.h"
 #include "serial.h"
 #include "vicetypes.h"
 
-int machine_bus_lib_directory(unsigned int unit, const char *pattern, BYTE **buf)
+int machine_bus_lib_directory(unsigned int unit, const char *pattern, uint8_t **buf)
 {
     return serial_iec_lib_directory(unit, pattern, buf);
 }
 
-int machine_bus_lib_read_sector(unsigned int unit, unsigned int track, unsigned int sector, BYTE *buf)
+int machine_bus_lib_read_sector(unsigned int unit, unsigned int track, unsigned int sector, uint8_t *buf)
 {
     return serial_iec_lib_read_sector(unit, track, sector, buf);
 }
 
-int machine_bus_lib_write_sector(unsigned int unit, unsigned int track, unsigned int sector, BYTE *buf)
+int machine_bus_lib_write_sector(unsigned int unit, unsigned int track, unsigned int sector, uint8_t *buf)
 {
     return serial_iec_lib_write_sector(unit, track, sector, buf);
 }
@@ -52,10 +53,10 @@ unsigned int machine_bus_device_type_get(unsigned int unit)
     return serial_device_type_get(unit);
 }
 
-void machine_bus_status_truedrive_set(unsigned int enable)
+void machine_bus_status_truedrive_set(unsigned int unit, unsigned int enable)
 {
-    iecbus_status_set(IECBUS_STATUS_TRUEDRIVE, 0, enable);
-    serial_trap_truedrive_set(enable);
+    iecbus_status_set(IECBUS_STATUS_TRUEDRIVE, unit, enable);
+    serial_trap_truedrive_set(unit, enable);
 }
 
 void machine_bus_status_drivetype_set(unsigned int unit, unsigned int enable)
@@ -63,10 +64,16 @@ void machine_bus_status_drivetype_set(unsigned int unit, unsigned int enable)
     iecbus_status_set(IECBUS_STATUS_DRIVETYPE, unit, enable);
 }
 
+void machine_bus_status_trapdevices_set(unsigned int unit, unsigned int enable)
+{
+    iecbus_status_set(IECBUS_STATUS_TRAPDEVICE, unit, enable);
+}
+
 void machine_bus_status_virtualdevices_set(unsigned int enable)
 {
-    iecbus_status_set(IECBUS_STATUS_VIRTUALDEVICES, 0, enable);
-    parallel_bus_enable(enable);
+    iecbus_status_set(IECBUS_STATUS_TRAPDEVICE, 0, enable);
+    /* NOTE: In VICE 3.10, parallel_bus_enable is now per-unit and called from
+       the IEEE device resource setter. The old global enable call was removed. */
 }
 
 void machine_bus_eof_callback_set(void (*func)(void))

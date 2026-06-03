@@ -45,22 +45,23 @@ typedef struct drivecia1571_context_s {
 } drivecia1571_context_t;
 
 
-void cia1571_store(drive_context_t *ctxptr, WORD addr, BYTE data)
+void cia1571_store(drive_context_t *ctxptr, uint16_t addr, uint8_t data)
 {
+    ctxptr->cpu->cpu_last_data = data;
     ciacore_store(ctxptr->cia1571, addr, data);
 }
 
-BYTE cia1571_read(drive_context_t *ctxptr, WORD addr)
+uint8_t cia1571_read(drive_context_t *ctxptr, uint16_t addr)
 {
-    return ciacore_read(ctxptr->cia1571, addr);
+    return ctxptr->cpu->cpu_last_data = ciacore_read(ctxptr->cia1571, addr);
 }
 
-BYTE cia1571_peek(drive_context_t *ctxptr, WORD addr)
+uint8_t cia1571_peek(drive_context_t *ctxptr, uint16_t addr)
 {
     return ciacore_peek(ctxptr->cia1571, addr);
 }
 
-int cia1571_dump(drive_context_t *ctxptr, WORD addr)
+int cia1571_dump(drive_context_t *ctxptr, uint16_t addr)
 {
     ciacore_dump(ctxptr->cia1571);
     return 0;
@@ -105,11 +106,11 @@ static void pulse_ciapc(cia_context_t *cia_context, CLOCK rclk)
     }
 }
 
-static void undump_ciapa(cia_context_t *cia_context, CLOCK rclk, BYTE byte)
+static void undump_ciapa(cia_context_t *cia_context, CLOCK rclk, uint8_t byte)
 {
 }
 
-static void undump_ciapb(cia_context_t *cia_context, CLOCK rclk, BYTE byte)
+static void undump_ciapb(cia_context_t *cia_context, CLOCK rclk, uint8_t byte)
 {
     drivecia1571_context_t *ciap;
 
@@ -120,11 +121,11 @@ static void undump_ciapb(cia_context_t *cia_context, CLOCK rclk, BYTE byte)
     }
 }
 
-static void store_ciapa(cia_context_t *cia_context, CLOCK rclk, BYTE byte)
+static void store_ciapa(cia_context_t *cia_context, CLOCK rclk, uint8_t byte)
 {
 }
 
-static void store_ciapb(cia_context_t *cia_context, CLOCK rclk, BYTE byte)
+static void store_ciapb(cia_context_t *cia_context, CLOCK rclk, uint8_t byte)
 {
     drivecia1571_context_t *ciap;
 
@@ -135,16 +136,16 @@ static void store_ciapb(cia_context_t *cia_context, CLOCK rclk, BYTE byte)
     }
 }
 
-static BYTE read_ciapa(cia_context_t *cia_context)
+static uint8_t read_ciapa(cia_context_t *cia_context)
 {
-    return (BYTE)((0xff & ~(cia_context->c_cia[CIA_DDRA]))
+    return (uint8_t)((0xff & ~(cia_context->c_cia[CIA_DDRA]))
             | (cia_context->c_cia[CIA_PRA] & cia_context->c_cia[CIA_DDRA]));
 }
 
-static BYTE read_ciapb(cia_context_t *cia_context)
+static uint8_t read_ciapb(cia_context_t *cia_context)
 {
     drivecia1571_context_t *ciap;
-    BYTE byte = 0xff;
+    uint8_t byte = 0xff;
 
     ciap = (drivecia1571_context_t *)(cia_context->prv);
 
@@ -152,7 +153,7 @@ static BYTE read_ciapb(cia_context_t *cia_context)
         byte = parallel_cable_drive_read(ciap->drive->parallel_cable, 1);
     }
 
-    return (BYTE)((byte & ~(cia_context->c_cia[CIA_DDRB]))
+    return (uint8_t)((byte & ~(cia_context->c_cia[CIA_DDRB]))
             | (cia_context->c_cia[CIA_PRB] & cia_context->c_cia[CIA_DDRB]));
 }
 
@@ -164,19 +165,19 @@ static void read_sdr(cia_context_t *cia_context)
 {
 }
 
-static void store_sdr(cia_context_t *cia_context, BYTE byte)
+static void store_sdr(cia_context_t *cia_context, uint8_t byte)
 {
     drivecia1571_context_t *cia1571p;
 
     cia1571p = (drivecia1571_context_t *)(cia_context->prv);
 
-    iec_fast_drive_write((BYTE)byte, cia1571p->number);
+    iec_fast_drive_write((uint8_t)byte, cia1571p->number);
 }
 
 void cia1571_init(drive_context_t *ctxptr)
 {
     ciacore_init(ctxptr->cia1571, ctxptr->cpu->alarm_context,
-                 ctxptr->cpu->int_status, ctxptr->cpu->clk_guard);
+                 ctxptr->cpu->int_status);
 }
 
 void cia1571_setup_context(drive_context_t *ctxptr)

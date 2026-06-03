@@ -1,5 +1,6 @@
 #include "CDebugBreakpointEventCallback.h"
 
+// Breakpoint is hit (evaluate breakpoint hit)
 bool CDebugBreakpointEventCallback::DebugBreakpointEvaluateCallback(CDebugBreakpoint *breakpoint)
 {
 	//	Note, this return allows plugins to set breakpoints that will not cause code to stop.

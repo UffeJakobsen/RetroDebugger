@@ -32,6 +32,6 @@
 #define VICE_PATCHROM_H
 
 /* this function takes the constants defined in c64-resources.h */
-extern int patch_rom_idx(int idx);
+int patch_rom_idx(int idx);
 
 #endif

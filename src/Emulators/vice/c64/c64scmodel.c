@@ -30,6 +30,7 @@
 
 #include <string.h>
 
+#include "c64.h"
 #include "c64-resources.h"
 #include "c64iec.h"
 #include "c64keyboard.h"
@@ -102,6 +103,7 @@ static int is_new_cia(int model)
 struct model_s {
     int vicii;      /* VIC-II model */
     int video;      /* machine video timing */
+    int ciatick;    /* CIA clock source: CIATICK_NET (power grid) or CIATICK_60HZ (fixed 60Hz) */
     int cia;        /* old or new */
     int glue;       /* discrete or ASIC */
     int sid;        /* old or new */
@@ -111,6 +113,7 @@ struct model_s {
     int iec;
     int userport;
     int keyboard;
+    int cia2;       /* NO_CIA2 or HAS_CIA2 */
     char *kernalname;
     char *chargenname;
     int kernalrev;
@@ -119,89 +122,89 @@ struct model_s {
 static struct model_s c64models[] = {
 
     /* C64 PAL */
-    { VICII_MODEL_6569, MACHINE_SYNC_PAL,
+    { VICII_MODEL_6569, MACHINE_SYNC_PAL, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV3 },
 
     /* C64C PAL */
-    { VICII_MODEL_8565, MACHINE_SYNC_PAL,
+    { VICII_MODEL_8565, MACHINE_SYNC_PAL, CIATICK_NET,
       CIA_MODEL_DEFAULT_NEW, GLUE_CUSTOM_IC, NEW_SID, BOARD_C64,
-      IEC_HARD_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_HARD_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV3 },
 
     /* C64 OLD PAL */
-    { VICII_MODEL_6569R1, MACHINE_SYNC_PAL,
+    { VICII_MODEL_6569R1, MACHINE_SYNC_PAL, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV2 },
 
     /* C64 NTSC */
-    { VICII_MODEL_6567, MACHINE_SYNC_NTSC,
+    { VICII_MODEL_6567, MACHINE_SYNC_NTSC, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV3 },
 
     /* C64C NTSC */
-    { VICII_MODEL_8562, MACHINE_SYNC_NTSC,
+    { VICII_MODEL_8562, MACHINE_SYNC_NTSC, CIATICK_NET,
       CIA_MODEL_DEFAULT_NEW, GLUE_CUSTOM_IC, NEW_SID, BOARD_C64,
-      IEC_HARD_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_HARD_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV3 },
 
     /* C64 OLD NTSC */
-    { VICII_MODEL_6567R56A, MACHINE_SYNC_NTSCOLD,
+    { VICII_MODEL_6567R56A, MACHINE_SYNC_NTSCOLD, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV1 },
 
     /* C64 PAL-N */
-    { VICII_MODEL_6572, MACHINE_SYNC_PALN,
+    { VICII_MODEL_6572, MACHINE_SYNC_PALN, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "kernal", "chargen", C64_KERNAL_REV3 },
 
     /* SX64 PAL, FIXME: guessed */
-    { VICII_MODEL_6569, MACHINE_SYNC_PAL,
-      CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, NO_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+    { VICII_MODEL_6569, MACHINE_SYNC_PAL, CIATICK_60HZ,
+      CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_SX64,
+      IEC_SOFT_RESET, NO_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "sxkernal", "chargen", C64_KERNAL_SX64 },
 
     /* SX64 NTSC, FIXME: guessed */
-    { VICII_MODEL_6567, MACHINE_SYNC_NTSC,
-      CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, NO_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+    { VICII_MODEL_6567, MACHINE_SYNC_NTSC, CIATICK_60HZ,
+      CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_SX64,
+      IEC_SOFT_RESET, NO_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "sxkernal", "chargen", C64_KERNAL_SX64 },
 
     /* C64 Japanese, FIXME: guessed */
-    { VICII_MODEL_6567, MACHINE_SYNC_NTSC,
+    { VICII_MODEL_6567, MACHINE_SYNC_NTSC, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "jpkernal", "jpchrgen", C64_KERNAL_JAP },
 
     /* C64 GS, FIXME: guessed */
-    { VICII_MODEL_8565, MACHINE_SYNC_PAL,
+    { VICII_MODEL_8565, MACHINE_SYNC_PAL, CIATICK_NET,
       CIA_MODEL_DEFAULT_NEW, GLUE_CUSTOM_IC, NEW_SID, BOARD_C64,
-      IEC_HARD_RESET, NO_DATASETTE, NO_IEC, NO_USERPORT, NO_KEYBOARD,
+      IEC_HARD_RESET, NO_DATASETTE, NO_IEC, NO_USERPORT, NO_KEYBOARD, HAS_CIA2,
       "gskernal", "chargen", C64_KERNAL_GS64 },
 
     /* PET64 PAL, FIXME: guessed */
-    { VICII_MODEL_6569, MACHINE_SYNC_PAL,
+    { VICII_MODEL_6569, MACHINE_SYNC_PAL, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "edkernal", "chargen", C64_KERNAL_4064 },
 
     /* PET64 NTSC, FIXME: guessed */
-    { VICII_MODEL_6567, MACHINE_SYNC_NTSC,
+    { VICII_MODEL_6567, MACHINE_SYNC_NTSC, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_C64,
-      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD,
+      IEC_SOFT_RESET, HAS_DATASETTE, HAS_IEC, HAS_USERPORT, HAS_KEYBOARD, HAS_CIA2,
       "edkernal", "chargen", C64_KERNAL_4064 },
 
     /* ultimax, FIXME: guessed */
-    /* FIXME: the MAX uses a VICII 6566, currenly unemulated, NTSC-M only */
-    { VICII_MODEL_6567, MACHINE_SYNC_NTSC,
+    /* FIXME: the MAX uses a VICII 6566, currently unemulated, NTSC-M only */
+    { VICII_MODEL_6567, MACHINE_SYNC_NTSC, CIATICK_NET,
       CIA_MODEL_DEFAULT_OLD, GLUE_DISCRETE, OLD_SID, BOARD_MAX,
-      IEC_SOFT_RESET, HAS_DATASETTE, NO_IEC, NO_USERPORT, HAS_KEYBOARD,
-      "kernal", "chargen", C64_KERNAL_MAX },
+      IEC_SOFT_RESET, HAS_DATASETTE, NO_IEC, NO_USERPORT, HAS_KEYBOARD, NO_CIA2,
+      "kernal", "chargen", C64_KERNAL_NONE },
 };
 
 /* ------------------------------------------------------------------------- */
@@ -266,7 +269,7 @@ int c64model_get(void)
         return -1;
     }
 
-	LOGD("vicii_resources.model=%d vicii_model=%d", (BYTE)vicii_resources.model, vicii_model);
+	LOGD("vicii_resources.model=%d vicii_model=%d", (uint8_t)vicii_resources.model, vicii_model);
 	
 
     modelType = c64model_get_temp(vicii_model, sid_model, glue_logic,
@@ -377,4 +380,5 @@ void c64model_set(int model)
     c64keyboard_enable(c64models[model].keyboard);
     c64iec_enable(c64models[model].iec);
     tapeport_enable(c64models[model].datasette);
+    c64_cia2_enable(c64models[model].cia2);
 }

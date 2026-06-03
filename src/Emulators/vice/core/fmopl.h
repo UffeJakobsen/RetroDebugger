@@ -112,14 +112,14 @@ typedef struct fm_opl_f {
  * 'clock' is the chip clock in Hz
  * 'rate' is sampling rate
  */
-extern FM_OPL *ym3812_init(UINT32 clock, UINT32 rate);
+FM_OPL *ym3812_init(UINT32 clock, UINT32 rate);
 
-extern void ym3812_shutdown(FM_OPL *chip);
-extern void ym3812_reset_chip(FM_OPL *chip);
-extern int ym3812_write(FM_OPL *chip, int a, int v);
-extern unsigned char ym3812_read(FM_OPL *chip, int a);
-extern unsigned char ym3812_peek(FM_OPL *chip, int a);
-extern int ym3812_timer_over(FM_OPL *chip, int c);
+void ym3812_shutdown(FM_OPL *chip);
+void ym3812_reset_chip(FM_OPL *chip);
+int ym3812_write(FM_OPL *chip, int a, int v);
+unsigned char ym3812_read(FM_OPL *chip, int a);
+unsigned char ym3812_peek(FM_OPL *chip, int a);
+int ym3812_timer_over(FM_OPL *chip, int c);
 
 /*
  * Generate samples for one of the YM3812's
@@ -128,7 +128,7 @@ extern int ym3812_timer_over(FM_OPL *chip, int c);
  * '*buffer' is the output buffer pointer
  * 'length' is the number of samples that should be generated
  */
-extern void ym3812_update_one(FM_OPL *chip, OPLSAMPLE *buffer, int length);
+void ym3812_update_one(FM_OPL *chip, OPLSAMPLE *buffer, int length);
 
 /*
  * Initialize YM3526 emulator.
@@ -137,18 +137,18 @@ extern void ym3812_update_one(FM_OPL *chip, OPLSAMPLE *buffer, int length);
  * 'clock' is the chip clock in Hz
  * 'rate' is sampling rate
  */
-extern FM_OPL *ym3526_init(UINT32 clock, UINT32 rate);
+FM_OPL *ym3526_init(UINT32 clock, UINT32 rate);
 
-extern void ym3526_shutdown(FM_OPL *chip);
-extern void ym3526_reset_chip(FM_OPL *chip);
-extern int ym3526_write(FM_OPL *chip, int a, int v);
-extern unsigned char ym3526_read(FM_OPL *chip, int a);
-extern unsigned char ym3526_peek(FM_OPL *chip, int a);
-extern int ym3526_timer_over(FM_OPL *chip, int c);
+void ym3526_shutdown(FM_OPL *chip);
+void ym3526_reset_chip(FM_OPL *chip);
+int ym3526_write(FM_OPL *chip, int a, int v);
+unsigned char ym3526_read(FM_OPL *chip, int a);
+unsigned char ym3526_peek(FM_OPL *chip, int a);
+int ym3526_timer_over(FM_OPL *chip, int c);
 
 struct snapshot_s;
-extern int ym3526_snapshot_read_module(struct snapshot_s *s);
-extern int ym3526_snapshot_write_module(struct snapshot_s *s);
+int ym3526_snapshot_read_module(struct snapshot_s *s);
+int ym3526_snapshot_write_module(struct snapshot_s *s);
 
 /*
  * Generate samples for one of the YM3526's
@@ -157,10 +157,10 @@ extern int ym3526_snapshot_write_module(struct snapshot_s *s);
  * '*buffer' is the output buffer pointer
  * 'length' is the number of samples that should be generated
  */
-extern void ym3526_update_one(FM_OPL *chip, OPLSAMPLE *buffer, int length);
+void ym3526_update_one(FM_OPL *chip, OPLSAMPLE *buffer, int length);
 
 
-extern int connect1_is_output0(int *connect);
-extern void set_connect1(FM_OPL *chip, int x, int y, int output0);
+int connect1_is_output0(int *connect);
+void set_connect1(FM_OPL *chip, int x, int y, int output0);
 
 #endif /* VICE_FMOPL_H */

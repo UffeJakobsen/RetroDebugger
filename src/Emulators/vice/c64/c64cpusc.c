@@ -29,6 +29,7 @@
 #include "vice.h"
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
 
@@ -38,6 +39,8 @@
 
 #include "c64.h"
 #include "cia.h"
+#include "log.h"
+#include "resources.h"
 #include "ViceWrapper.h"
 #include "DebuggerDefs.h"
 
@@ -86,7 +89,7 @@ int c64d_c64_instruction_cycle = 0;
 
 #if !defined WORDS_BIGENDIAN && defined ALLOW_UNALIGNED_ACCESS
 
-#define opcode_t DWORD
+#define opcode_t uint32_t
 
 #define p0 (opcode & 0xff)
 #define p1 ((opcode >> 8) & 0xff)
@@ -98,10 +101,10 @@ int c64d_c64_instruction_cycle = 0;
 
 #define opcode_t         \
     struct {             \
-        BYTE ins;        \
+        uint8_t ins;     \
         union {          \
-            BYTE op8[2]; \
-            WORD op16;   \
+            uint8_t op8[2]; \
+            uint16_t op16;  \
         } op;            \
     }
 
@@ -136,7 +139,7 @@ int c64d_c64_instruction_cycle = 0;
 
 /* HACK: memmap updates for the reg_pc < bank_limit case */
 #ifdef FEATURE_CPUMEMHISTORY
-#define MEMMAP_UPDATE(addr) memmap_mem_update(addr, 0)
+#define MEMMAP_UPDATE(addr) memmap_mem_update(addr, 0, 0)
 #else
 #define MEMMAP_UPDATE(addr)
 #endif
@@ -147,7 +150,7 @@ int c64d_c64_instruction_cycle = 0;
     do {                                                       \
         if (((int)reg_pc) < bank_limit) {                      \
             check_ba();                                        \
-            o = (*((DWORD *)(bank_base + reg_pc)) & 0xffffff); \
+            o = (*((uint32_t *)(bank_base + reg_pc)) & 0xffffff); \
             MEMMAP_UPDATE(reg_pc);                             \
             SET_LAST_OPCODE(p0);                               \
             CLK_INC();                                         \
@@ -256,7 +259,6 @@ static void check_and_run_alternate_cpu(void)
 #include "c64pla.h"
 #endif
 
-#include "clkguard.h"
 #include "debug.h"
 #include "interrupt.h"
 #include "machine.h"
@@ -286,9 +288,13 @@ static void check_and_run_alternate_cpu(void)
  */
 
 /* ------------------------------------------------------------------------- */
-#ifdef VICE_DEBUG
+#if defined (DEBUG) || defined (FEATURE_CPUMEMHISTORY)
 CLOCK debug_clk;
 #endif
+
+CLOCK stolen_cycles;
+
+static int reu_dma_triggered = 0;
 
 #define NEED_REG_PC
 
@@ -325,8 +331,8 @@ inline static void interrupt_delay(void)
 static void maincpu_steal_cycles(void)
 {
 	interrupt_cpu_status_t *cs = maincpu_int_status;
-	BYTE opcode;
-	
+	uint8_t opcode;
+
 	if (maincpu_ba_low_flags & MAINCPU_BA_LOW_VICII) {
 		vicii_steal_cycles();
 		maincpu_ba_low_flags &= ~MAINCPU_BA_LOW_VICII;
@@ -374,7 +380,13 @@ static void maincpu_steal_cycles(void)
 			/* this is a hacky way of signaling ANE() that
 			 cycles were stolen after the first fetch */
 			/* (fall through) */
-			
+
+			/* LXA */
+		case 0xab:
+			/* this is a hacky way of signaling LXA() that
+			 cycles were stolen after the first fetch */
+			/* (fall through) */
+
 			/* CLI */
 		case 0x58:
 			/* this is a hacky way of signaling CLI() that it
@@ -401,15 +413,16 @@ static void maincpu_steal_cycles(void)
 inline static void check_ba(void)
 {
 	if (maincpu_ba_low_flags) {
-#ifdef VICE_DEBUG
 		CLOCK old_maincpu_clk = maincpu_clk;
-#endif
+
 		maincpu_steal_cycles();
-#ifdef VICE_DEBUG
+#if defined (DEBUG) || defined (FEATURE_CPUMEMHISTORY)
 		if (debug_clk == old_maincpu_clk) {
 			debug_clk = maincpu_clk;
 		}
 #endif
+
+		stolen_cycles += maincpu_clk - old_maincpu_clk;
 	}
 }
 
@@ -417,10 +430,11 @@ inline static void check_ba(void)
 
 /* FIXME do proper ROM/RAM/IO tests */
 
-inline static void memmap_mem_update(unsigned int addr, int write)
+/* this is called per memory access, so it should only do whats really needed */
+inline static void memmap_mem_update(unsigned int addr, int write, int dummy)
 {
 	unsigned int type = MEMMAP_RAM_R;
-	
+
 	if (write) {
 		if ((addr >= 0xd000) && (addr <= 0xdfff)) {
 			type = MEMMAP_I_O_W;
@@ -450,43 +464,97 @@ inline static void memmap_mem_update(unsigned int addr, int write)
 			/* HACK: transform R to X */
 			type >>= 2;
 			memmap_state &= ~(MEMMAP_STATE_OPCODE);
+#if 0
 		} else if (memmap_state & MEMMAP_STATE_INSTR) {
 			/* ignore operand reads */
 			type = 0;
+#endif
+		}
+		if (dummy == 0) {
+			type |= MEMMAP_REGULAR_READ;
 		}
 	}
 	monitor_memmap_store(addr, type);
 }
 
-void memmap_mem_store(unsigned int addr, unsigned int value)
+// Forward decl — trace helper defined below.
+static void c64d_trace_sprite_ptr_write(unsigned int addr, unsigned char value);
+
+static void memmap_mem_store(unsigned int addr, unsigned int value)
 {
-	memmap_mem_update(addr, 1);
-	
+	memmap_mem_update(addr, 1, 0);
+
 	c64d_mark_c64_cell_write(addr, value);
 
-	(*_mem_write_tab_ptr[(addr) >> 8])((WORD)(addr), (BYTE)(value));
+	// CTestRemapperPixelMap sprite-pointer write trace (env-gated, see helper).
+	if (addr >= 0x4BF8 && addr <= 0x4BFF) {
+		c64d_trace_sprite_ptr_write(addr, value);
+	}
+
+	(*_mem_write_tab_ptr[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value));
+}
+
+static void memmap_mem_store_dummy(unsigned int addr, unsigned int value)
+{
+	memmap_mem_update(addr, 1, 1);
+
+	c64d_mark_c64_cell_write(addr, value);
+
+	(*_mem_write_tab_ptr_dummy[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value));
 }
 
 /* read byte, check BA and mark as read */
-BYTE memmap_mem_read(unsigned int addr)
+static uint8_t memmap_mem_read(unsigned int addr)
 {
 	check_ba();
-	
-	memmap_mem_update(addr, 0);
-	
+
+	memmap_mem_update(addr, 0, 0);
+
 	c64d_mark_c64_cell_read(addr);
 
-	return (*_mem_read_tab_ptr[(addr) >> 8])((WORD)(addr));
+	return (*_mem_read_tab_ptr[(addr) >> 8])((uint16_t)(addr));
+}
+
+static uint8_t memmap_mem_read_dummy(unsigned int addr)
+{
+	check_ba();
+
+	memmap_mem_update(addr, 0, 1);
+
+	c64d_mark_c64_cell_read(addr);
+
+	return (*(_mem_read_tab_ptr_dummy[(addr) >> 8]))((uint16_t)(addr));
 }
 
 #ifndef STORE
 #define STORE(addr, value) \
-memmap_mem_store(addr, value)
+    if (reu_dma_triggered == 0) { \
+        memmap_mem_store(addr, value); \
+        if (addr == 0xff00) { \
+            reu_dma(-1); \
+        } \
+    } \
+    reu_dma_triggered = 0
+#endif
+
+#ifndef STORE_DUMMY
+/* VICE 3.10: reu_dma() returns int for reu_dma_triggered assignment.
+   Our reu_dma() still returns void; will be updated with reu.c upgrade. */
+#define STORE_DUMMY(addr, value) \
+    memmap_mem_store_dummy(addr, value); \
+    if (addr == 0xff00) { \
+        reu_dma(-1); \
+    }
 #endif
 
 #ifndef LOAD
 #define LOAD(addr) \
 memmap_mem_read(addr)
+#endif
+
+#ifndef LOAD_DUMMY
+#define LOAD_DUMMY(addr) \
+memmap_mem_read_dummy(addr)
 #endif
 
 #ifndef LOAD_CHECK_BA_LOW
@@ -496,9 +564,21 @@ memmap_mem_read(addr);      \
 check_ba_low = 0
 #endif
 
+#ifndef LOAD_CHECK_BA_LOW_DUMMY
+#define LOAD_CHECK_BA_LOW_DUMMY(addr) \
+check_ba_low = 1;           \
+memmap_mem_read_dummy(addr);      \
+check_ba_low = 0
+#endif
+
 #ifndef STORE_ZERO
 #define STORE_ZERO(addr, value) \
 memmap_mem_store((addr) & 0xff, value)
+#endif
+
+#ifndef STORE_ZERO_DUMMY
+#define STORE_ZERO_DUMMY(addr, value) \
+memmap_mem_store_dummy((addr) & 0xff, value)
 #endif
 
 #ifndef LOAD_ZERO
@@ -506,11 +586,16 @@ memmap_mem_store((addr) & 0xff, value)
 memmap_mem_read((addr) & 0xff)
 #endif
 
+#ifndef LOAD_ZERO_DUMMY
+#define LOAD_ZERO_DUMMY(addr) \
+memmap_mem_read_dummy((addr) & 0xff)
+#endif
+
 /* Route stack operations through memmap */
 
-#define PUSH(val) memmap_mem_store((0x100 + (reg_sp--)), (BYTE)(val))
+#define PUSH(val) memmap_mem_store((0x100 + (reg_sp--)), (uint8_t)(val))
 #define PULL()    memmap_mem_read(0x100 + (++reg_sp))
-#define STACK_PEEK()  memmap_mem_read(0x100 + reg_sp)
+#define STACK_PEEK()  memmap_mem_read_dummy(0x100 + reg_sp)
 
 /* Stack annotation: after PUSH, reg_sp has been decremented, so the pushed byte is at reg_sp+1 */
 #define C64D_ANNOTATE_PUSH(entry_type, irq_source, origin) \
@@ -527,33 +612,74 @@ static int c64d_irq_flag_needs_clear = 0;
 
 #endif /* FEATURE_CPUMEMHISTORY */
 
-inline static BYTE mem_read_check_ba(unsigned int addr)
+inline static uint8_t mem_read_check_ba(unsigned int addr)
 {
-	//LOGD("mem_read_check_ba: %4.4x", addr);
-	
 	check_ba();
-	
+
 	c64d_mark_c64_cell_read(addr);
-	
-	return (*_mem_read_tab_ptr[(addr) >> 8])((WORD)(addr));
+
+	return (*_mem_read_tab_ptr[(addr) >> 8])((uint16_t)(addr));
+}
+
+inline static uint8_t mem_read_check_ba_dummy(unsigned int addr)
+{
+	check_ba();
+
+	c64d_mark_c64_cell_read(addr);
+
+	return (*(_mem_read_tab_ptr_dummy[(addr) >> 8]))((uint16_t)(addr));
+}
+
+// Non-inline trace helper (keeps static state single across inlined
+// c64d_mem_store copies). Gated by VICE_SPRITE_PTR_TRACE env var.
+// Output: /tmp/sprite_ptr_writes.txt.
+static void c64d_trace_sprite_ptr_write(unsigned int addr, unsigned char value)
+{
+	static int trace_enabled = -1;
+	static FILE *fp = NULL;
+	static int lines = 0;
+	const int max_lines = 4000;
+	if (trace_enabled < 0) {
+		trace_enabled = (getenv("VICE_SPRITE_PTR_TRACE") != NULL) ? 1 : 0;
+	}
+	if (!trace_enabled) return;
+	if (fp == NULL && lines < max_lines) {
+		fp = fopen("/tmp/sprite_ptr_writes.txt", "w");
+		if (fp) fprintf(fp, "# raster_line\traster_cycle\taddr\tvalue\n");
+	}
+	if (fp && lines < max_lines && vicii.raster_line >= 120 && vicii.raster_line <= 170) {
+		fprintf(fp, "%u\t%u\t$%04x\t$%02x\n",
+		        vicii.raster_line, vicii.raster_cycle, addr, value);
+		fflush(fp);
+		lines++;
+		if (lines >= max_lines) { fclose(fp); fp = NULL; }
+	}
 }
 
 inline static void c64d_mem_store(unsigned int addr, unsigned char value)
 {
-	//LOGD("c64d_mem_store: %4.4x %2.2x", addr, value);
-	
 	c64d_mark_c64_cell_write(addr, value);
-	
-	(*_mem_write_tab_ptr[(addr) >> 8])((WORD)(addr), (BYTE)(value));
+
+	// CTestRemapperPixelMap sprite-pointer write trace (see helper above).
+	if (addr >= 0x4BF8 && addr <= 0x4BFF) {
+		c64d_trace_sprite_ptr_write(addr, value);
+	}
+
+	(*_mem_write_tab_ptr[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value));
+}
+
+inline static void c64d_mem_store_dummy(unsigned int addr, unsigned char value)
+{
+	c64d_mark_c64_cell_write(addr, value);
+
+	(*_mem_write_tab_ptr_dummy[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value));
 }
 
 inline static void c64d_mem_store_zero(unsigned int addr, unsigned char value)
 {
-	//LOGD("c64d_mem_store_zero: %4.4x %2.2x", addr, value);
-	
 	c64d_mark_c64_cell_write(addr, value);
-	
-	(*_mem_write_tab_ptr[0])((WORD)(addr), (BYTE)(value));
+
+	(*_mem_write_tab_ptr[0])((uint16_t)(addr), (uint8_t)(value));
 }
 
 void c64d_mem_write_c64(unsigned int addr, unsigned char value)
@@ -563,17 +689,38 @@ void c64d_mem_write_c64(unsigned int addr, unsigned char value)
 
 void c64d_mem_write_c64_no_mark(unsigned int addr, unsigned char value)
 {
-	(*_mem_write_tab_ptr[(addr) >> 8])((WORD)(addr), (BYTE)(value));
+	(*_mem_write_tab_ptr[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value));
 }
 
 #ifndef STORE
 #define STORE(addr, value) \
-c64d_mem_store((WORD)(addr), (BYTE)(value));
+    if (reu_dma_triggered == 0) { \
+        c64d_mem_store((uint16_t)(addr), (uint8_t)(value)); \
+        if (addr == 0xff00) { \
+            reu_dma(-1); \
+        } \
+    } \
+    reu_dma_triggered = 0
+#endif
+
+#ifndef STORE_DUMMY
+/* VICE 3.10: reu_dma() returns int for reu_dma_triggered assignment.
+   Our reu_dma() still returns void; will be updated with reu.c upgrade. */
+#define STORE_DUMMY(addr, value) \
+    c64d_mem_store_dummy((uint16_t)(addr), (uint8_t)(value)); \
+    if (addr == 0xff00) { \
+        reu_dma(-1); \
+    }
 #endif
 
 #ifndef LOAD
 #define LOAD(addr) \
 mem_read_check_ba(addr)
+#endif
+
+#ifndef LOAD_DUMMY
+#define LOAD_DUMMY(addr) \
+mem_read_check_ba_dummy(addr)
 #endif
 
 #ifndef LOAD_CHECK_BA_LOW
@@ -583,9 +730,21 @@ mem_read_check_ba(addr);    \
 check_ba_low = 0
 #endif
 
+#ifndef LOAD_CHECK_BA_LOW_DUMMY
+#define LOAD_CHECK_BA_LOW_DUMMY(addr) \
+check_ba_low = 1;                 \
+mem_read_check_ba_dummy(addr);    \
+check_ba_low = 0
+#endif
+
 #ifndef STORE_ZERO
 #define STORE_ZERO(addr, value) \
-c64d_mem_store_zero(addr, value);
+c64d_mem_store_zero(addr, value)
+#endif
+
+#ifndef STORE_ZERO_DUMMY
+#define STORE_ZERO_DUMMY(addr, value) \
+(*_mem_write_tab_ptr_dummy[0])((uint16_t)(addr), (uint8_t)(value))
 #endif
 
 #ifndef LOAD_ZERO
@@ -593,10 +752,15 @@ c64d_mem_store_zero(addr, value);
 mem_read_check_ba((addr) & 0xff)
 #endif
 
+#ifndef LOAD_ZERO_DUMMY
+#define LOAD_ZERO_DUMMY(addr) \
+mem_read_check_ba_dummy((addr) & 0xff)
+#endif
+
 /* Route stack operations through read/write handlers */
 
 #ifndef PUSH
-#define PUSH(val) (*_mem_write_tab_ptr[0x01])((WORD)(0x100 + (reg_sp--)), (BYTE)(val))
+#define PUSH(val) (*_mem_write_tab_ptr[0x01])((uint16_t)(0x100 + (reg_sp--)), (uint8_t)(val))
 #endif
 
 #ifndef PULL
@@ -604,7 +768,7 @@ mem_read_check_ba((addr) & 0xff)
 #endif
 
 #ifndef STACK_PEEK
-#define STACK_PEEK()  mem_read_check_ba(0x100 + reg_sp)
+#define STACK_PEEK()  mem_read_check_ba_dummy(0x100 + reg_sp)
 #endif
 
 #ifndef DMA_FUNC
@@ -632,7 +796,6 @@ static void maincpu_generic_dma(void)
 
 struct interrupt_cpu_status_s *maincpu_int_status = NULL;
 alarm_context_t *maincpu_alarm_context = NULL;
-clk_guard_t *maincpu_clk_guard = NULL;
 monitor_interface_t *maincpu_monitor_interface = NULL;
 
 /* This flag is an obsolete optimization. It's always 0 for the x64sc CPU,
@@ -675,6 +838,46 @@ const CLOCK maincpu_opcode_write_cycles[] = {
  the values copied into this struct.  */
 mos6510_regs_t maincpu_regs;
 
+log_t maincpu_log = LOG_DEFAULT;
+
+static int maincpu_jammed = 0;
+
+/* ------------------------------------------------------------------------- */
+
+static int ane_log_level = 0; /* 0: none, 1: unstable only 2: all */
+static int lxa_log_level = 0; /* 0: none, 1: unstable only 2: all */
+
+static int set_ane_log_level(int val, void *param)
+{
+	if ((val < 0) || (val > 2)) {
+		return -1;
+	}
+	ane_log_level = val;
+	return 0;
+}
+
+static int set_lxa_log_level(int val, void *param)
+{
+	if ((val < 0) || (val > 2)) {
+		return -1;
+	}
+	lxa_log_level = val;
+	return 0;
+}
+
+static const resource_int_t maincpu_resources_int[] = {
+	{ "LogLevelANE", 0, RES_EVENT_NO, NULL,
+	  &ane_log_level, set_ane_log_level, NULL },
+	{ "LogLevelLXA", 0, RES_EVENT_NO, NULL,
+	  &lxa_log_level, set_lxa_log_level, NULL },
+	RESOURCE_INT_LIST_END
+};
+
+int maincpu_resources_init(void)
+{
+	return resources_register_int(maincpu_resources_int);
+}
+
 /* ------------------------------------------------------------------------- */
 
 monitor_interface_t *maincpu_monitor_interface_get(void)
@@ -695,9 +898,9 @@ monitor_interface_t *maincpu_monitor_interface_get(void)
 	maincpu_monitor_interface->mem_bank_read = mem_bank_read;
 	maincpu_monitor_interface->mem_bank_peek = mem_bank_peek;
 	maincpu_monitor_interface->mem_bank_write = mem_bank_write;
-	
+
 	maincpu_monitor_interface->mem_ioreg_list_get = mem_ioreg_list_get;
-	
+
 	maincpu_monitor_interface->toggle_watchpoints_func = mem_toggle_watchpoints;
 	
 	maincpu_monitor_interface->set_bank_base = NULL;
@@ -711,6 +914,8 @@ monitor_interface_t *maincpu_monitor_interface_get(void)
 void maincpu_early_init(void)
 {
 	maincpu_int_status = interrupt_cpu_status_new();
+
+	maincpu_log = log_open("Main CPU");
 }
 
 void maincpu_init(void)
@@ -814,31 +1019,29 @@ inline static int interrupt_check_irq_delay(interrupt_cpu_status_t *cs,
 unsigned int reg_pc;
 #endif
 
-static BYTE **o_bank_base;
-static int *o_bank_start;
-static int *o_bank_limit;
+static bool bank_base_ready = false;
+static uint8_t *bank_base = NULL;
+static int bank_start = 0;
+static int bank_limit = 0;
 
 void maincpu_resync_limits(void)
 {
-	if (o_bank_base) {
-		mem_mmu_translate(reg_pc, o_bank_base, o_bank_start, o_bank_limit);
+	if (bank_base_ready) {
+		mem_mmu_translate(reg_pc, &bank_base, &bank_start, &bank_limit);
 	}
 }
 
-BYTE reg_a = 0;
-BYTE reg_x = 0;
-BYTE reg_y = 0;
-BYTE reg_p = 0;
-BYTE reg_sp = 0;
-BYTE flag_n = 0;
-BYTE flag_z = 0;
+uint8_t reg_a = 0;
+uint8_t reg_x = 0;
+uint8_t reg_y = 0;
+uint8_t reg_p = 0;
+uint8_t reg_sp = 0;
+uint8_t flag_n = 0;
+uint8_t flag_z = 0;
 #ifndef NEED_REG_PC
+/* FIXME: this should really be uint16_t, but it breaks things (eg trap17.prg) */
 unsigned int reg_pc;
 #endif
-BYTE *bank_base;
-int bank_start = 0;
-int bank_limit = 0;
-
 //
 // proof of concept of the profiler compatible with Champ, this needs to be moved
 // and generalised to be used also with other platforms not only C64
@@ -994,8 +1197,8 @@ void c64d_profiler_end_cpu_instruction()
 			
 
 			unsigned int frameNum = c64d_get_frame_num();
-			fprintf(c64d_profiler_file_out, "cpu %u %u %04x %02x %02x %02x %04x %02x %02x %llu %d %d %d\n",
-					c64d_maincpu_clk,
+			fprintf(c64d_profiler_file_out, "cpu %llu %u %04x %02x %02x %02x %04x %02x %02x %llu %d %d %d\n",
+					(unsigned long long)c64d_maincpu_clk,
 					frameNum,
 				   c64d_profiler_old_pc, reg_a, reg_x, reg_y, reg_pc, reg_sp,
 					reg_p | (flag_n & 0x80) | P_UNUSED | ( (!(flag_z)) ? P_ZERO : 0),
@@ -1058,19 +1261,19 @@ void c64d_set_maincpu_regs_no_trap(uint8 a, uint8 x, uint8 y, uint8 p, uint8 sp)
 	reg_sp = sp;
 }
 
-unsigned int c64d_get_maincpu_clock()
+CLOCK c64d_get_maincpu_clock()
 {
 	return c64d_maincpu_clk;
 }
 
-void interrupt_maincpu_trigger_trap(void (*trap_func)(WORD, void *data),
+void interrupt_maincpu_trigger_trap(void (*trap_func)(uint16_t, void *data),
 									void *data);
 
 int _c64d_new_pc = -1;
 
-void _c64d_set_c64_pc_trap(WORD addr, void *data)
+void _c64d_set_c64_pc_trap(uint16_t addr, void *data)
 {
-	WORD *newpc = data;
+	uint16_t *newpc = data;
 	maincpu_regs.pc = *newpc;
 	
 	_c64d_new_pc = -1;
@@ -1086,7 +1289,7 @@ void c64d_set_c64_pc(uint16 pc)
 ////
 uint8 _c64d_maincpu_set_a; uint8 _c64d_maincpu_set_x; uint8 _c64d_maincpu_set_y; uint8 _c64d_maincpu_set_p; uint8 _c64d_maincpu_set_sp;
 
-void _c64d_set_c64_maincpu_set_sp_trap(WORD addr, void *data)
+void _c64d_set_c64_maincpu_set_sp_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_set_c64_maincpu_set_sp_trap: %x", _c64d_maincpu_set_sp);
 	maincpu_regs.sp = _c64d_maincpu_set_sp;
@@ -1099,7 +1302,7 @@ void c64d_set_maincpu_set_sp(uint8 *sp)
 	interrupt_maincpu_trigger_trap(_c64d_set_c64_maincpu_set_sp_trap, NULL);
 }
 
-void _c64d_set_c64_maincpu_set_a_trap(WORD addr, void *data)
+void _c64d_set_c64_maincpu_set_a_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_set_c64_maincpu_set_a_trap: %x", _c64d_maincpu_set_a);
 	maincpu_regs.a = _c64d_maincpu_set_a;
@@ -1112,7 +1315,7 @@ void c64d_set_maincpu_set_a(uint8 *a)
 	interrupt_maincpu_trigger_trap(_c64d_set_c64_maincpu_set_a_trap, NULL);
 }
 
-void _c64d_set_c64_maincpu_set_x_trap(WORD addr, void *data)
+void _c64d_set_c64_maincpu_set_x_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_set_c64_maincpu_set_x_trap: %x", _c64d_maincpu_set_x);
 	maincpu_regs.x = _c64d_maincpu_set_x;
@@ -1126,7 +1329,7 @@ void c64d_set_maincpu_set_x(uint8 *x)
 	interrupt_maincpu_trigger_trap(_c64d_set_c64_maincpu_set_x_trap, NULL);
 }
 
-void _c64d_set_c64_maincpu_set_y_trap(WORD addr, void *data)
+void _c64d_set_c64_maincpu_set_y_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_set_c64_maincpu_set_y_trap: %x", _c64d_maincpu_set_y);
 	maincpu_regs.y = _c64d_maincpu_set_y;
@@ -1140,7 +1343,7 @@ void c64d_set_maincpu_set_y(uint8 *y)
 	interrupt_maincpu_trigger_trap(_c64d_set_c64_maincpu_set_y_trap, NULL);
 }
 
-void _c64d_set_c64_maincpu_set_p_trap(WORD addr, void *data)
+void _c64d_set_c64_maincpu_set_p_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_set_c64_maincpu_set_p_trap: %x", _c64d_maincpu_set_p);
 	maincpu_regs.p = _c64d_maincpu_set_p;
@@ -1153,7 +1356,7 @@ void c64d_set_maincpu_set_p(uint8 *p)
 	interrupt_maincpu_trigger_trap(_c64d_set_c64_maincpu_set_p_trap, NULL);
 }
 
-void _c64d_set_c64_maincpu_regs_trap(WORD addr, void *data)
+void _c64d_set_c64_maincpu_regs_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_set_c64_maincpu_regs_trap: %x %x %x %x %x", _c64d_maincpu_set_a, _c64d_maincpu_set_x, _c64d_maincpu_set_y, _c64d_maincpu_set_p, _c64d_maincpu_set_sp);
 	maincpu_regs.a  = _c64d_maincpu_set_a;
@@ -1175,7 +1378,7 @@ void c64d_set_maincpu_regs(uint8 *a, uint8 *x, uint8 *y, uint8 *p, uint8 *sp)
 	interrupt_maincpu_trigger_trap(_c64d_set_c64_maincpu_regs_trap, NULL);
 }
 
-void _c64d_update_roms_trap(WORD addr, void *data);
+void _c64d_update_roms_trap(uint16_t addr, void *data);
 
 void c64d_trigger_update_roms()
 {
@@ -1183,7 +1386,7 @@ void c64d_trigger_update_roms()
 	interrupt_maincpu_trigger_trap(_c64d_update_roms_trap, NULL);
 }
 
-void _c64d_maincpu_make_basic_run_trap(WORD addr, void *data)
+void _c64d_maincpu_make_basic_run_trap(uint16_t addr, void *data)
 {
 	LOGD("_c64d_maincpu_make_basic_run_trap");
 	
@@ -1215,6 +1418,11 @@ void c64d_maincpu_make_basic_run(uint8 *a, uint8 *x, uint8 *y, uint8 *p, uint8 *
 int debug_iterations_after_restore = 0;
 int debug_prev_iteration_pc = 0;
 
+// Diagnostic for the rewind-while-running regression: marks the maincpu_clk at
+// the last snapshot restore so the BRK() macro can log only BRKs that happen
+// shortly after a restore (the suspected corruption), not normal program BRKs.
+CLOCK c64d_debug_last_restore_clk = 0;
+
 volatile unsigned char c64d_vice_run_emulation = 1;
 void c64d_shutdown_vice()
 {
@@ -1227,25 +1435,28 @@ void maincpu_mainloop(void)
 
 	/* Notice that using a struct for these would make it a lot slower (at
 	 least, on gcc 2.7.2.x).  */
-	//	BYTE reg_a = 0;
-	//	BYTE reg_x = 0;
-	//	BYTE reg_y = 0;
-	//	BYTE reg_p = 0;
-	//	BYTE reg_sp = 0;
-	//	BYTE flag_n = 0;
-	//	BYTE flag_z = 0;
+	//	uint8_t reg_a = 0;
+	//	uint8_t reg_x = 0;
+	//	uint8_t reg_y = 0;
+	//	uint8_t reg_p = 0;
+	//	uint8_t reg_sp = 0;
+	//	uint8_t flag_n = 0;
+	//	uint8_t flag_z = 0;
 	//#ifndef NEED_REG_PC
 	//	unsigned int reg_pc;
 	//#endif
-	//	BYTE *bank_base;
+	//	uint8_t *bank_base;
 	//	int bank_start = 0;
 	//	int bank_limit = 0;
 
-	o_bank_base = &bank_base;
-	o_bank_start = &bank_start;
-	o_bank_limit = &bank_limit;
-	
-	machine_trigger_reset(MACHINE_RESET_MODE_SOFT);
+	/*
+	 * Enable maincpu_resync_limits functionality .. in the old code
+	 * this is where the local stack var had its address copied to
+	 * the global.
+	 */
+	bank_base_ready = true;
+
+	machine_trigger_reset(MACHINE_RESET_MODE_RESET_CPU);
 	
 	while (c64d_vice_run_emulation) {
 #define CLK maincpu_clk
@@ -1266,19 +1477,30 @@ void maincpu_mainloop(void)
 		
 #define ROM_TRAP_HANDLER() traps_handler()
 		
+#define CPU_LOG_ID maincpu_log
+#define ANE_LOG_LEVEL ane_log_level
+#define LXA_LOG_LEVEL lxa_log_level
+#define CPU_IS_JAMMED maincpu_jammed
+
+/* VICE 3.10 profiler macros - defined as no-ops since c64d has its own profiler */
+#define CHECK_PROFILE_INTERRUPT(dest_addr, handler)
+#define CHECK_PROFILE_JSR(dest_addr)
+#define CHECK_PROFILE_RTS()
+#define CHECK_PROFILE_RTI()
+
 #define JAM()                                                         \
 do {                                                              \
 unsigned int tmp;                                             \
 \
 EXPORT_REGISTERS();                                           \
-LOGError("CPU JAM: PC=%04x opcode=%x LAST_OPCODE_ADDR=%04x debug_iterations_after_restore=%d debug_prev_iteration_pc=%04x", reg_pc, opcode, LAST_OPCODE_ADDR, debug_iterations_after_restore, debug_prev_iteration_pc);									\
+LOGError("CPU JAM: PC=%04x opcode=%x LAST_OPCODE_ADDR=%04x debug_iterations_after_restore=%d debug_prev_iteration_pc=%04x sp=%02x p=%02x clk=%llu gpi=%x irq_clk=%llu nmi_clk=%llu irq_pending_clk=%llu next_alarm=%llu", reg_pc, opcode, LAST_OPCODE_ADDR, debug_iterations_after_restore, debug_prev_iteration_pc, reg_sp, reg_p, (unsigned long long)maincpu_clk, maincpu_int_status->global_pending_int, (unsigned long long)maincpu_int_status->irq_clk, (unsigned long long)maincpu_int_status->nmi_clk, (unsigned long long)maincpu_int_status->irq_pending_clk, (unsigned long long)alarm_context_next_pending_clk(maincpu_alarm_context));									\
 tmp = machine_jam("   " CPU_STR ": JAM at $%04X   ", reg_pc); \
 switch (tmp) {                                                \
-case JAM_RESET:                                           \
+case JAM_RESET_CPU:                                       \
 DO_INTERRUPT(IK_RESET);                               \
 break;                                                \
-case JAM_HARD_RESET:                                      \
-mem_powerup();                                        \
+case JAM_POWER_CYCLE:                                     \
+machine_powerup();                                    \
 DO_INTERRUPT(IK_RESET);                               \
 break;                                                \
 case JAM_MONITOR:                                         \
@@ -1291,8 +1513,10 @@ CLK_INC();                                            \
 } while (0)
 		
 #define CALLER e_comp_space
+
+#define ORIGIN_MEMSPACE (e_comp_space)
 		
-#define ROM_TRAP_ALLOWED() mem_rom_trap_allowed((WORD)reg_pc)
+#define ROM_TRAP_ALLOWED() mem_rom_trap_allowed((uint16_t)reg_pc)
 		
 #define GLOBAL_REGS maincpu_regs
 		
@@ -1569,7 +1793,7 @@ debug_text("*** BRK"); \
 #define DO_IRQBRK()                                                                                                   \
 do {                                                                                                              \
 /* Interrupt vector to use. Assume regular IRQ/BRK. */                                                        \
-WORD handler_vector = 0xfffe;                                                                                 \
+uint16_t handler_vector = 0xfffe;                                                                                 \
 \
 PUSH(reg_pc >> 8);                                                                                            \
 C64D_ANNOTATE_PUSH(c64d_irqbrk_entry_type_base, c64d_irqbrk_irq_source, LAST_OPCODE_ADDR);                   \
@@ -1615,8 +1839,8 @@ JUMP(addr);                                                                     
 		/* FIXME: LOCAL_STATUS() should check byte ready first.  */
 #define DO_INTERRUPT(int_kind)                                                 \
 	do {                                                                       \
-		BYTE ik = (int_kind);                                                  \
-		WORD addr;                                                             \
+		uint8_t ik = (int_kind);                                                  \
+		uint16_t addr;                                                             \
 		\
 		if (ik & (IK_IRQ | IK_IRQPEND | IK_NMI)) {                             \
 			if ((ik & IK_NMI)                                                  \
@@ -1627,9 +1851,9 @@ JUMP(addr);                                                                     
 				}                                                              \
 				interrupt_ack_nmi(CPU_INT_STATUS);                             \
 				if (!SKIP_CYCLE) {                                             \
-					LOAD(reg_pc);                                              \
+					LOAD_DUMMY(reg_pc);                                              \
 					CLK_INC();                                                 \
-					LOAD(reg_pc);                                              \
+					LOAD_DUMMY(reg_pc);                                              \
 					CLK_INC();                                                 \
 				}                                                              \
 				LOCAL_SET_BREAK(0);                                            \
@@ -1662,9 +1886,9 @@ JUMP(addr);                                                                     
 				}                                                              \
 				interrupt_ack_irq(CPU_INT_STATUS);                             \
 				if (!SKIP_CYCLE) {                                             \
-					LOAD(reg_pc);                                              \
+					LOAD_DUMMY(reg_pc);                                              \
 					CLK_INC();                                                 \
-					LOAD(reg_pc);                                              \
+					LOAD_DUMMY(reg_pc);                                              \
 					CLK_INC();                                                 \
 				}                                                              \
 				LOCAL_SET_BREAK(0);                                            \
@@ -1682,7 +1906,7 @@ JUMP(addr);                                                                     
 		if (ik & (IK_TRAP | IK_RESET)) {                                       \
 			if (ik & IK_TRAP) {                                                \
 				EXPORT_REGISTERS();                                            \
-				interrupt_do_trap(CPU_INT_STATUS, (WORD)reg_pc);               \
+				interrupt_do_trap(CPU_INT_STATUS, (uint16_t)reg_pc);           \
 				IMPORT_REGISTERS();                                            \
 				if (CPU_INT_STATUS->global_pending_int & IK_RESET) {           \
 					ik |= IK_RESET;                                            \
@@ -1694,30 +1918,28 @@ JUMP(addr);                                                                     
 				addr = LOAD(0xfffc);                                           \
 				addr |= (LOAD(0xfffd) << 8);                                   \
 				bank_start = bank_limit = 0; /* prevent caching */             \
+				LOCAL_SET_INTERRUPT(1);                                        \
+				CPU_IS_JAMMED = 0;                                             \
 				JUMP(addr);                                                    \
 				DMA_ON_RESET;                                                  \
 			}                                                                  \
 		}                                                                      \
 		if (ik & (IK_MONITOR | IK_DMA)) {                                      \
 			if (ik & IK_MONITOR) {                                             \
-				if (monitor_force_import(CALLER)) {                            \
-					IMPORT_REGISTERS();                                        \
-				}                                                              \
-				if (monitor_mask[CALLER]) {                                    \
-					EXPORT_REGISTERS();                                        \
-				}                                                              \
 				if (monitor_mask[CALLER] & (MI_STEP)) {                        \
-					monitor_check_icount((WORD)reg_pc);                        \
+					EXPORT_REGISTERS();                                        \
+					monitor_check_icount((uint16_t)reg_pc);                    \
 					IMPORT_REGISTERS();                                        \
 				}                                                              \
 				if (monitor_mask[CALLER] & (MI_BREAK)) {                       \
-					if (monitor_check_breakpoints(CALLER, (WORD)reg_pc)) {     \
+					EXPORT_REGISTERS();                                        \
+					if (monitor_check_breakpoints(CALLER, (uint16_t)reg_pc)) { \
 						monitor_startup(CALLER);                               \
 						IMPORT_REGISTERS();                                    \
 					}                                                          \
 				}                                                              \
 				if (monitor_mask[CALLER] & (MI_WATCH)) {                       \
-					monitor_check_watchpoints(LAST_OPCODE_ADDR, (WORD)reg_pc); \
+					monitor_check_watchpoints(LAST_OPCODE_ADDR, (uint16_t)reg_pc); \
 					IMPORT_REGISTERS();                                        \
 				}                                                              \
 			}                                                                  \
@@ -1737,17 +1959,17 @@ JUMP(addr);                                                                     
 		
 #define GET_TEMP(dest) dest = new_value;
 		
-#define GET_IMM(dest) dest = (BYTE)(p1);
+#define GET_IMM(dest) dest = (uint8_t)(p1);
 		/* same as above, for NOOP */
 #define GET_IMM_DUMMY()
 		
 #define GET_ABS(dest)        \
-dest = (BYTE)(LOAD(p2)); \
+dest = (uint8_t)(LOAD(p2)); \
 CLK_INC();
 		
 		/* same as above, for NOOP */
 #define GET_ABS_DUMMY()      \
-LOAD(p2);                \
+LOAD_DUMMY(p2);          \
 CLK_INC();
 		
 #define SET_ABS(value) \
@@ -1756,7 +1978,7 @@ CLK_INC();
 		
 #define SET_ABS_RMW(old_value, new_value) \
 if (!SKIP_CYCLE) {                    \
-STORE(p2, old_value);             \
+STORE_DUMMY(p2, old_value);       \
 CLK_INC();                        \
 }                                     \
 STORE(p2, new_value);                 \
@@ -1764,13 +1986,13 @@ CLK_INC();
 		
 #define INT_ABS_I_R(reg_i)                                 \
 if (!SKIP_CYCLE && ((((p2) & 0xff) + reg_i) > 0xff)) { \
-LOAD((((p2) + reg_i) & 0xff) | ((p2) & 0xff00));   \
+LOAD_DUMMY((((p2) + reg_i) & 0xff) | ((p2) & 0xff00)); \
 CLK_INC();                                         \
 }
 		
 #define INT_ABS_I_W(reg_i)                               \
 if (!SKIP_CYCLE) {                                   \
-LOAD((((p2) + reg_i) & 0xff) | ((p2) & 0xff00)); \
+LOAD_DUMMY((((p2) + reg_i) & 0xff) | ((p2) & 0xff00)); \
 CLK_INC();                                       \
 }
 		
@@ -1781,7 +2003,7 @@ CLK_INC();
 		/* same as above, for NOOP */
 #define GET_ABS_X_DUMMY()      \
 INT_ABS_I_R(reg_x)         \
-LOAD((p2) + reg_x);        \
+LOAD_DUMMY((p2) + reg_x);  \
 CLK_INC();
 		
 #define GET_ABS_Y(dest)        \
@@ -1811,7 +2033,7 @@ CLK_INC();
 		
 #define SET_ABS_I_RMW(reg_i, old_value, new_value) \
 if (!SKIP_CYCLE) {                             \
-STORE(p2 + reg_i, old_value);              \
+STORE_DUMMY(p2 + reg_i, old_value);        \
 CLK_INC();                                 \
 }                                              \
 STORE(p2 + reg_i, new_value);                  \
@@ -1827,7 +2049,7 @@ CLK_INC();
 		
 		/* same as above, for NOOP */
 #define GET_ZERO_DUMMY()    \
-LOAD_ZERO(p1); \
+LOAD_ZERO_DUMMY(p1); \
 CLK_INC();
 		
 #define SET_ZERO(value)    \
@@ -1836,7 +2058,7 @@ CLK_INC();
 		
 #define SET_ZERO_RMW(old_value, new_value) \
 if (!SKIP_CYCLE) {                     \
-STORE_ZERO(p1, old_value);         \
+STORE_ZERO_DUMMY(p1, old_value);   \
 CLK_INC();                         \
 }                                      \
 STORE_ZERO(p1, new_value);             \
@@ -1844,7 +2066,7 @@ CLK_INC();
 		
 #define INT_ZERO_I      \
 if (!SKIP_CYCLE) {  \
-LOAD_ZERO(p1);  \
+LOAD_ZERO_DUMMY(p1); \
 CLK_INC();      \
 }
 		
@@ -1855,7 +2077,7 @@ CLK_INC();
 		/* same as above, for NOOP */
 #define GET_ZERO_X_DUMMY()        \
 INT_ZERO_I                    \
-LOAD_ZERO(p1 + reg_x);        \
+LOAD_ZERO_DUMMY(p1 + reg_x);  \
 CLK_INC();
 		
 #define GET_ZERO_Y(dest)          \
@@ -1887,7 +2109,7 @@ CLK_INC();
 		
 #define INT_IND_X                   \
 unsigned int tmpa, addr;        \
-LOAD_ZERO(p1);                  \
+LOAD_ZERO_DUMMY(p1);            \
 CLK_INC();                      \
 tmpa = (p1 + reg_x) & 0xff;     \
 addr = LOAD_ZERO(tmpa);         \
@@ -1915,7 +2137,7 @@ CLK_INC();                                               \
 tmpa |= (LOAD_ZERO(p1 + 1) << 8);                        \
 CLK_INC();                                               \
 if (!SKIP_CYCLE && ((((tmpa) & 0xff) + reg_y) > 0xff)) { \
-LOAD((tmpa & 0xff00) | ((tmpa + reg_y) & 0xff));     \
+LOAD_DUMMY((tmpa & 0xff00) | ((tmpa + reg_y) & 0xff)); \
 CLK_INC();                                           \
 }                                                        \
 addr = (tmpa + reg_y) & 0xffff;                          \
@@ -1927,7 +2149,7 @@ CLK_INC();                                           \
 tmpa |= (LOAD_ZERO(p1 + 1) << 8);                    \
 CLK_INC();                                           \
 if (!SKIP_CYCLE) {                                   \
-LOAD((tmpa & 0xff00) | ((tmpa + reg_y) & 0xff)); \
+LOAD_DUMMY((tmpa & 0xff00) | ((tmpa + reg_y) & 0xff)); \
 CLK_INC();                                       \
 }                                                    \
 addr = (tmpa + reg_y) & 0xffff;
@@ -1962,7 +2184,7 @@ CLK_INC();          \
 		
 #define SET_IND_RMW(old_value, new_value) \
 if (!SKIP_CYCLE) {                    \
-STORE(addr, old_value);           \
+STORE_DUMMY(addr, old_value);     \
 CLK_INC();                        \
 }                                     \
 STORE(addr, new_value);               \
@@ -2043,7 +2265,7 @@ INC_PC(pc_inc);                                                                 
 		
 #define ANC()                                  \
 do {                                       \
-reg_a_write = (BYTE)(reg_a_read & p1); \
+reg_a_write = (uint8_t)(reg_a_read & p1); \
 LOCAL_SET_NZ(reg_a_read);              \
 LOCAL_SET_CARRY(LOCAL_SIGN());         \
 INC_PC(2);                             \
@@ -2053,7 +2275,7 @@ INC_PC(2);                             \
 do {                                          \
 unsigned int value;                       \
 get_func(value)                           \
-reg_a_write = (BYTE)(reg_a_read & value); \
+reg_a_write = (uint8_t)(reg_a_read & value); \
 LOCAL_SET_NZ(reg_a_read);                 \
 INC_PC(pc_inc);                           \
 } while (0)
@@ -2061,33 +2283,71 @@ INC_PC(pc_inc);                           \
 		/*
 		 The result of the ANE opcode is A = ((A | CONST) & X & IMM), with CONST apparently
 		 being both chip- and temperature dependent.
-		 
+
 		 The commonly used value for CONST in various documents is 0xee, which is however
 		 not to be taken for granted (as it is unstable). see here:
 		 http://visual6502.org/wiki/index.php?title=6502_Opcode_8B_(XAA,_ANE)
-		 
+
 		 as seen in the list, there are several possible values, and its origin is still
 		 kinda unknown. instead of the commonly used 0xee we use 0xff here, since this
 		 will make the only known occurance of this opcode in actual code work. see here:
 		 https://sourceforge.net/tracker/?func=detail&aid=2110948&group_id=223021&atid=1057617
-		 
+
 		 FIXME: in the unlikely event that other code surfaces that depends on another
 		 CONST value, it probably has to be made configureable somehow if no value can
 		 be found that works for both.
+
+		 FIXME: perhaps we really have to add some randomness to (some) bits
 		 */
-		
+
+#define ANE_MAGIC       0xef
+#define ANE_RDY_MAGIC   (0xee & ANE_MAGIC)
+
+#ifndef ANE_LOG_LEVEL
+#define ANE_LOG_LEVEL 0
+#endif
+
+#if 1
+/* static int ane_log_level = 1; */ /* 0: none, 1: unstable only 2: all */
+
+#define ANE_LOGGING(rdy)                                                                    \
+do {                                                                                    \
+unsigned int result = ((reg_a_read | (rdy ? ANE_RDY_MAGIC : ANE_MAGIC)) & reg_x & p1); \
+unsigned int unstablebits = ((reg_a_read ^ 0xff) & (p1 & reg_x));                   \
+if ((ANE_LOG_LEVEL == 2) || ((ANE_LOG_LEVEL == 1) && (unstablebits != 0))) {        \
+if (unstablebits == 0) {                                                        \
+log_warning(CPU_LOG_ID, "$%04x ANE #$%02x ; A=$%02x X=$%02x -> A=$%02x%s",  \
+reg_pc, p1, reg_a_read, reg_x, result, rdy ? " (RDY cycle)" : "");      \
+} else {                                                                        \
+log_warning(CPU_LOG_ID, "$%04x ANE #$%02x ; A=$%02x X=$%02x -> A=$%02x (unstable bits: %c%c%c%c%c%c%c%c)%s", \
+reg_pc, p1, reg_a_read, reg_x, result,                                  \
+unstablebits & 0x80 ? '*' : '.', unstablebits & 0x40 ? '*' : '.',       \
+unstablebits & 0x20 ? '*' : '.', unstablebits & 0x10 ? '*' : '.',       \
+unstablebits & 0x08 ? '*' : '.', unstablebits & 0x04 ? '*' : '.',       \
+unstablebits & 0x02 ? '*' : '.', unstablebits & 0x01 ? '*' : '.',       \
+rdy ? " (RDY cycle)" : ""                                               \
+);                                                                      \
+}                                                                               \
+}                                                                                   \
+} while (0)
+#else
+#define ANE_LOGGING(rdy)
+#endif
+
 #define ANE()                                                       \
 do {                                                            \
 /* Set by main-cpu to signal steal after first fetch */     \
 if (OPINFO_ENABLES_IRQ(LAST_OPCODE_INFO)) {                 \
 /* Remove the signal */                                 \
 LAST_OPCODE_INFO &= ~OPINFO_ENABLES_IRQ_MSK;            \
-/* TODO emulate the different behaviour */              \
-reg_a_write = (BYTE)((reg_a_read | 0xff) & reg_x & p1); \
+/* TODO: the real behaviour is more complex */           \
+ANE_LOGGING(1);                                         \
+reg_a_write = (uint8_t)((reg_a_read | ANE_RDY_MAGIC) & reg_x & p1); \
 } else {                                                    \
-reg_a_write = (BYTE)((reg_a_read | 0xff) & reg_x & p1); \
+ANE_LOGGING(0);                                         \
+reg_a_write = (uint8_t)((reg_a_read | ANE_MAGIC) & reg_x & p1); \
 }                                                           \
-LOCAL_SET_NZ(reg_a_read);                                   \
+LOCAL_SET_NZ(reg_a_write);                                  \
 INC_PC(2);                                                  \
 /* Pretend to be NOP #$nn to not trigger the special case   \
 when cycles are stolen after the second fetch */         \
@@ -2181,10 +2441,10 @@ burst_broken = 1;                                     \
 dest_addr = reg_pc + (signed char)(p1);               \
 \
 if (!SKIP_CYCLE) {                                    \
-LOAD(reg_pc);                                     \
+LOAD_DUMMY(reg_pc);                               \
 CLK_INC();                                        \
 if ((reg_pc ^ dest_addr) & 0xff00) {              \
-LOAD((reg_pc & 0xff00) | (dest_addr & 0xff)); \
+LOAD_DUMMY((reg_pc & 0xff00) | (dest_addr & 0xff)); \
 CLK_INC();                                    \
 } else {                                          \
 OPCODE_DELAYS_INTERRUPT();                    \
@@ -2193,7 +2453,7 @@ OPCODE_DELAYS_INTERRUPT();                    \
 JUMP(dest_addr & 0xffff);                             \
 }                                                         \
 } while (0)
-		
+
 #else /* !C64DTV */
 		
 #define BRANCH(cond)                                          \
@@ -2205,10 +2465,10 @@ unsigned int dest_addr;                           \
 \
 dest_addr = reg_pc + (signed char)(p1);           \
 \
-LOAD(reg_pc);                                     \
+LOAD_DUMMY(reg_pc);                               \
 CLK_INC();                                        \
 if ((reg_pc ^ dest_addr) & 0xff00) {              \
-LOAD((reg_pc & 0xff00) | (dest_addr & 0xff)); \
+LOAD_DUMMY((reg_pc & 0xff00) | (dest_addr & 0xff)); \
 CLK_INC();                                    \
 } else {                                          \
 OPCODE_DELAYS_INTERRUPT();                    \
@@ -2216,14 +2476,16 @@ OPCODE_DELAYS_INTERRUPT();                    \
 JUMP(dest_addr & 0xffff);                         \
 }                                                     \
 } while (0)
-		
+
 #endif
 		
 #define BRK() \
 do { \
-WORD addr;          \
+uint16_t addr;          \
 EXPORT_REGISTERS(); \
 TRACE_BRK();        \
+if (c64d_debug_last_restore_clk != 0 && (CLOCK)(maincpu_clk - c64d_debug_last_restore_clk) < 200000) \
+	LOGError("CPU BRK soon after restore: BRK@%04x reg_pc=%04x sp=%02x p=%02x clk=%llu (restore_clk=%llu, +%llu cyc) gpi=%x irq_clk=%llu nmi_clk=%llu irq_pending_clk=%llu", LAST_OPCODE_ADDR, reg_pc, reg_sp, reg_p, (unsigned long long)maincpu_clk, (unsigned long long)c64d_debug_last_restore_clk, (unsigned long long)(maincpu_clk - c64d_debug_last_restore_clk), maincpu_int_status->global_pending_int, (unsigned long long)maincpu_int_status->irq_clk, (unsigned long long)maincpu_int_status->nmi_clk, (unsigned long long)maincpu_int_status->irq_pending_clk); \
 INC_PC(2);          \
 LOCAL_SET_BREAK(1); \
 c64d_irqbrk_entry_type_base = C64D_STACK_ENTRY_BRK_PCH; \
@@ -2236,9 +2498,10 @@ DO_IRQBRK();        \
 		
 #define JAM_02()                                                                      \
 do {                                                                              \
-DWORD trap_result;                                                            \
+uint32_t trap_result;                                                            \
 EXPORT_REGISTERS();                                                           \
-if (!ROM_TRAP_ALLOWED() || (trap_result = ROM_TRAP_HANDLER()) == (DWORD)-1) { \
+if (!ROM_TRAP_ALLOWED() || (trap_result = ROM_TRAP_HANDLER()) == (uint32_t)-1) { \
+CPU_IS_JAMMED = 1;                                                        \
 REWIND_FETCH_OPCODE(CLK);                                                 \
 JAM();                                                                    \
 } else {                                                                      \
@@ -2304,7 +2567,7 @@ LOCAL_SET_OVERFLOW(0); \
 #define CP(reg, get_func, pc_inc)     \
 do {                              \
 unsigned int tmp;             \
-BYTE value;                   \
+uint8_t value;                   \
 get_func(value)               \
 tmp = reg - value;            \
 LOCAL_SET_CARRY(tmp < 0x100); \
@@ -2351,7 +2614,7 @@ INC_PC(1);           \
 do {                                            \
 unsigned int value;                         \
 get_func(value)                             \
-reg_a_write = (BYTE)(reg_a_read ^ (value)); \
+reg_a_write = (uint8_t)(reg_a_read ^ (value)); \
 LOCAL_SET_NZ(reg_a_read);                   \
 INC_PC(pc_inc);                             \
 } while (0)
@@ -2397,7 +2660,7 @@ JUMP(addr); \
 		
 #define JMP_IND()                                                    \
 do {                                                             \
-WORD dest_addr;                                              \
+uint16_t dest_addr;                                              \
 dest_addr = LOAD(p2);                                        \
 CLK_INC();                                                   \
 dest_addr |= (LOAD((p2 & 0xff00) | ((p2 + 1) & 0xff)) << 8); \
@@ -2414,8 +2677,8 @@ JUMP(dest_addr);                                             \
 		
 #define JSR()                                     \
 do {                                          \
-BYTE addr_msb;                            \
-WORD dest_addr;                           \
+uint8_t addr_msb;                            \
+uint16_t dest_addr;                           \
 if (!SKIP_CYCLE) {                        \
 STACK_PEEK();                         \
 CLK_INC();                            \
@@ -2429,7 +2692,7 @@ C64D_ANNOTATE_PUSH(C64D_STACK_ENTRY_JSR_PCL, C64D_IRQ_SOURCE_UNKNOWN, LAST_OPCOD
 CLK_INC();                                \
 addr_msb = LOAD(reg_pc);                  \
 JSR_FIXUP_MSB(addr_msb);                  \
-dest_addr = (WORD)(p1 | (addr_msb << 8)); \
+dest_addr = (uint16_t)(p1 | (addr_msb << 8)); \
 CLK_INC();                                \
 c64d_profiler_jsr(dest_addr);								\
 JUMP(dest_addr);                          \
@@ -2478,20 +2741,79 @@ LOCAL_SET_NZ(reg_a_read);           \
 INC_PC(1);                          \
 } while (0)
 		
-		/* Note: this is not always exact, as this opcode can be quite unstable!
-   Moreover, the behavior is different from the one described in 64doc. */
-#define LXA(value, pc_inc)                                             \
-do {                                                               \
-reg_a_write = reg_x = ((reg_a_read | 0xee) & ((BYTE)(value))); \
-LOCAL_SET_NZ(reg_a_read);                                      \
-INC_PC(pc_inc);                                                \
+		/*
+		 Note: this is not always exact, as this opcode can be quite unstable!
+		 Moreover, the behavior is different from the one described in 64doc.
+
+		 The commonly used value for CONST in various documents is 0xee, which is however
+		 not to be taken for granted (as it is unstable).
+
+		 FIXME: in the unlikely event that other code surfaces that depends on another
+		 CONST value, it probably has to be made configureable somehow if no value can
+		 be found that works for both.
+
+		 FIXME: perhaps we really have to add some randomness to (some) bits
+		 */
+
+#define LXA_MAGIC       0xee    /* needs to be 0xee for wizball */
+#define LXA_RDY_MAGIC   0xee
+
+#ifndef LXA_LOG_LEVEL
+#define LXA_LOG_LEVEL 0
+#endif
+
+#if 1
+/* static int lxa_log_level = 1; */ /* 0: none, 1: unstable only 2: all */
+
+#define LXA_LOGGING(rdy)                                                                    \
+do {                                                                                    \
+unsigned int result = (reg_a_read | (rdy ? LXA_RDY_MAGIC : LXA_MAGIC)) & p1;        \
+unsigned int unstablebits = (reg_a_read ^ 0xff) & p1;                               \
+if ((LXA_LOG_LEVEL == 2) || ((LXA_LOG_LEVEL == 1) && (unstablebits != 0))) {        \
+if (unstablebits == 0) {                                                        \
+log_warning(CPU_LOG_ID, "$%04x LAX #$%02x ; A=$%02x -> A=X=$%02x%s",        \
+reg_pc, p1, reg_a_read, result, rdy ? " (RDY cycle)" : "");             \
+} else {                                                                        \
+log_warning(CPU_LOG_ID, "$%04x LAX #$%02x ; A=$%02x -> A=X=$%02x (unstable bits: %c%c%c%c%c%c%c%c)%s", \
+reg_pc, p1, reg_a_read, result,                                         \
+unstablebits & 0x80 ? '*' : '.', unstablebits & 0x40 ? '*' : '.',       \
+unstablebits & 0x20 ? '*' : '.', unstablebits & 0x10 ? '*' : '.',       \
+unstablebits & 0x08 ? '*' : '.', unstablebits & 0x04 ? '*' : '.',       \
+unstablebits & 0x02 ? '*' : '.', unstablebits & 0x01 ? '*' : '.',       \
+rdy ? " (RDY cycle)" : ""                                               \
+);                                                                      \
+}                                                                               \
+}                                                                                   \
+} while (0)
+#else
+#define LXA_LOGGING(rdy)
+#endif
+
+#define LXA()                                                       \
+do {                                                            \
+/* Set by main-cpu to signal steal after first fetch */     \
+if (OPINFO_ENABLES_IRQ(LAST_OPCODE_INFO)) {                 \
+/* Remove the signal */                                 \
+LAST_OPCODE_INFO &= ~OPINFO_ENABLES_IRQ_MSK;            \
+/* TODO: the real behaviour is more complex */           \
+LXA_LOGGING(1);                                         \
+reg_a_write = reg_x = (uint8_t)((reg_a_read | LXA_RDY_MAGIC) & p1); \
+} else {                                                    \
+LXA_LOGGING(0);                                         \
+reg_a_write = reg_x = (uint8_t)((reg_a_read | LXA_MAGIC) & p1); \
+}                                                           \
+LOCAL_SET_NZ(reg_a_write);                                  \
+INC_PC(2);                                                  \
+/* Pretend to be NOP #$nn to not trigger the special case   \
+when cycles are stolen after the second fetch */         \
+SET_LAST_OPCODE(0x80);                                      \
 } while (0)
 		
 #define ORA(get_func, pc_inc)                       \
 do {                                            \
 unsigned int value;                         \
 get_func(value)                             \
-reg_a_write = (BYTE)(reg_a_read | (value)); \
+reg_a_write = (uint8_t)(reg_a_read | (value)); \
 LOCAL_SET_NZ(reg_a_write);                  \
 INC_PC(pc_inc);                             \
 } while (0)
@@ -2532,7 +2854,7 @@ INC_PC(1);                \
 		
 #define PLP()                                                 \
 do {                                                      \
-BYTE s;                                               \
+uint8_t s;                                               \
 if (!SKIP_CYCLE) {                                    \
 STACK_PEEK();                                     \
 CLK_INC();                                        \
@@ -2598,7 +2920,7 @@ set_func(old_value, new_value)     \
 		
 #define ROR_A()                                         \
 do {                                                \
-BYTE tmp = reg_a_read;                          \
+uint8_t tmp = reg_a_read;                          \
 \
 reg_a_write = (reg_a_read >> 1) | (reg_p << 7); \
 LOCAL_SET_CARRY(tmp & 0x01);                    \
@@ -2628,24 +2950,24 @@ set_func(old_value, new_value)     \
    soon as the opcode ends, if necessary.  */
 #define RTI()                        \
 do {                             \
-WORD tmp;                    \
+uint16_t tmp;                    \
 if (!SKIP_CYCLE) {           \
 STACK_PEEK();            \
 CLK_INC();               \
 }                            \
-tmp = (WORD)PULL();          \
+tmp = (uint16_t)PULL();          \
 CLK_INC();                   \
-LOCAL_SET_STATUS((BYTE)tmp); \
-tmp = (WORD)PULL();          \
+LOCAL_SET_STATUS((uint8_t)tmp); \
+tmp = (uint16_t)PULL();          \
 CLK_INC();                   \
-tmp |= (WORD)PULL() << 8;    \
+tmp |= (uint16_t)PULL() << 8;    \
 CLK_INC();                   \
 JUMP(tmp);                   \
 } while (0)
 		
 #define RTS()                 \
 do {                      \
-WORD tmp;             \
+uint16_t tmp;             \
 if (!SKIP_CYCLE) {    \
 STACK_PEEK();     \
 CLK_INC();        \
@@ -2670,7 +2992,7 @@ INC_PC(2);                  \
 		
 #define SBC(get_func, pc_inc)                                                               \
 do {                                                                                    \
-WORD src, tmp;                                                                      \
+uint16_t src, tmp;                                                                      \
 \
 get_func(src)                                                                       \
 tmp = reg_a_read - src - ((reg_p & P_CARRY) ? 0 : 1);                               \
@@ -2688,12 +3010,12 @@ tmp_a -= 0x60;                                                              \
 LOCAL_SET_CARRY(tmp < 0x100);                                                   \
 LOCAL_SET_NZ(tmp & 0xff);                                                       \
 LOCAL_SET_OVERFLOW(((reg_a_read ^ tmp) & 0x80) && ((reg_a_read ^ src) & 0x80)); \
-reg_a_write = (BYTE) tmp_a;                                                     \
+reg_a_write = (uint8_t) tmp_a;                                                     \
 } else {                                                                            \
 LOCAL_SET_NZ(tmp & 0xff);                                                       \
 LOCAL_SET_CARRY(tmp < 0x100);                                                   \
 LOCAL_SET_OVERFLOW(((reg_a_read ^ tmp) & 0x80) && ((reg_a_read ^ src) & 0x80)); \
-reg_a_write = (BYTE) tmp;                                                       \
+reg_a_write = (uint8_t) tmp;                                                       \
 }                                                                                   \
 INC_PC(pc_inc);                                                                     \
 } while (0)
@@ -2740,7 +3062,7 @@ INC_PC(2);                                     \
 #define SH_ABS_I(reg_and, reg_i)                                        \
 do {                                                                \
 if (!SKIP_CYCLE) {                                              \
-LOAD_CHECK_BA_LOW(((p2 + reg_i) & 0xff) | ((p2) & 0xff00)); \
+LOAD_CHECK_BA_LOW_DUMMY(((p2 + reg_i) & 0xff) | ((p2) & 0xff00)); \
 CLK_INC();                                                  \
 }                                                               \
 SET_ABS_SH_I(p2, reg_and, reg_i);                               \
@@ -2836,7 +3158,7 @@ INC_PC(1);                \
 		
 		/* ------------------------------------------------------------------------- */
 		
-		static const BYTE fetch_tab[] = {
+		static const uint8_t fetch_tab[] = {
 			/* 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
 			/* $00 */  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, /* $00 */
 			/* $10 */  0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, /* $10 */
@@ -2879,7 +3201,18 @@ INC_PC(1);                \
 			while (CLK >= alarm_context_next_pending_clk(ALARM_CONTEXT)) {
 				alarm_context_dispatch(ALARM_CONTEXT, CLK);
 			}
-			
+
+			/* HACK: when the CPU is jammed, no interrupts are served, the only way
+			   to recover is reset. so we clear the interrupt flags and force
+			   acknowledging them here in this case. */
+			if (CPU_IS_JAMMED) {
+				interrupt_ack_irq(CPU_INT_STATUS);
+				CPU_INT_STATUS->global_pending_int &= ~(IK_IRQ | IK_NMI);
+				if (CPU_INT_STATUS->global_pending_int & IK_RESET) {
+					CPU_IS_JAMMED = 0;
+				}
+			}
+
 			{
 				enum cpu_int pending_interrupt;
 
@@ -2968,27 +3301,32 @@ INC_PC(1);                \
 				
 				c64d_maincpu_current_instruction_clk = maincpu_clk;
 				
-				if (c64d_debug_mode != DEBUGGER_MODE_RUN_ONE_INSTRUCTION
-					&& c64d_debug_mode != DEBUGGER_MODE_RUN_ONE_CYCLE)
 				{
-					// c64d check PC breakpoint after IRQ or trap
-					c64d_c64_check_pc_breakpoint(reg_pc);
-					viceCurrentC64PC = reg_pc;
-					c64d_debug_pause_check(1);
-					debug_iterations_after_restore = 0;
+					int _dm = c64d_debug_mode_get();
+					if (_dm != DEBUGGER_MODE_RUN_ONE_INSTRUCTION
+						&& _dm != DEBUGGER_MODE_RUN_ONE_CYCLE)
+					{
+						// c64d check PC breakpoint after IRQ or trap
+						c64d_c64_check_pc_breakpoint(reg_pc);
+						viceCurrentC64PC = reg_pc;
+						c64d_debug_pause_check(1);
+						debug_iterations_after_restore = 0;
+					}
 				}
 			}
 			
 			{
 				opcode_t opcode;
-#ifdef VICE_DEBUG
+#if defined (DEBUG) || defined (FEATURE_CPUMEMHISTORY)
 				debug_clk = maincpu_clk;
 #endif
-				
+
 #ifdef FEATURE_CPUMEMHISTORY
 				memmap_state |= (MEMMAP_STATE_INSTR | MEMMAP_STATE_OPCODE);
 #endif
-				
+
+				stolen_cycles = 0;
+
 				debug_iterations_after_restore++;
 				debug_prev_iteration_pc = reg_pc;
 				SET_LAST_ADDR(reg_pc);
@@ -3003,29 +3341,43 @@ INC_PC(1);                \
 					}
 				}
 				///
-				FETCH_OPCODE(opcode);
+				/* HACK: The real CPU would stop fetching opcodes all together when
+				 * "jammed" - however, our code may rely on FETCH_OPCODE being called
+				 * here, so we can not simply skip it. What we do instead is remembering
+				 * the opcode fetched when not jammed and force it when jammed.
+				 * This is needed so the CPU would not continue executing opcodes when
+				 * the value at the original jam location changed to a non-jam, for
+				 * whatever reason.
+				 */
+				{
+					static uint8_t lastop;
+					FETCH_OPCODE(opcode);
+					if (!CPU_IS_JAMMED) {
+						/* remember current opcode */
+						lastop = p0;
+					} else {
+						/* set opcode that made the cpu jam */
+						SET_OPCODE(lastop);
+					}
+				}
 				
 #ifdef FEATURE_CPUMEMHISTORY
 				/* If reg_pc >= bank_limit  then JSR (0x20) hasn't load p2 yet.
 				 The earlier LOAD(reg_pc+2) hack can break stealing badly on x64sc.
 				 The fixing is now handled in JSR(). */
-				monitor_cpuhistory_store(reg_pc, p0, p1, p2 >> 8, reg_a_read, reg_x, reg_y, reg_sp, LOCAL_STATUS());
+				monitor_cpuhistory_store(debug_clk, reg_pc, p0, p1, p2 >> 8, reg_a_read, reg_x, reg_y, reg_sp, LOCAL_STATUS(), ORIGIN_MEMSPACE);
 				memmap_state &= ~(MEMMAP_STATE_INSTR | MEMMAP_STATE_OPCODE);
 #endif
 				
-#ifdef VICE_DEBUG
-				
-				// TODO: shall we put here a hook to C64 Debugger?
-
-				
+#ifdef DEBUG
 				if (TRACEFLG) {
-					BYTE op = (BYTE)(p0);
-					BYTE lo = (BYTE)(p1);
-					BYTE hi = (BYTE)(p2 >> 8);
-					
-					debug_maincpu((DWORD)(reg_pc), debug_clk,
+					uint8_t op = (uint8_t)(p0);
+					uint8_t lo = (uint8_t)(p1);
+					uint8_t hi = (uint8_t)(p2 >> 8);
+
+					debug_maincpu((uint32_t)(reg_pc), debug_clk,
 								  mon_disassemble_to_string(e_comp_space,
-															(WORD) reg_pc, op,
+															(uint16_t) reg_pc, op,
 															lo, hi, 0, 1, "6502"),
 								  reg_a_read, reg_x, reg_y, reg_sp);
 				}
@@ -3042,7 +3394,14 @@ INC_PC(1);                \
 				
 				switch (p0) {
 					case 0x00:          /* BRK */
-						c64d_set_debug_mode(DEBUGGER_MODE_PAUSED);
+						// Don't auto-pause when a hardware reset is pending.
+						// During reset, mem_powerup() clears RAM to 0x00 which the
+						// CPU may fetch as BRK before IK_RESET is processed on the
+						// next loop iteration. Let the reset proceed normally.
+						if (!(CPU_INT_STATUS->global_pending_int & IK_RESET))
+						{
+							c64d_set_debug_mode(DEBUGGER_MODE_PAUSED);
+						}
 						BRK();
 						break;
 						
@@ -3068,6 +3427,7 @@ INC_PC(1);                \
 					case 0x32:          /* JAM */
 					case 0x42:          /* JAM */
 #endif
+						CPU_IS_JAMMED = 1;
 						REWIND_FETCH_OPCODE(CLK);
 						JAM();
 						break;
@@ -3698,7 +4058,7 @@ INC_PC(1);                \
 						break;
 						
 					case 0xab:          /* LXA #$nn */
-						LXA(p1, 2);
+						LXA();
 						break;
 						
 					case 0xac:          /* LDY $nnnn */
@@ -4002,17 +4362,27 @@ INC_PC(1);                \
 		if (c64d_is_debug_on_c64())
 		{
 			// one instruction has been just run, pause
-			if (c64d_debug_mode == DEBUGGER_MODE_RUN_ONE_INSTRUCTION)
 			{
-				c64d_debug_mode = DEBUGGER_MODE_PAUSED;
+			int _dm = c64d_debug_mode_get();
+			if (_dm == DEBUGGER_MODE_RUN_ONE_INSTRUCTION)
+			{
+				c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "cpu-post-step");
+				c64d_debug_mode_store(DEBUGGER_MODE_PAUSED);
 				LOGD("maincpuclk=%d previous=%d previous2=%d",
 					 maincpu_clk, c64d_maincpu_previous_instruction_clk, c64d_maincpu_previous2_instruction_clk);
 			}
-			
+			else if (_dm == DEBUGGER_MODE_PAUSED)
+			{
+				// This is the normal path when mode was set to PAUSED by a breakpoint or other source.
+				// Log to detect if something set PAUSED during instruction execution (e.g. memory/raster BP)
+				LOGD("cpu-post-instr: mode already PAUSED at pc=%04x (set by: %s)", reg_pc, c64d_debug_mode_last_setter);
+			}
+			}
+
 			//c64d_c64_check_pc_breakpoint(reg_pc);
-			
+
 			viceCurrentC64PC = reg_pc;
-			
+
 			c64d_debug_pause_check(0);
 		}
 		
@@ -4028,7 +4398,7 @@ INC_PC(1);                \
 		maincpu_int_status->num_dma_per_opcode = 0;
 		
 		if (maincpu_clk_limit && (maincpu_clk > maincpu_clk_limit)) {
-			log_error(LOG_DEFAULT, "cycle limit reached.");
+			log_error(maincpu_log, "cycle limit reached.");
 			exit(EXIT_FAILURE);
 		}
 #if 0
@@ -4042,7 +4412,8 @@ INC_PC(1);                \
 void c64d_set_debug_mode(int newMode)
 {
 	LOGD("c64d_set_debug_mode: %d", newMode);
-	c64d_debug_mode = newMode;
+	c64d_debug_mode_trace(newMode, "SetDebugMode-UI");
+	c64d_debug_mode_store(newMode);
 }
 
 int c64d_c64_do_cycle()
@@ -4052,21 +4423,42 @@ int c64d_c64_do_cycle()
 	
 	c64d_c64_instruction_cycle++;
 	
+	// Check input events and pending tasks — only when flag is set
+	// (c64d_vice_input_tasks_flag is a simple volatile int, zero overhead when idle)
+	if (c64d_vice_input_tasks_flag)
+	{
+		// per-cycle (mid-instruction) hook: process input tasks ONLY.
+		// allowSnapshotRestore=0 — restoring here would leave reg_pc stale and
+		// jam the CPU; the pending restore is applied at the instruction
+		// boundary by c64d_check_cpu_snapshot_manager_restore (with IMPORT_REGISTERS).
+		c64d_check_snapshot_restore(0);
+	}
+
 	if (c64d_is_debug_on_c64())
 	{
-		if (c64d_debug_mode == DEBUGGER_MODE_RUN_ONE_CYCLE)
+		int _dm = c64d_debug_mode_get();
+		if (_dm == DEBUGGER_MODE_RUN_ONE_CYCLE)
 		{
-			c64d_debug_mode = DEBUGGER_MODE_PAUSED;
+			c64d_debug_mode_trace(DEBUGGER_MODE_PAUSED, "cpu-cycle-step");
+			c64d_debug_mode_store(DEBUGGER_MODE_PAUSED);
+			_dm = DEBUGGER_MODE_PAUSED;
 		}
-		
-		if (c64d_debug_mode == DEBUGGER_MODE_RUNNING)
+
+		if (_dm == DEBUGGER_MODE_RUNNING)
 		{
 			return vicii_cycle();
 		}
-		
+
+		// If mode is PAUSED here (not RUNNING, not stepping), something set it during this cycle
+		// (e.g. memory breakpoint, raster breakpoint). Log this as it causes mid-instruction pause.
+		if (_dm == DEBUGGER_MODE_PAUSED && c64d_c64_instruction_cycle > 0)
+		{
+			LOGD("DIAG: mid-instruction pause at cycle %d (set by: %s)", c64d_c64_instruction_cycle, c64d_debug_mode_last_setter);
+		}
+
 		c64d_debug_pause_check(0);
 	}
-	
+
 	return vicii_cycle();
 }
 
@@ -4133,28 +4525,31 @@ unsigned int maincpu_get_sp(void) {
 
 static char snap_module_name[] = "MAINCPU";
 #define SNAP_MAJOR 1
-#define SNAP_MINOR 1
+#define SNAP_MINOR 4
 
 int maincpu_snapshot_write_module(snapshot_t *s)
 {
 	snapshot_module_t *m;
-	
-	m = snapshot_module_create(s, snap_module_name, ((BYTE)SNAP_MAJOR),
-							   ((BYTE)SNAP_MINOR));
+
+	m = snapshot_module_create(s, snap_module_name, ((uint8_t)SNAP_MAJOR),
+							   ((uint8_t)SNAP_MINOR));
 	if (m == NULL) {
 		return -1;
 	}
-	
+
 	if (0
-		|| SMW_DW(m, maincpu_clk) < 0
+		|| SMW_CLOCK(m, maincpu_clk) < 0
 		|| SMW_B(m, MOS6510_REGS_GET_A(&maincpu_regs)) < 0
 		|| SMW_B(m, MOS6510_REGS_GET_X(&maincpu_regs)) < 0
 		|| SMW_B(m, MOS6510_REGS_GET_Y(&maincpu_regs)) < 0
 		|| SMW_B(m, MOS6510_REGS_GET_SP(&maincpu_regs)) < 0
-		|| SMW_W(m, (WORD)MOS6510_REGS_GET_PC(&maincpu_regs)) < 0
-		|| SMW_B(m, (BYTE)MOS6510_REGS_GET_STATUS(&maincpu_regs)) < 0
-		|| SMW_DW(m, (DWORD)last_opcode_info) < 0
-		|| SMW_DW(m, (DWORD)maincpu_ba_low_flags) < 0) {
+		|| SMW_W(m, (uint16_t)MOS6510_REGS_GET_PC(&maincpu_regs)) < 0
+		|| SMW_B(m, (uint8_t)MOS6510_REGS_GET_STATUS(&maincpu_regs)) < 0
+		|| SMW_DW(m, (uint32_t)last_opcode_info) < 0
+		|| SMW_DW(m, (uint32_t)ane_log_level) < 0
+		|| SMW_DW(m, (uint32_t)lxa_log_level) < 0
+		|| SMW_DW(m, (uint32_t)maincpu_jammed) < 0
+		|| SMW_DW(m, (uint32_t)maincpu_ba_low_flags) < 0) {
 		goto fail;
 	}
 	
@@ -4181,19 +4576,18 @@ fail:
 
 int maincpu_snapshot_read_module(snapshot_t *s)
 {
-	BYTE a, x, y, sp, status;
-	WORD pc;
-	BYTE major, minor;
+	uint8_t a, x, y, sp, status;
+	uint16_t pc;
+	uint8_t major, minor;
 	snapshot_module_t *m;
-	
+
 	m = snapshot_module_open(s, snap_module_name, &major, &minor);
 	if (m == NULL) {
 		return -1;
 	}
-	
-	/* XXX: Assumes `CLOCK' is the same size as a `DWORD'.  */
+
 	if (0
-		|| SMR_DW(m, &maincpu_clk) < 0
+		|| SMR_CLOCK(m, &maincpu_clk) < 0
 		|| SMR_B(m, &a) < 0
 		|| SMR_B(m, &x) < 0
 		|| SMR_B(m, &y) < 0
@@ -4201,10 +4595,13 @@ int maincpu_snapshot_read_module(snapshot_t *s)
 		|| SMR_W(m, &pc) < 0
 		|| SMR_B(m, &status) < 0
 		|| SMR_DW_UINT(m, &last_opcode_info) < 0
+		|| SMR_DW_INT(m, &ane_log_level) < 0
+		|| SMR_DW_INT(m, &lxa_log_level) < 0
+		|| SMR_DW_INT(m, &maincpu_jammed) < 0
 		|| SMR_DW_INT(m, &maincpu_ba_low_flags) < 0) {
 		goto fail;
 	}
-	
+
 	MOS6510_REGS_SET_A(&maincpu_regs, a);
 	MOS6510_REGS_SET_X(&maincpu_regs, x);
 	MOS6510_REGS_SET_Y(&maincpu_regs, y);
@@ -4235,12 +4632,12 @@ fail:
 
 int c64d_check_cpu_snapshot_manager_restore()
 {
-	if (c64d_check_snapshot_restore())
+	if (c64d_check_snapshot_restore(1))
 	{
 		enum cpu_int pending_interrupt;
 
 //		EXPORT_REGISTERS();                                            \
-//		interrupt_do_trap(CPU_INT_STATUS, (WORD)reg_pc);               \
+//		interrupt_do_trap(CPU_INT_STATUS, (uint16_t)reg_pc);               \
 //		IMPORT_REGISTERS();                                            \
 //		if (CPU_INT_STATUS->global_pending_int & IK_RESET) {           \
 //			ik |= IK_RESET;                                            \
@@ -4250,6 +4647,7 @@ int c64d_check_cpu_snapshot_manager_restore()
 
 		IMPORT_REGISTERS();
 		viceCurrentC64PC = maincpu_get_pc();
+		c64d_debug_last_restore_clk = maincpu_clk;
 
 		LOGD("viceCurrentC64PC=%04x reg_pc=%04x", viceCurrentC64PC, reg_pc);
 

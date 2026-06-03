@@ -14,6 +14,7 @@
 #include "IMG_Filters.h"
 #include "IMG_Scale.h"
 #include "C64Tools.h"
+#include "exomizer.h"
 #include "CMainMenuBar.h"
 #include "CLayoutParameter.h"
 
@@ -56,7 +57,8 @@ enum
 	VICEDITOR_EXPORT_KOALA		= 3,
 	VICEDITOR_EXPORT_ART_STUDIO	= 4,
 	VICEDITOR_EXPORT_RAW_TEXT	= 5,
-	VICEDITOR_EXPORT_PNG		= 6
+	VICEDITOR_EXPORT_PNG		= 6,
+	VICEDITOR_EXPORT_PRG		= 7
 };
 
 
@@ -132,6 +134,10 @@ CViewC64VicEditor::CViewC64VicEditor(const char *name, float posX, float posY, f
 
 	viewC64->config->GetBool("VicEditorShowBadLines", &viewVicDisplay->showBadLines, false);
 
+	bool showSpritesFramesSetting = false;
+	viewC64->config->GetBool("VicEditorShowSpritesFrames", &showSpritesFramesSetting, false);
+	SetSpritesFramesVisible(showSpritesFramesSetting);
+
 	// Restore selected layer from config
 	this->selectedLayer = NULL;
 	char savedLayerName[128];
@@ -183,6 +189,7 @@ CViewC64VicEditor::CViewC64VicEditor(const char *name, float posX, float posY, f
 	exportHiresBitmapFileExtensions.push_back(new CSlrString("art"));
 	exportHiresTextFileExtensions.push_back(new CSlrString("rawtext"));
 	exportPNGFileExtensions.push_back(new CSlrString("png"));
+	exportPRGFileExtensions.push_back(new CSlrString("prg"));
 	
 	// this will be created elsewhere
 	viewLayers = NULL;
@@ -956,6 +963,7 @@ bool CViewC64VicEditor::KeyboardShortcut(CSlrKeyboardShortcut *shortcut)
 	{
 		bool show = !viewVicDisplay->showSpritesFrames;
 		SetSpritesFramesVisible(show);
+		viewC64->config->SetBool("VicEditorShowSpritesFrames", &viewVicDisplay->showSpritesFrames);
 		return true;
 	}
 	else if (shortcut == kbsVicEditorSelectNextLayer)
@@ -1651,6 +1659,12 @@ void CViewC64VicEditor::ZoomDisplay(float newScale, float anchorX, float anchorY
 	viewVicDisplay->UpdateGridLinesVisibleOnCurrentZoom();
 
 	guiMain->UnlockMutex();
+}
+
+void CViewC64VicEditor::ResetZoomAndPosition()
+{
+	ZoomDisplay(1.0f);
+	viewVicDisplay->SetPosition(posX, posY, -1, sizeX, sizeY);
 }
 
 ///////
@@ -2890,9 +2904,22 @@ void CViewC64VicEditor::OpenDialogExportFile()
 
 		// multi bitmap
 		exportFileDialogMode = VICEDITOR_EXPORT_PNG;
-		
+
 		CSlrString *windowTitle = new CSlrString("Export screen to PNG");
 		viewC64->ShowDialogSaveFile(this, &exportPNGFileExtensions, defaultFileName, c64SettingsDefaultVicEditorFolder, windowTitle);
+		delete windowTitle;
+		delete defaultFileName;
+		return;
+	}
+	else if (exportMode == VICEDITOR_EXPORT_PRG)
+	{
+		LOGD(" ..... export prg");
+		CSlrString *defaultFileName = new CSlrString("picture");
+
+		exportFileDialogMode = VICEDITOR_EXPORT_PRG;
+
+		CSlrString *windowTitle = new CSlrString("Export image as C64 PRG");
+		viewC64->ShowDialogSaveFile(this, &exportPRGFileExtensions, defaultFileName, c64SettingsDefaultVicEditorFolder, windowTitle);
 		delete windowTitle;
 		delete defaultFileName;
 		return;
@@ -3000,6 +3027,10 @@ void CViewC64VicEditor::SystemDialogFileSaveSelected(CSlrString *path)
 	else if (exportFileDialogMode == VICEDITOR_EXPORT_PNG)
 	{
 		ExportPNG(path);
+	}
+	else if (exportFileDialogMode == VICEDITOR_EXPORT_PRG)
+	{
+		ExportPRG(path);
 	}
 	
 #ifdef WIN32
@@ -3852,13 +3883,13 @@ bool CViewC64VicEditor::ExportPNG(CSlrString *path)
 	path->DebugPrint("ExportPNG path=");
 	
 	guiMain->LockMutex();
-	viewC64->debugInterfaceC64->LockRenderScreenMutex();
-	
+
 	// refresh texture of C64's screen
-	CImageData *c64Screen = viewC64->debugInterfaceC64->GetScreenImageData();
+	CImageData *c64Screen = viewC64->debugInterfaceC64->AcquireScreenImageForRendering();
 	CImageData *imageCrop = IMG_CropSupersampleImageRGBA(c64Screen,
 														 viewC64->debugInterfaceC64->screenSupersampleFactor,
 														 0, 0, viewC64->debugInterfaceC64->GetScreenSizeX(), viewC64->debugInterfaceC64->GetScreenSizeY());
+	viewC64->debugInterfaceC64->ReleaseScreenImageAfterRendering();
 
 	viewVicDisplay->RefreshScreenImageData(&(viewC64->viciiStateToShow), 255, 255);
 	layerVirtualSprites->SimpleScanSpritesInThisFrame();
@@ -4020,17 +4051,165 @@ bool CViewC64VicEditor::ExportPNG(CSlrString *path)
 	}
 	
 	//
-	viewC64->debugInterfaceC64->UnlockRenderScreenMutex();
 	guiMain->UnlockMutex();
-	
+
 	CSlrString *str = path->GetFileNameComponentFromPath();
 	str->Concatenate(" exported");
 	viewC64->ShowMessageSuccess(str);
 	delete str;
 	
 	LOGM("CViewVicEditor::ExportPNG: file saved");
-	
+
 	return true;
+}
+
+void CViewC64VicEditor::SaveAsPRG()
+{
+	exportMode = VICEDITOR_EXPORT_PRG;
+	this->OpenDialogExportFile();
+}
+
+// Build a self-displaying C64 PRG of the current VIC editor image.
+// Strategy: take a snapshot of the live RAM, inject a color-RAM backup and a
+// small init stub into the buffer, then crunch the buffer with Exomizer. The
+// resulting PRG includes a BASIC SYS bootstrap; on RUN, the depacker restores
+// memory and JMPs to the stub which sets VIC + copies color RAM + spins.
+bool CViewC64VicEditor::ExportPRG(CSlrString *path)
+{
+	LOGD("CViewVicEditor::ExportPRG");
+	path->DebugPrint("ExportPRG path=");
+
+	guiMain->LockMutex();
+
+	vicii_cycle_state_t *viciiState = &(viewC64->currentViciiState);
+
+	u8 d011 = viciiState->regs[0x11];
+	u8 d016 = viciiState->regs[0x16];
+	u8 d018 = viciiState->regs[0x18];
+	u8 d020 = viciiState->regs[0x20];
+	u8 d021 = viciiState->regs[0x21];
+
+	// VIC bank from CIA2 PA0/PA1 (inverted): bank 0..3 → bits 11,10,01,00
+	int vbank = viciiState->vbank_phi1;
+	u8 bankNum = (u8)((vbank >> 14) & 3);
+	u8 dd00val = (u8)(0xC0 | ((3 - bankNum) & 3));
+
+	// Grab pointer to live color RAM (1KB, lower nibble used).
+	u8 *screen_ptr;
+	u8 *color_ram_ptr;
+	u8 *chargen_ptr;
+	u8 *bitmap_low_ptr;
+	u8 *bitmap_high_ptr;
+	u8 d020colors[0x0F];
+	viewVicDisplay->GetViciiPointers(viciiState,
+									 &screen_ptr, &color_ram_ptr, &chargen_ptr,
+									 &bitmap_low_ptr, &bitmap_high_ptr, d020colors);
+
+	// Snapshot of full 64KB user RAM (no I/O overlay).
+	u8 *ram = new u8[0x10000];
+	debugInterface->GetWholeMemoryMapFromRam(ram);
+
+	// Drop the color-RAM backup at $C800..$CBFF in the buffer.
+	for (int i = 0; i < 0x0400; i++)
+	{
+		ram[0xC800 + i] = color_ram_ptr[i] & 0x0F;
+	}
+
+	// Init stub at $0810. Layout / disasm:
+	//   SEI
+	//   LDA #$35       STA $01              ; I/O on, BASIC/KERNAL off
+	//   LDA #dd00val   STA $DD00            ; VIC bank
+	//   LDA #d018      STA $D018            ; screen / charset / bitmap pointers
+	//   LDA #d016      STA $D016            ; MCM
+	//   LDA #d020      STA $D020            ; border
+	//   LDA #d021      STA $D021            ; background
+	//   LDX #$00
+	// loop ($0830):
+	//   LDA $C800,X  STA $D800,X
+	//   LDA $C900,X  STA $D900,X
+	//   LDA $CA00,X  STA $DA00,X
+	//   LDA $CB00,X  STA $DB00,X
+	//   INX
+	//   BNE loop
+	//   LDA #d011    STA $D011              ; enable display last (ECM/BMM/DEN/Y-scroll)
+	// spin ($0850):
+	//   JMP spin
+	const int stubAddr = 0x0810;
+	u8 stub[] = {
+		0x78,                           // SEI
+		0xA9, 0x35,  0x85, 0x01,        // LDA #$35  STA $01
+		0xA9, dd00val,  0x8D, 0x00, 0xDD,
+		0xA9, d018,     0x8D, 0x18, 0xD0,
+		0xA9, d016,     0x8D, 0x16, 0xD0,
+		0xA9, d020,     0x8D, 0x20, 0xD0,
+		0xA9, d021,     0x8D, 0x21, 0xD0,
+		0xA2, 0x00,                     // LDX #$00
+		// loop @ +0x20
+		0xBD, 0x00, 0xC8, 0x9D, 0x00, 0xD8,
+		0xBD, 0x00, 0xC9, 0x9D, 0x00, 0xD9,
+		0xBD, 0x00, 0xCA, 0x9D, 0x00, 0xDA,
+		0xBD, 0x00, 0xCB, 0x9D, 0x00, 0xDB,
+		0xE8,                           // INX
+		0xD0, 0xE5,                     // BNE loop  (-27)
+		0xA9, d011,     0x8D, 0x11, 0xD0,
+		0x4C, 0x50, 0x08                // JMP $0850
+	};
+	const int stubSize = (int)sizeof(stub);
+	for (int i = 0; i < stubSize; i++)
+	{
+		ram[stubAddr + i] = stub[i];
+	}
+
+	// Crunch from $0801 (BASIC start) to $D000 (top of user RAM, just below I/O).
+	// Exomizer prepends a BASIC SYS bootstrap → stage1 (decruncher init) at $080B →
+	// stage2 → JMP <start> after decompression. We hand the depacker our stub
+	// address as `start`.
+	const int fromAddr = 0x0801;
+	const int toAddr   = 0xD000;
+	const int jmpAddr  = stubAddr;
+
+	int dataSize = toAddr - fromAddr;
+	u8 *compressed = new u8[0x10000];
+	int prgSize = exomizer(ram + fromAddr, dataSize, fromAddr, jmpAddr, compressed);
+
+	// Match C64SaveMemoryExomizerPRG convention: BASIC line = 666.
+	const int lineNumber = 666;
+	compressed[4] = (u8)(lineNumber & 0xFF);
+	compressed[5] = (u8)(lineNumber >> 8);
+
+	char *cPath = path->GetStdASCII();
+	LOGD(" ..... cPath='%s'", cPath);
+
+	bool ok = false;
+	FILE *fp = fopen(cPath, "wb");
+	if (fp)
+	{
+		fwrite(compressed, prgSize, 1, fp);
+		fclose(fp);
+		ok = true;
+	}
+
+	delete [] cPath;
+	delete [] compressed;
+	delete [] ram;
+
+	guiMain->UnlockMutex();
+
+	if (ok)
+	{
+		CSlrString *str = path->GetFileNameComponentFromPath();
+		str->Concatenate(" exported");
+		viewC64->ShowMessageSuccess(str);
+		delete str;
+		LOGM("CViewVicEditor::ExportPRG: file saved (%d bytes)", prgSize);
+	}
+	else
+	{
+		viewC64->ShowMessageError("Failed to write PRG file");
+		LOGError("CViewVicEditor::ExportPRG: fopen failed");
+	}
+
+	return ok;
 }
 
 //
@@ -4039,8 +4218,7 @@ bool CViewC64VicEditor::ExportSpritesData(CSlrString *path)
 	LOGD("CViewVicEditor::ExportSpritesData");
 	
 	guiMain->LockMutex();
-	viewC64->debugInterfaceC64->LockRenderScreenMutex();
-	
+
 	// refresh texture of C64's screen
 	layerVirtualSprites->SimpleScanSpritesInThisFrame();
 	
@@ -4113,9 +4291,8 @@ bool CViewC64VicEditor::ExportSpritesData(CSlrString *path)
 	}
 	
 	//
-	viewC64->debugInterfaceC64->UnlockRenderScreenMutex();
 	guiMain->UnlockMutex();
-	
+
 	LOGM("CViewVicEditor::ExportSpritesData: file saved");
 	
 	return true;
@@ -4341,6 +4518,11 @@ void CViewC64VicEditor::RenderContextMenuItems()
 	{
 		this->SaveScreenshotAsPNG();
 	}
+
+	if (ImGui::MenuItem("Save as PRG"))
+	{
+		this->SaveAsPRG();
+	}
 	
 	recentlyOpened->RenderImGuiMenu("Recent##CViewC64VicEditor");
 	
@@ -4374,6 +4556,7 @@ void CViewC64VicEditor::RenderContextMenuItems()
 	if (ImGui::MenuItem("Show sprites frames", kbsVicEditorToggleSpriteFrames->cstr, &showSpritesFrames))
 	{
 		SetSpritesFramesVisible(showSpritesFrames);
+		viewC64->config->SetBool("VicEditorShowSpritesFrames", &viewVicDisplay->showSpritesFrames);
 	}
 
 	bool showRasterBeam = viewC64->isShowingRasterCross;
@@ -4446,8 +4629,7 @@ void CViewC64VicEditor::RenderContextMenuItems()
 	
 	if (ImGui::MenuItem("Reset zoom", NULL))
 	{
-		ZoomDisplay(1.0f);
-		viewVicDisplay->SetPosition(posX, posY, -1, sizeX, sizeY);
+		ResetZoomAndPosition();
 	}
 }
 

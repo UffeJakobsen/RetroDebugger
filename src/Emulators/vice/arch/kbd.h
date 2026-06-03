@@ -31,12 +31,12 @@
 #include "vice_sdl.h"
 #include "uimenu.h"
 
-extern void kbd_arch_init(void);
-extern int kbd_arch_get_host_mapping(void);
+void kbd_arch_init(void);
+int kbd_arch_get_host_mapping(void);
 
-extern signed long kbd_arch_keyname_to_keynum(char *keyname);
-extern const char *kbd_arch_keynum_to_keyname(signed long keynum);
-extern void kbd_initialize_numpad_joykeys(int *joykeys);
+signed long kbd_arch_keyname_to_keynum(char *keyname);
+const char *kbd_arch_keynum_to_keyname(signed long keynum);
+void kbd_initialize_numpad_joykeys(int *joykeys);
 
 #define KBD_PORT_PREFIX "sdl"
 
@@ -73,17 +73,17 @@ extern void kbd_initialize_numpad_joykeys(int *joykeys);
 //extern ui_menu_action_t sdlkbd_release(SDLKey key, SDLMod mod);
 //
 //extern void sdlkbd_set_hotkey(SDLKey key, SDLMod mod, ui_menu_entry_t *value);
-extern int sdlkbd_hotkeys_load(const char *filename);
-extern int sdlkbd_hotkeys_load(const char *filename);
-extern int sdlkbd_hotkeys_dump(const char *filename);
+int sdlkbd_hotkeys_load(const char *filename);
+int sdlkbd_hotkeys_load(const char *filename);
+int sdlkbd_hotkeys_dump(const char *filename);
 
-extern int sdlkbd_init_resources(void);
-extern void sdlkbd_resources_shutdown(void);
+int sdlkbd_init_resources(void);
+void sdlkbd_resources_shutdown(void);
 
-extern int sdlkbd_init_cmdline(void);
+int sdlkbd_init_cmdline(void);
 
-extern void kbd_enter_leave(void);
-extern void kbd_focus_change(void);
+void kbd_enter_leave(void);
+void kbd_focus_change(void);
 
 extern int sdl_ui_menukeys[];
 

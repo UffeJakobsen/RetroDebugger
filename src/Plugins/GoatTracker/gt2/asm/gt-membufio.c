@@ -29,6 +29,7 @@
 #include "gt-log.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "gt-abort.h"
 
 
 void read_file(const char *name, struct membuf *buf)

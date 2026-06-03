@@ -30,10 +30,10 @@
 struct drive_s;
 struct drive_context_s;
 
-extern void drivesync_factor(struct drive_context_s *drv);
-extern void drivesync_set_1571(int new_sync, struct drive_context_s *drv);
-extern void drivesync_set_4000(struct drive_context_s *drv, int new_sync);
-extern void drivesync_clock_frequency(unsigned int type,
-                                      struct drive_s *drive);
+void drivesync_factor(struct drive_context_s *drv);
+void drivesync_set_1571(struct drive_context_s *drv, int new_sync);
+void drivesync_set_4000(struct drive_context_s *drv, int new_sync);
+void drivesync_clock_frequency(struct drive_context_s *unit,
+                                      unsigned int type);
 
 #endif

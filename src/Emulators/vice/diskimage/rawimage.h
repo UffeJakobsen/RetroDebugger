@@ -38,22 +38,22 @@ typedef struct rawimage_s {
 } rawimage_t;
 
 
-extern void rawimage_init(void);
-extern int rawimage_resources_init(void);
-extern int rawimage_cmdline_options_init(void);
-extern void rawimage_resources_shutdown(void);
+void rawimage_init(void);
+int rawimage_resources_init(void);
+int rawimage_cmdline_options_init(void);
+void rawimage_resources_shutdown(void);
 
-extern void rawimage_name_set(struct disk_image_s *image, const char *name);
-extern const char *rawimage_name_get(const struct disk_image_s *image);
-extern void rawimage_driver_name_set(struct disk_image_s *image);
+void rawimage_name_set(struct disk_image_s *image, const char *name);
+const char *rawimage_name_get(const struct disk_image_s *image);
+void rawimage_driver_name_set(struct disk_image_s *image);
 
-extern int rawimage_open(struct disk_image_s *image);
-extern int rawimage_close(struct disk_image_s *image);
-extern int rawimage_read_sector(const struct disk_image_s *image, BYTE *buf,
+int rawimage_open(struct disk_image_s *image);
+int rawimage_close(struct disk_image_s *image);
+int rawimage_read_sector(const struct disk_image_s *image, uint8_t *buf,
                                 const struct disk_addr_s *dadr);
-extern int rawimage_write_sector(struct disk_image_s *image, const BYTE *buf,
+int rawimage_write_sector(struct disk_image_s *image, const uint8_t *buf,
                                  const struct disk_addr_s *dadr);
-extern void rawimage_media_create(struct disk_image_s *image);
-extern void rawimage_media_destroy(struct disk_image_s *image);
+void rawimage_media_create(struct disk_image_s *image);
+void rawimage_media_destroy(struct disk_image_s *image);
 
 #endif

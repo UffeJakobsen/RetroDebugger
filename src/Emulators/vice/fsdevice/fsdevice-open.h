@@ -27,13 +27,13 @@
 #ifndef VICE_FSDEVICE_OPEN_H
 #define VICE_FSDEVICE_OPEN_H
 
-#include "vicetypes.h"
+#include "types.h"
 
 struct cbmdos_cmd_parse_s;
 struct vdrive_s;
 
-extern int fsdevice_open(struct vdrive_s *vdrive, const BYTE *name,
-                         unsigned int length, unsigned int secondary,
-                         struct cbmdos_cmd_parse_s *cmd_parse_ext);
+int fsdevice_open(struct vdrive_s *vdrive, const uint8_t *name,
+                  unsigned int length, unsigned int secondary,
+                  struct cbmdos_cmd_parse_s *cmd_parse_ext);
 
 #endif

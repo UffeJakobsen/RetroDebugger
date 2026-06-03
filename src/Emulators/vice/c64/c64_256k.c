@@ -44,23 +44,22 @@
 #include "resources.h"
 #include "reu.h"
 #include "snapshot.h"
-#include "translate.h"
 #include "vicetypes.h"
 #include "uiapi.h"
 #include "util.h"
 #include "vicii.h"
 
 /* 256K registers */
-BYTE c64_256k_DDA;
-BYTE c64_256k_PRA;
-BYTE c64_256k_CRA;
-BYTE c64_256k_DDB;
-BYTE c64_256k_PRB;
-BYTE c64_256k_CRB;
+uint8_t c64_256k_DDA;
+uint8_t c64_256k_PRA;
+uint8_t c64_256k_CRA;
+uint8_t c64_256k_DDB;
+uint8_t c64_256k_PRB;
+uint8_t c64_256k_CRB;
 
 int c64_256k_start;
 
-static log_t c64_256k_log = LOG_ERR;
+static log_t c64_256k_log = LOG_DEFAULT;
 
 static int c64_256k_activate(void);
 static int c64_256k_deactivate(void);
@@ -78,7 +77,7 @@ int c64_256k_segment3;
 /* Filename of the 256K image.  */
 static char *c64_256k_filename = NULL;
 
-BYTE *c64_256k_ram = NULL;
+uint8_t *c64_256k_ram = NULL;
 
 /* ---------------------------------------------------------------------*/
 
@@ -89,9 +88,9 @@ void pia_set_vbank(void)
     mem_set_vbank(0);
 }
 
-static BYTE c64_256k_read(WORD addr)
+static uint8_t c64_256k_read(uint16_t addr)
 {
-    BYTE retval = 0;
+    uint8_t retval = 0;
 
     if (addr == 1) {
         retval = c64_256k_CRA;
@@ -115,9 +114,9 @@ static BYTE c64_256k_read(WORD addr)
     return retval;
 }
 
-static void c64_256k_store(WORD addr, BYTE byte)
+static void c64_256k_store(uint16_t addr, uint8_t byte)
 {
-    BYTE old_prb;
+    uint8_t old_prb;
 
     if (addr == 1) {
         c64_256k_CRA = byte & 0x3f;
@@ -163,18 +162,20 @@ static int c64_256k_dump(void)
 /* ---------------------------------------------------------------------*/
 
 static io_source_t c64_256k_device = {
-    "C64 256K",
-    IO_DETACH_RESOURCE,
-    "C64_256K",
-    0xdf80, 0xdfff, 0x7f,
-    1, /* read is always valid */
-    c64_256k_store,
-    c64_256k_read,
-    c64_256k_read,
-    c64_256k_dump,
-    CARTRIDGE_C64_256K,
-    0,
-    0
+    "C64 256K",           /* name of the device */
+    IO_DETACH_RESOURCE,   /* use resource to detach the device when involved in a read-collision */
+    "C64_256K",           /* resource to set to '0' */
+    0xdf80, 0xdfff, 0x03, /* range for the device, registers:$df80-df83, mirrors:$df84-$dfff, range can be changed */
+    1,                    /* read is always valid */
+    c64_256k_store,       /* store function */
+    NULL,                 /* NO poke function */
+    c64_256k_read,        /* read function */
+    c64_256k_read,        /* peek function */
+    c64_256k_dump,        /* device state information dump function */
+    CARTRIDGE_C64_256K,   /* cartridge ID */
+    IO_PRIO_NORMAL,       /* normal priority, device read needs to be checked for collisions */
+    0,                    /* insertion order, gets filled in by the registration function */
+    IO_MIRROR_NONE        /* NO mirroring */
 };
 
 static io_source_list_t *c64_256k_list_item = NULL;
@@ -194,7 +195,7 @@ int set_c64_256k_enabled(int value, int disable_reset)
             return -1;
         }
         if (!disable_reset) {
-            machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+            machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
         }
         io_source_unregister(c64_256k_list_item);
         c64_256k_list_item = NULL;
@@ -205,7 +206,7 @@ int set_c64_256k_enabled(int value, int disable_reset)
             return -1;
         }
         if (!disable_reset) {
-            machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+            machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
         }
         c64_256k_list_item = io_source_register(&c64_256k_device);
         c64_256k_enabled = 1;
@@ -247,8 +248,8 @@ static int set_c64_256k_base(int val, void *param)
         case 0xde80:
         case 0xdf00:
         case 0xdf80:
-            c64_256k_device.start_address = (WORD)val;
-            c64_256k_device.end_address = (WORD)(val + 0x7f);
+            c64_256k_device.start_address = (uint16_t)val;
+            c64_256k_device.end_address = (uint16_t)(val + 0x7f);
             break;
         default:
             log_message(c64_256k_log, "Unknown 256K base %X.", val);
@@ -296,21 +297,17 @@ void c64_256k_resources_shutdown(void)
 
 static const cmdline_option_t cmdline_options[] =
 {
-    { "-256kimage", SET_RESOURCE, 1,
+    { "-256kimage", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "C64_256Kfilename", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_SPECIFY_C64_256K_NAME,
-      NULL, NULL },
+      "<Name>", "Specify name of 256K image" },
     CMDLINE_LIST_END
 };
 
 static cmdline_option_t base_cmdline_options[] =
 {
-    { "-256kbase", SET_RESOURCE, 1,
+    { "-256kbase", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "C64_256Kbase", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_BASE_ADDRESS, IDCLS_C64_256K_BASE,
-      NULL, NULL },
+      "<Base address>", "Base address of the 256K expansion. (0xDE00/0xDE80/0xDF00/0xDF80)" },
     CMDLINE_LIST_END
 };
 
@@ -404,7 +401,7 @@ void c64_256k_shutdown(void)
 
 /* ------------------------------------------------------------------------- */
 
-void c64_256k_ram_segment0_store(WORD addr, BYTE value)
+void c64_256k_ram_segment0_store(uint16_t addr, uint8_t value)
 {
     c64_256k_ram[(c64_256k_segment0 * 0x4000) + (addr & 0x3fff)] = value;
     if (addr == 0xff00) {
@@ -412,7 +409,7 @@ void c64_256k_ram_segment0_store(WORD addr, BYTE value)
     }
 }
 
-void c64_256k_ram_segment1_store(WORD addr, BYTE value)
+void c64_256k_ram_segment1_store(uint16_t addr, uint8_t value)
 {
     c64_256k_ram[(c64_256k_segment1 * 0x4000) + (addr & 0x3fff)] = value;
     if (addr == 0xff00) {
@@ -420,7 +417,7 @@ void c64_256k_ram_segment1_store(WORD addr, BYTE value)
     }
 }
 
-void c64_256k_ram_segment2_store(WORD addr, BYTE value)
+void c64_256k_ram_segment2_store(uint16_t addr, uint8_t value)
 {
     c64_256k_ram[(c64_256k_segment2 * 0x4000) + (addr & 0x3fff)] = value;
     if (addr == 0xff00) {
@@ -428,7 +425,7 @@ void c64_256k_ram_segment2_store(WORD addr, BYTE value)
     }
 }
 
-void c64_256k_ram_segment3_store(WORD addr, BYTE value)
+void c64_256k_ram_segment3_store(uint16_t addr, uint8_t value)
 {
     c64_256k_ram[(c64_256k_segment3 * 0x4000) + (addr & 0x3fff)] = value;
     if (addr == 0xff00) {
@@ -436,22 +433,22 @@ void c64_256k_ram_segment3_store(WORD addr, BYTE value)
     }
 }
 
-BYTE c64_256k_ram_segment0_read(WORD addr)
+uint8_t c64_256k_ram_segment0_read(uint16_t addr)
 {
     return c64_256k_ram[(c64_256k_segment0 * 0x4000) + (addr & 0x3fff)];
 }
 
-BYTE c64_256k_ram_segment1_read(WORD addr)
+uint8_t c64_256k_ram_segment1_read(uint16_t addr)
 {
     return c64_256k_ram[(c64_256k_segment1 * 0x4000) + (addr & 0x3fff)];
 }
 
-BYTE c64_256k_ram_segment2_read(WORD addr)
+uint8_t c64_256k_ram_segment2_read(uint16_t addr)
 {
     return c64_256k_ram[(c64_256k_segment2 * 0x4000) + (addr & 0x3fff)];
 }
 
-BYTE c64_256k_ram_segment3_read(WORD addr)
+uint8_t c64_256k_ram_segment3_read(uint16_t addr)
 {
     return c64_256k_ram[(c64_256k_segment3 * 0x4000) + (addr & 0x3fff)];
 }
@@ -462,22 +459,22 @@ BYTE c64_256k_ram_segment3_read(WORD addr)
 
    type  | name     | description
    ------------------------------
-   WORD  | base     | base address of the control registers
-   BYTE  | DDA      | register A direction
-   BYTE  | PRA      | register A data
-   BYTE  | CRA      | register A control
-   BYTE  | DDB      | register B direction
-   BYTE  | PRB      | register B data
-   BYTE  | CRB      | register B control
-   BYTE  | vbank    | video bank
-   BYTE  | segment0 | segment 0 bank
-   BYTE  | segment1 | segment 1 bank
-   BYTE  | segment2 | segment 2 bank
-   BYTE  | segment3 | segment 3 bank
+   uint16_t  | base     | base address of the control registers
+   uint8_t  | DDA      | register A direction
+   uint8_t  | PRA      | register A data
+   uint8_t  | CRA      | register A control
+   uint8_t  | DDB      | register B direction
+   uint8_t  | PRB      | register B data
+   uint8_t  | CRB      | register B control
+   uint8_t  | vbank    | video bank
+   uint8_t  | segment0 | segment 0 bank
+   uint8_t  | segment1 | segment 1 bank
+   uint8_t  | segment2 | segment 2 bank
+   uint8_t  | segment3 | segment 3 bank
    ARRAY | RAM      | 262144 BYTES of RAM data
  */
 
-static char snap_module_name[] = "C64_256K";
+static const char snap_module_name[] = "C64_256K";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   0
 
@@ -492,18 +489,18 @@ int c64_256k_snapshot_write(struct snapshot_s *s)
     }
 
     if (0
-        || SMW_W (m, (WORD)c64_256k_start) < 0
+        || SMW_W (m, (uint16_t)c64_256k_start) < 0
         || SMW_B (m, c64_256k_DDA) < 0
         || SMW_B (m, c64_256k_PRA) < 0
         || SMW_B (m, c64_256k_CRA) < 0
         || SMW_B (m, c64_256k_DDB) < 0
         || SMW_B (m, c64_256k_PRB) < 0
         || SMW_B (m, c64_256k_CRB) < 0
-        || SMW_B (m, (BYTE)cia_vbank) < 0
-        || SMW_B (m, (BYTE)c64_256k_segment0) < 0
-        || SMW_B (m, (BYTE)c64_256k_segment1) < 0
-        || SMW_B (m, (BYTE)c64_256k_segment2) < 0
-        || SMW_B (m, (BYTE)c64_256k_segment3) < 0
+        || SMW_B (m, (uint8_t)cia_vbank) < 0
+        || SMW_B (m, (uint8_t)c64_256k_segment0) < 0
+        || SMW_B (m, (uint8_t)c64_256k_segment1) < 0
+        || SMW_B (m, (uint8_t)c64_256k_segment2) < 0
+        || SMW_B (m, (uint8_t)c64_256k_segment3) < 0
         || SMW_BA(m, c64_256k_ram, 0x40000) < 0) {
         snapshot_module_close(m);
         return -1;
@@ -515,7 +512,7 @@ int c64_256k_snapshot_write(struct snapshot_s *s)
 int c64_256k_snapshot_read(struct snapshot_s *s)
 {
     snapshot_module_t *m;
-    BYTE vmajor, vminor;
+    uint8_t vmajor, vminor;
 
     m = snapshot_module_open(s, snap_module_name, &vmajor, &vminor);
 
@@ -524,7 +521,7 @@ int c64_256k_snapshot_read(struct snapshot_s *s)
     }
 
     /* do not accept higher versions than current */
-    if (vmajor > SNAP_MAJOR || vminor > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }

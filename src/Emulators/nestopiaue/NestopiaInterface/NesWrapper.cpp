@@ -610,6 +610,7 @@ void nesd_update_screen(bool lockRenderMutex)
 	{
 		debugInterfaceNes->UnlockRenderScreenMutex();
 	}
+	debugInterfaceNes->PublishScreenImage();
 }
 
 extern volatile unsigned int nesdFrame;
@@ -838,7 +839,7 @@ bool nesd_store_nesd_state_to_bytebuffer(CByteBuffer *byteBuffer)
 	byteBuffer->index += state.size();
 	
 	// store additional nesd data
-	byteBuffer->PutU32(debugInterfaceNes->emulationFrameCounter);
+	byteBuffer->PutU32(debugInterfaceNes->emulationFrameCounter.load());
 	
 	Core::Machine& machine = nesEmulator;
 	machine.cpu.SaveNesDebuggerState(byteBuffer);
@@ -900,7 +901,7 @@ bool nesd_restore_nesd_state_from_bytebuffer(CByteBuffer *byteBuffer)
 	
 	// restore additional nesd data
 	debugInterfaceNes->emulationFrameCounter = byteBuffer->GetU32();
-	nesdFrame = debugInterfaceNes->emulationFrameCounter;
+	nesdFrame = debugInterfaceNes->emulationFrameCounter.load();
 
 	Core::Machine& machine = nesEmulator;
 	machine.cpu.LoadNesDebuggerState(byteBuffer);
@@ -1847,9 +1848,23 @@ uint8 nesd_get_apu_register(uint16 addr)
 // TODO: damn we must now remove that C wrapper and put it nicely into c++ debuginterface wrapper
 //static Api::Input::Controllers *input = NULL;
 
-u8 nesd_get_api_input_buttons()
+u8 nesd_get_api_input_buttons(int port)
 {
-	return input->pad->buttons;
+	return input->pad[port].buttons;
+}
+
+uint32 nesd_convert_pad_buttons_to_joypad(u8 padButtons)
+{
+	uint32 joypad = JOYPAD_IDLE;
+	if (padButtons & 0x01) joypad |= JOYPAD_FIRE;    // A
+	if (padButtons & 0x02) joypad |= JOYPAD_FIRE_B;  // B
+	if (padButtons & 0x04) joypad |= JOYPAD_SELECT;  // SELECT
+	if (padButtons & 0x08) joypad |= JOYPAD_START;   // START
+	if (padButtons & 0x10) joypad |= JOYPAD_N;       // UP
+	if (padButtons & 0x20) joypad |= JOYPAD_S;       // DOWN
+	if (padButtons & 0x40) joypad |= JOYPAD_W;       // LEFT
+	if (padButtons & 0x80) joypad |= JOYPAD_E;       // RIGHT
+	return joypad;
 }
 
 // FDS (Famicom Disk System) wrapper functions
@@ -2036,7 +2051,8 @@ void nesd_get_cpu_regs(unsigned short *pc, unsigned char *a, unsigned char *x, u
 void nesd_check_pc_breakpoint(uint16 pc) {}
 void nesd_update_cpu_pc_by_emulator(uint16 cpuPC) {}
 
-u8 nesd_get_api_input_buttons() { return 0; }
+u8 nesd_get_api_input_buttons(int port) { return 0; }
+uint32 nesd_convert_pad_buttons_to_joypad(u8 padButtons) { return JOYPAD_IDLE; }
 
 void nesd_mute_channels(bool muteSquare1, bool muteSquare2, bool muteTriangle, bool muteNoise, bool muteDmc, bool muteExt) {}
 volatile bool nesd_isReceiveChannelsData;

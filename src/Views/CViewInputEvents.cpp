@@ -17,14 +17,6 @@ extern "C" {
 #include "VID_ImageBinding.h"
 #include "CSnapshotsManager.h"
 
-#include "CDebugInterfaceNes.h"
-#include "NstApiMachine.hpp"
-#include "NstMachine.hpp"
-#include "NstApiEmulator.hpp"
-#include "NstApiInput.hpp"
-#include "NstCpu.hpp"
-#include "NstPpu.hpp"
-
 
 CViewInputEvents::CViewInputEvents(const char *name, float posX, float posY, float posZ, float sizeX, float sizeY,
 													 CDebugInterface *debugInterface)
@@ -54,80 +46,13 @@ void CViewInputEvents::Render()
 {
 }
 
-u8 nesd_get_api_input_buttons();
-
 void CViewInputEvents::RenderImGui()
 {
-//	LOGD("CViewInputEvents");
-	
 	PreRenderImGui();
-	
+
 	ImGui::Checkbox("Store", &(debugInterface->snapshotsManager->isStoreInputEventsEnabled));
 	ImGui::Checkbox("Replay", &(debugInterface->snapshotsManager->isReplayInputEventsEnabled));
-	ImGui::Checkbox("Overwrite", &(debugInterface->snapshotsManager->isOverwriteInputEventsEnabled));
 
-	ImGui::Text("Joystick #1");
-
-	// NES
-	u8 nesInputApiButtons = nesd_get_api_input_buttons();
-	
-	bool buttonA = nesInputApiButtons & 0x01;
-	bool buttonB = nesInputApiButtons & 0x02;
-	bool buttonSelect = nesInputApiButtons & 0x04;
-	bool buttonStart = nesInputApiButtons & 0x08;
-	bool buttonUp = nesInputApiButtons & 0x10;
-	bool buttonDown = nesInputApiButtons & 0x20;
-	bool buttonLeft = nesInputApiButtons & 0x40;
-	bool buttonRight = nesInputApiButtons & 0x80;
-	
-	ImGui::Checkbox("A", &buttonA);
-	ImGui::Checkbox("B", &buttonB);
-	ImGui::Checkbox("SELECT", &buttonSelect);
-	ImGui::Checkbox("START", &buttonStart);
-	ImGui::Checkbox("UP", &buttonUp);
-	ImGui::Checkbox("DOWN", &buttonDown);
-	ImGui::Checkbox("LEFT", &buttonLeft);
-	ImGui::Checkbox("RIGHT", &buttonRight);
-
-//	enum
-//	{
-//		A      = 0x01,
-//		B      = 0x02,
-//		SELECT = 0x04,
-//		START  = 0x08,
-//		UP     = 0x10,
-//		DOWN   = 0x20,
-//		LEFT   = 0x40,
-//		RIGHT  = 0x80
-//	};
-//	volatile uint buttons;
-
-	/*
-	float px = posX;
-	float py = posY;
-	
-	char buf[256];
-	
-	int frameNum = debugInterface->GetEmulationFrameNumber();
-	sprintf(buf, "FRAME: %9d", frameNum);
-	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-
-	float emulationFPS = debugInterface->GetEmulationFPS();
-	
-	float t = (float)frameNum / emulationFPS;
-	float mins = floor(t / 60.0f);
-	float secs = t - mins*60.0f;
-	
-	sprintf(buf, " TIME:%4.0f:%05.2f", mins, secs);
-	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-
-//	sprintf(buf, "CYCLE: %9d", debugInterface->GetMainCpuCycleCounter());
-	sprintf(buf, "CYCLE: %9d", debugInterface->GetMainCpuDebugCycleCounter());
-	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-	
-//	py += fontSize;
-	*/
-	
 	PostRenderImGui();
 }
 

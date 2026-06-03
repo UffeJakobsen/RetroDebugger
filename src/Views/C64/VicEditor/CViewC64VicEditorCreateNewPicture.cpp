@@ -179,8 +179,7 @@ void CViewC64VicEditorCreateNewPicture::CreateNewPicture(u8 mode, u8 backgroundC
 	viewC64->debugInterfaceC64->SetDebugMode(DEBUGGER_MODE_RUNNING);
 
 	guiMain->LockMutex();
-	viewC64->debugInterfaceC64->LockRenderScreenMutex();
-	
+
 	viewC64->viewC64VicControl->UnlockAll();
 	
 	debugInterfaceVice->SetPatchKernalFastBoot(true);
@@ -246,9 +245,8 @@ void CViewC64VicEditorCreateNewPicture::CreateNewPicture(u8 mode, u8 backgroundC
 
 	vicEditor->RunC64EndlessLoop();
 	
-	viewC64->debugInterfaceC64->UnlockRenderScreenMutex();
 	guiMain->UnlockMutex();
-	
+
 	debugInterfaceVice->SetPatchKernalFastBoot(c64SettingsFastBootKernalPatch);
 		
 	c64SettingsVicEditorDefaultBackgroundColor = backgroundColor;

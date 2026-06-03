@@ -824,7 +824,7 @@ namespace Nes
 
 			switch (powerstate) {
 				case 1: std::memset( mem, 0xFF, sizeof(mem) ); break;
-				case 2: std::memset( mem, byte(std::rand()), sizeof(mem) ); break;
+				case 2: std::memset( mem, 0xA5, sizeof(mem) ); break; // deterministic (was std::rand())
 				default: std::memset( mem, 0x00, sizeof(mem) ); break;
 			}
 		}

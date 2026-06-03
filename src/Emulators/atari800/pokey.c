@@ -420,14 +420,9 @@ int POKEY_Initialise(int *argc, char *argv[])
 	else
 #endif
 	{
-		random_scanline_counter =
-#ifdef HAVE_WINDOWS_H
-		GetTickCount() % POKEY_POLY17_SIZE;
-#elif defined(HAVE_TIME)
-		time(NULL) % POKEY_POLY17_SIZE;
-#else
-		0;
-#endif
+		// Use deterministic seed from CPU cycle counter for reproducible emulation
+		extern volatile unsigned int atrdMainCpuCycle;
+		random_scanline_counter = atrdMainCpuCycle % POKEY_POLY17_SIZE;
 	}
 #ifndef BASIC
 	if (INPUT_Recording()) {

@@ -40,7 +40,6 @@
 #include "maincpu.h"
 #include "mem.h"
 #include "resources.h"
-#include "translate.h"
 #include "traps.h"
 #include "vicetypes.h"
 #include "wdc65816.h"
@@ -55,7 +54,9 @@ static traplist_t *traplist = NULL;
 static int install_trap(const trap_t *t);
 static int remove_trap(const trap_t *t);
 
-static log_t traps_log = LOG_ERR;
+log_t traps_log = LOG_DEFAULT;
+
+static int trapsready = 0;
 
 /* ------------------------------------------------------------------------- */
 
@@ -109,16 +110,12 @@ int traps_resources_init(void)
 /* Trap-related command-line options.  */
 
 static const cmdline_option_t cmdline_options[] = {
-    { "-virtualdev", SET_RESOURCE, 0,
+    { "-virtualdev", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "VirtualDevices", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_TRAPS_FAST_EMULATION,
-      NULL, NULL },
-    { "+virtualdev", SET_RESOURCE, 0,
+      NULL, "Enable general mechanisms for fast disk/tape emulation" },
+    { "+virtualdev", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "VirtualDevices", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_TRAPS_FAST_EMULATION,
-      NULL, NULL },
+      NULL, "Disable general mechanisms for fast disk/tape emulation" },
     CMDLINE_LIST_END
 };
 
@@ -132,6 +129,12 @@ int traps_cmdline_options_init(void)
 void traps_init(void)
 {
     traps_log = log_open("Traps");
+    trapsready = 1;
+}
+
+int traps_ready(void)
+{
+    return trapsready;
 }
 
 void traps_shutdown(void)
@@ -152,7 +155,7 @@ static int install_trap(const trap_t *t)
     int i;
 
     for (i = 0; i < 3; i++) {
-        if ((t->readfunc)((WORD)(t->address + i)) != t->check[i]) {
+        if ((t->readfunc)((uint16_t)(t->address + i)) != t->check[i]) {
             log_error(traps_log,
                       "Incorrect checkbyte for trap `%s'.  Not installed.",
                       t->name);
@@ -160,7 +163,7 @@ static int install_trap(const trap_t *t)
         }
     }
 
-    log_verbose("Trap '%s' installed.", t->name);
+    log_verbose(LOG_DEFAULT, "Trap '%s' installed.", t->name);
     (t->storefunc)(t->address, TRAP_OPCODE);
 
     return 0;
@@ -178,7 +181,7 @@ int traps_add(const trap_t *trap)
     if (traps_enabled) {
         install_trap(trap);
     } else {
-        log_verbose("Traps are disabled, trap '%s' not installed.", trap->name);
+        log_verbose(LOG_DEFAULT, "Traps are disabled, trap '%s' not installed.", trap->name);
     }
 
     return 0;
@@ -190,7 +193,7 @@ static int remove_trap(const trap_t *trap)
         log_error(traps_log, "No trap `%s' installed?", trap->name);
         return -1;
     }
-    log_verbose("Trap '%s' disabled.", trap->name);
+    log_verbose(LOG_DEFAULT, "Trap '%s' disabled.", trap->name);
 
     (trap->storefunc)(trap->address, trap->check[0]);
     return 0;
@@ -241,7 +244,7 @@ void traps_refresh(void)
     return;
 }
 
-DWORD traps_handler(void)
+uint32_t traps_handler(void)
 {
     traplist_t *p = traplist;
     unsigned int pc;
@@ -252,7 +255,7 @@ DWORD traps_handler(void)
     while (p) {
         if (p->trap->address == pc) {
             /* This allows the trap function to remove traps.  */
-            WORD resume_address = p->trap->resume_address;
+            uint16_t resume_address = p->trap->resume_address;
 
             result = (*p->trap->func)();
             if (!result) {
@@ -266,7 +269,7 @@ DWORD traps_handler(void)
         p = p->next;
     }
 
-    return (DWORD)-1;
+    return (uint32_t)-1;
 }
 
 int traps_checkaddr(unsigned int addr)

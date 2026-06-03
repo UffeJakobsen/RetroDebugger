@@ -88,6 +88,10 @@
    - userport RTC (58321a) device
  */
 
+/* TODO: day of week is not an independent variable; it is derived from the
+   date. Other modules have corrected this, but it hasn't been done here
+   as there is no tester. */
+
 /* ---------------------------------------------------------------------------------------------------- */
 
 rtc_58321a_t *rtc58321a_init(char *device)
@@ -103,7 +107,7 @@ rtc_58321a_t *rtc58321a_init(char *device)
     retval->old_offset = retval->offset;
 
     retval->hour24 = 1;
-    retval->device = lib_stralloc(device);
+    retval->device = lib_strdup(device);
 
     return retval;
 }
@@ -112,7 +116,7 @@ void rtc58321a_destroy(rtc_58321a_t *context, int save)
 {
     if (save) {
         if (context->old_offset != context->offset) {
-            rtc_save_context(NULL, 0, NULL, 0, context->device, context->offset);
+            rtc_save_context(NULL, 0, NULL, 0, context->device, context->offset, 0);
         }
     }
     lib_free(context->device);
@@ -121,9 +125,9 @@ void rtc58321a_destroy(rtc_58321a_t *context, int save)
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-BYTE rtc58321a_read(rtc_58321a_t *context)
+uint8_t rtc58321a_read(rtc_58321a_t *context)
 {
-    BYTE retval = 0;
+    uint8_t retval = 0;
     time_t latch = (context->stop) ? context->latch : rtc_get_latch(context->offset);
 
     switch (context->address) {
@@ -203,18 +207,18 @@ BYTE rtc58321a_read(rtc_58321a_t *context)
 }
 
 
-void rtc58321a_write_address(rtc_58321a_t *context, BYTE address)
+void rtc58321a_write_address(rtc_58321a_t *context, uint8_t address)
 {
     context->address = address & 0xf;
 }
 
 #define LIMIT_9(x) (x > 9) ? 9 : x
 
-void rtc58321a_write_data(rtc_58321a_t *context, BYTE data)
+void rtc58321a_write_data(rtc_58321a_t *context, uint8_t data)
 {
     time_t latch = (context->stop) ? context->latch : rtc_get_latch(context->offset);
-    BYTE real_data = data & 0xf;
-    BYTE new_data;
+    uint8_t real_data = data & 0xf;
+    uint8_t new_data;
 
     switch (context->address) {
         case RTC58321A_REGISTER_SECONDS:
@@ -392,66 +396,50 @@ void rtc58321a_write_data(rtc_58321a_t *context, BYTE data)
     }
 }
 
-void rtc58321_stop_clock(rtc_58321a_t *context)
-{
-    if (!context->stop) {
-        context->stop = 1;
-        context->latch = rtc_get_latch(context->offset);
-    }
-}
-
-void rtc58321_start_clock(rtc_58321a_t *context)
-{
-    if (context->stop) {
-        context->stop = 0;
-        context->offset = context->offset - (rtc_get_latch(0) - (context->latch - context->offset));
-    }
-}
-
 /* ---------------------------------------------------------------------------------------------------- */
 
 /* RTC_58321A snapshot module format:
 
    type   | name          | description
    --------------------------------
-   BYTE   | stop          | stop flag
-   BYTE   | 24 hours      | 24 hours flag
-   BYTE   | address       | current address
-   DWORD  | latch hi      | high DWORD of latch offset
-   DWORD  | latch lo      | low DWORD of latch offset
-   DWORD  | offset hi     | high DWORD of RTC offset
-   DWORD  | offset lo     | low DWORD of RTC offset
-   DWORD  | old offset hi | high DWORD of old RTC offset
-   DWORD  | old offset lo | low DWORD of old RTC offset
+   uint8_t   | stop          | stop flag
+   uint8_t   | 24 hours      | 24 hours flag
+   uint8_t   | address       | current address
+   uint32_t  | latch hi      | high uint32_t of latch offset
+   uint32_t  | latch lo      | low uint32_t of latch offset
+   uint32_t  | offset hi     | high uint32_t of RTC offset
+   uint32_t  | offset lo     | low uint32_t of RTC offset
+   uint32_t  | old offset hi | high uint32_t of old RTC offset
+   uint32_t  | old offset lo | low uint32_t of old RTC offset
    STRING | device        | device name STRING
  */
 
-static char snap_module_name[] = "RTC_58321A";
+static const char snap_module_name[] = "RTC_58321A";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   0
 
 int rtc58321a_write_snapshot(rtc_58321a_t *context, snapshot_t *s)
 {
-    DWORD latch_lo = 0;
-    DWORD latch_hi = 0;
-    DWORD offset_lo = 0;
-    DWORD offset_hi = 0;
-    DWORD old_offset_lo = 0;
-    DWORD old_offset_hi = 0;
+    uint32_t latch_lo = 0;
+    uint32_t latch_hi = 0;
+    uint32_t offset_lo = 0;
+    uint32_t offset_hi = 0;
+    uint32_t old_offset_lo = 0;
+    uint32_t old_offset_hi = 0;
     snapshot_module_t *m;
 
     /* time_t can be either 32bit or 64bit, so we save as 64bit */
 #if (SIZE_OF_TIME_T == 8)
-    latch_hi = (DWORD)(context->latch >> 32);
-    latch_lo = (DWORD)(context->latch & 0xffffffff);
-    offset_hi = (DWORD)(context->offset >> 32);
-    offset_lo = (DWORD)(context->offset & 0xffffffff);
-    old_offset_hi = (DWORD)(context->old_offset >> 32);
-    old_offset_lo = (DWORD)(context->old_offset & 0xffffffff);
+    latch_hi = (uint32_t)(context->latch >> 32);
+    latch_lo = (uint32_t)(context->latch & 0xffffffff);
+    offset_hi = (uint32_t)(context->offset >> 32);
+    offset_lo = (uint32_t)(context->offset & 0xffffffff);
+    old_offset_hi = (uint32_t)(context->old_offset >> 32);
+    old_offset_lo = (uint32_t)(context->old_offset & 0xffffffff);
 #else
-    latch_lo = (DWORD)context->latch;
-    offset_lo = (DWORD)context->offset;
-    old_offset_lo = (DWORD)context->old_offset;
+    latch_lo = (uint32_t)context->latch;
+    offset_lo = (uint32_t)context->offset;
+    old_offset_lo = (uint32_t)context->old_offset;
 #endif
 
     m = snapshot_module_create(s, snap_module_name, SNAP_MAJOR, SNAP_MINOR);
@@ -461,8 +449,8 @@ int rtc58321a_write_snapshot(rtc_58321a_t *context, snapshot_t *s)
     }
 
     if (0
-        || SMW_B(m, (BYTE)context->stop) < 0
-        || SMW_B(m, (BYTE)context->hour24) < 0
+        || SMW_B(m, (uint8_t)context->stop) < 0
+        || SMW_B(m, (uint8_t)context->hour24) < 0
         || SMW_B(m, context->address) < 0
         || SMW_DW(m, latch_hi) < 0
         || SMW_DW(m, latch_lo) < 0
@@ -479,13 +467,13 @@ int rtc58321a_write_snapshot(rtc_58321a_t *context, snapshot_t *s)
 
 int rtc58321a_read_snapshot(rtc_58321a_t *context, snapshot_t *s)
 {
-    DWORD latch_lo = 0;
-    DWORD latch_hi = 0;
-    DWORD offset_lo = 0;
-    DWORD offset_hi = 0;
-    DWORD old_offset_lo = 0;
-    DWORD old_offset_hi = 0;
-    BYTE vmajor, vminor;
+    uint32_t latch_lo = 0;
+    uint32_t latch_hi = 0;
+    uint32_t offset_lo = 0;
+    uint32_t offset_hi = 0;
+    uint32_t old_offset_lo = 0;
+    uint32_t old_offset_hi = 0;
+    uint8_t vmajor, vminor;
     snapshot_module_t *m;
 
     m = snapshot_module_open(s, snap_module_name, &vmajor, &vminor);
@@ -495,7 +483,7 @@ int rtc58321a_read_snapshot(rtc_58321a_t *context, snapshot_t *s)
     }
 
     /* Do not accept versions higher than current */
-    if (vmajor > SNAP_MAJOR || vminor > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }

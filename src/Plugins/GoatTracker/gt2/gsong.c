@@ -7,11 +7,15 @@
 #include "goattrk2.h"
 #include "log.h"
 
+extern void gt2ClearPatternUndoHistory(void);
+
 INSTR ginstr[MAX_INSTR];
 unsigned char ltable[MAX_TABLES][MAX_TABLELEN];
 unsigned char rtable[MAX_TABLES][MAX_TABLELEN];
 unsigned char songorder[MAX_SONGS][MAX_CHN][MAX_SONGLEN+2];
 unsigned char pattern[MAX_PATT][MAX_PATTROWS*4+4];
+unsigned char arpdata[MAX_PATT][MAX_CHN][MAX_PATTROWS][MAX_ARP_COLS];
+int numarpcolumns = 0;
 char songname[MAX_STR];
 char authorname[MAX_STR];
 char copyrightname[MAX_STR];
@@ -23,7 +27,7 @@ int highestusedinstr;
 int savesong(void)
 {
   int c;
-  char ident[] = {'G', 'T', 'S', '5'};
+  char ident[] = {'G', 'T', 'S', (numarpcolumns > 0) ? '6' : '5'};
   FILE *handle;
 
   if (strlen(songfilename) < MAX_FILENAME-4)
@@ -118,6 +122,19 @@ int savesong(void)
       fwrite8(handle, length);
       fwrite(pattern[c], length * 4, 1, handle);
     }
+    // Write arp data (GTS6 only, when arp feature is enabled)
+    if (numarpcolumns > 0)
+    {
+      fwrite8(handle, numarpcolumns);
+      for (c = 0; c < amount; c++)
+      {
+        length = pattlen[c]+1;
+        for (int ch = 0; ch < MAX_CHN; ch++)
+        {
+          fwrite(arpdata[c][ch], length * numarpcolumns, 1, handle);
+        }
+      }
+    }
     fclose(handle);
     strcpy(loadedsongfilename, songfilename);
     return 1;
@@ -189,8 +206,9 @@ void loadsong(void)
   if (handle)
   {
     fread(ident, 4, 1, handle);
-    if ((!memcmp(ident, "GTS3", 4)) || (!memcmp(ident, "GTS4", 4)) || (!memcmp(ident, "GTS5", 4)))
+    if ((!memcmp(ident, "GTS3", 4)) || (!memcmp(ident, "GTS4", 4)) || (!memcmp(ident, "GTS5", 4)) || (!memcmp(ident, "GTS6", 4)))
     {
+      int isGTS6 = !memcmp(ident, "GTS6", 4);
       int d;
       int length;
       int amount;
@@ -245,6 +263,20 @@ void loadsong(void)
         fread(pattern[c], length, 1, handle);
       }
       countpatternlengths();
+      // Read arp data (GTS6 only)
+      if (isGTS6)
+      {
+        numarpcolumns = fread8(handle);
+        if (numarpcolumns > MAX_ARP_COLS) numarpcolumns = MAX_ARP_COLS;
+        for (c = 0; c < amount; c++)
+        {
+          int plen = pattlen[c] + 1;
+          for (int ch = 0; ch < MAX_CHN; ch++)
+          {
+            fread(arpdata[c][ch], plen * numarpcolumns, 1, handle);
+          }
+        }
+      }
       songchange();
     }
 
@@ -855,6 +887,7 @@ void loadinstrument(void)
   int c,d;
   int pulsestart = -1;
   int pulseend = -1;
+  int undoHistoryDirty = 0;
 
   handle = fopen(instrfilename, "rb");
   if (handle)
@@ -865,6 +898,7 @@ void loadinstrument(void)
     if ((!memcmp(ident, "GTI3", 4)) || (!memcmp(ident, "GTI4", 4)) || (!memcmp(ident, "GTI5", 4)))
     {
       unsigned char optr[4];
+      undoHistoryDirty = 1;
 
       ginstr[einum].ad = fread8(handle);
       ginstr[einum].sr = fread8(handle);
@@ -928,6 +962,7 @@ void loadinstrument(void)
     if (!memcmp(ident, "GTI2", 4))
     {
       unsigned char optr[3];
+      undoHistoryDirty = 1;
 
       ginstr[einum].ad = fread8(handle);
       ginstr[einum].sr = fread8(handle);
@@ -986,6 +1021,7 @@ void loadinstrument(void)
     // Goattracker 1.xx import
     if (!memcmp(ident, "GTI!", 4))
     {
+      undoHistoryDirty = 1;
 
       unsigned char pulse, pulseadd, pulselimitlow, pulselimithigh, wavelen;
       unsigned char filtertemp[4];
@@ -1227,6 +1263,8 @@ void loadinstrument(void)
       }
       if (!ginstr[einum].firstwave) ginstr[einum].gatetimer |= 0x40;
     }
+    if (undoHistoryDirty)
+      gt2ClearPatternUndoHistory();
   }
 }
 
@@ -1298,6 +1336,7 @@ void clearsong(int cs, int cp, int ci, int ct, int cn)
     memset(loadedsongfilename, 0, sizeof loadedsongfilename);
     for (c = 0; c < MAX_PATT; c++)
       clearpattern(c);
+    memset(arpdata, 0, sizeof arpdata);
   }
   if (ci)
   {
@@ -1741,4 +1780,3 @@ void mergesong(void)
   countpatternlengths();
   songchange();
 }
-

@@ -8,10 +8,28 @@
 #include "C64Tools.h"
 #include <float.h>
 
+// Multi-bitmap: byte -> 4 two-bit color indices
+// multiColorIndex[byte][pixel] gives the 2-bit color index for pixel 0-3
+static u8 multiColorIndex[256][4];
+static bool multiColorIndexInitialized = false;
+
+static void InitMultiColorIndex()
+{
+	if (multiColorIndexInitialized) return;
+	for (int b = 0; b < 256; b++)
+	{
+		multiColorIndex[b][0] = (b >> 6) & 3;
+		multiColorIndex[b][1] = (b >> 4) & 3;
+		multiColorIndex[b][2] = (b >> 2) & 3;
+		multiColorIndex[b][3] = b & 3;
+	}
+	multiColorIndexInitialized = true;
+}
+
 C64VicDisplayCanvasMultiBitmap::C64VicDisplayCanvasMultiBitmap(CViewC64VicDisplay *vicDisplay)
 : C64VicDisplayCanvas(vicDisplay, C64_CANVAS_TYPE_BITMAP, true, false)
 {
-	
+	InitMultiColorIndex();
 }
 
 ///////
@@ -33,71 +51,45 @@ void C64VicDisplayCanvasMultiBitmap::RefreshScreen(vicii_cycle_state_t *viciiSta
 	
 	vicDisplay->GetViciiPointers(viciiState, &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, colors);
 	
-	u8 bitmap;
-	
-	u8 color0R, color0G, color0B;
-	this->debugInterface->GetCBMColor(colors[1], &color0R, &color0G, &color0B);
-	
-	u8 color1;
-	u8 color1R, color1G, color1B;
-	u8 color2;
-	u8 color2R, color2G, color2B;
-	u8 color3;
-	u8 color3R, color3G, color3B;
-	
+	// Precompute 16-entry RGBA lookup tables
+	uint32_t colorLutFg[16], colorLutBg[16];
+	for (int c = 0; c < 16; c++)
+	{
+		u8 r, g, b;
+		debugInterface->GetCBMColor(c, &r, &g, &b);
+		colorLutFg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)foregroundColorAlpha << 24);
+		colorLutBg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)backgroundColorAlpha << 24);
+	}
+
+	u8 *imageData = (u8 *)imageDataScreen->resultData;
+	int imgWidth = imageDataScreen->width;
+
+	uint32_t rgba0 = colorLutBg[colors[1] & 0xf];
+
 	for (int i = 0; i < 25; i++)
 	{
 		for (int j = 0; j < 40; j++)
 		{
-			color1 = (screen_ptr[(i * 40) + j] & 0xf0) >> 4;
-			color2 = screen_ptr[(i * 40) + j] & 0xf;
-			color3 = color_ram_ptr[(i * 40) + j] & 0xf;
-			
-			debugInterface->GetCBMColor(color1, &color1R, &color1G, &color1B);
-			debugInterface->GetCBMColor(color2, &color2R, &color2G, &color2B);
-			debugInterface->GetCBMColor(color3, &color3R, &color3G, &color3B);
-			
+			u8 c1 = (screen_ptr[(i * 40) + j] & 0xf0) >> 4;
+			u8 c2 = screen_ptr[(i * 40) + j] & 0xf;
+			u8 c3 = color_ram_ptr[(i * 40) + j] & 0xf;
+
+			uint32_t rgba1 = colorLutFg[c1];
+			uint32_t rgba2 = colorLutFg[c2];
+			uint32_t rgba3 = colorLutFg[c3];
+			uint32_t rgbaLut[4] = { rgba0, rgba1, rgba2, rgba3 };
+
 			for (int k = 0; k < 8; k++)
 			{
-				if (((i * 40 * 8) + (j * 8) + k) < 4096)
-				{
-					bitmap = bitmap_low_ptr[(i * 40 * 8) + (j * 8) + k];
-				}
-				else
-				{
-					bitmap = bitmap_high_ptr[((i * 40 * 8) + (j * 8) + k) - 4096];
-				}
-				
+				int bitmapOffset = (i * 40 * 8) + (j * 8) + k;
+				u8 bitmap = (bitmapOffset < 4096) ? bitmap_low_ptr[bitmapOffset] : bitmap_high_ptr[bitmapOffset - 4096];
+
+				uint32_t *row = (uint32_t *)(imageData + ((i*8 + k) * imgWidth + j*8) * 4);
 				for (int l = 0; l < 4; l++)
 				{
-					switch ((bitmap & (3 << ((3 - l) * 2))) >> ((3 - l) * 2))
-					{
-						case 0:
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2)] = color0;
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2) + 1] = color0;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color0R, color0G, color0B, backgroundColorAlpha);
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color0R, color0G, color0B, backgroundColorAlpha);
-							
-							break;
-						case 1:
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2)] = color1;
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2) + 1] = color1;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color1R, color1G, color1B, foregroundColorAlpha);
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color1R, color1G, color1B, foregroundColorAlpha);
-							break;
-						case 2:
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2)] = color2;
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2) + 1] = color2;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color2R, color2G, color2B, foregroundColorAlpha);
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color2R, color2G, color2B, foregroundColorAlpha);
-							break;
-						case 3:
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2)] = color3;
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + (l * 2) + 1] = color3;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color3R, color3G, color3B, foregroundColorAlpha);
-							imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color3R, color3G, color3B, foregroundColorAlpha);
-							break;
-					}
+					uint32_t rgba = rgbaLut[multiColorIndex[bitmap][l]];
+					row[l*2]     = rgba;
+					row[l*2 + 1] = rgba;
 				}
 			}
 		}
@@ -286,18 +278,9 @@ void C64VicDisplayCanvasMultiBitmap::RenderCanvasSpecificGridValues()
 				
 				for (int pixelNum = 0; pixelNum < 4; pixelNum++)
 				{
-					// TODO: this is extremely unoptimal
-					
-					///LOGF("pixelNum=%d val=%02x", pixelNum, val);
-					u8 a = 0x03 << ((3-pixelNum)*2);
-					//LOGF(" a=%02x", a);
-					u8 va = val & a;
-					//LOGF("va=%02x", va);
-					u8 vb = va >> ((3-pixelNum)*2);
-					//LOGF("vb=%02x", vb);
-					
-					buf2[0] = ((vb & 0x02) == 0x02) ? '1' : '0';
-					buf2[1] = ((vb & 0x01) == 0x01) ? '1' : '0';
+					u8 vb = multiColorIndex[val][pixelNum];
+					buf2[0] = '0' + ((vb >> 1) & 1);
+					buf2[1] = '0' + (vb & 1);
 					
 					//LOGF("buf2=%s", buf2);
 					
@@ -592,15 +575,28 @@ void C64VicDisplayCanvasMultiBitmap::PutBitPixelMultiBitmap(int x, int y, u8 bit
 
 u8 C64VicDisplayCanvasMultiBitmap::GetColorAtPixel(int x, int y)
 {
-	// get pixel
 	u8 pixelBitColor = this->GetBitPixelMultiBitmap(x, y);
-	C64CharMulti *bitChar = this->GetBitCharMultiBitmap(x, y);
-	
-	u8 color = bitChar->colors[pixelBitColor];
-	
-	delete bitChar;
 
-	return color;
+	// Inline color lookup to avoid heap allocation
+	int charColumn = x / 8;
+	int charRow = y / 8;
+
+	u8 *screen_ptr;
+	u8 *color_ram_ptr;
+	u8 *chargen_ptr;
+	u8 *bitmap_low_ptr;
+	u8 *bitmap_high_ptr;
+	u8 d020colors[0x0F];
+
+	vicDisplay->GetViciiPointers(&(viewC64->viciiStateToShow), &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, d020colors);
+
+	u8 colors[4];
+	colors[0] = d020colors[1];
+	colors[1] = (screen_ptr[(charRow * 40) + charColumn] & 0xf0) >> 4;
+	colors[2] = screen_ptr[(charRow * 40) + charColumn] & 0x0f;
+	colors[3] = color_ram_ptr[(charRow * 40) + charColumn] & 0x0f;
+
+	return colors[pixelBitColor];
 }
 
 u8 C64VicDisplayCanvasMultiBitmap::PutColorAtPixel(bool forceColorReplace, int x, int y, u8 paintColor)

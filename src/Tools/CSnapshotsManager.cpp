@@ -44,6 +44,11 @@ CStoredSnapshot::CStoredSnapshot(CSnapshotsManager *manager, u8 snapshotType)
 
 CStoredSnapshot::~CStoredSnapshot()
 {
+	if (byteBuffer)
+	{
+		delete byteBuffer;
+		byteBuffer = NULL;
+	}
 }
 
 void CStoredSnapshot::Use(u32 frame, u64 cycle)
@@ -250,7 +255,7 @@ CSnapshotsManager::CSnapshotsManager(CDebugInterface *debugInterface)
 
 	isStoreInputEventsEnabled = false;
 	isReplayInputEventsEnabled = false;
-	isOverwriteInputEventsEnabled = false;
+	lastReplayedCycle = 0;
 	
 
 	LOGD("CSnapshotsManager::CSnapshotsManager: snapshotsIntervalInFrames=%d snapshotsLimit=%d",
@@ -276,7 +281,10 @@ void CSnapshotsManager::CancelRestore()
 	skipFrameRender = false;
 	UnlockMutex();
 
-	debugInterface->RefreshScreenNoCallback();
+	// Do NOT call RefreshScreenNoCallback here — during stepping, the screen
+	// will be refreshed by c64d_debug_pause_check() with the correct raster
+	// state. Publishing a full-frame refresh here would flash stale data
+	// for one frame before the step's refresh overwrites it.
 }
 
 // CheckSnapshotInterval should be run each frame from within code that can store snapshots,
@@ -474,12 +482,12 @@ bool CSnapshotsManager::CheckSnapshotRestore()
 				
 		// restore chips
 		debugInterface->LoadChipsSnapshotSynced(snapshotToRestore->byteBuffer);
-		
+
 		// clear all history events after restored cycle (mem write history, execute history)
 		debugInterface->symbols->memory->ClearEventsAfterCycle(snapshotToRestore->cycle);
 
 		snapshotToRestore = NULL;
-		
+
 		LOGS("!!!!!!!!!!!!!!!!!!!!!!!!     restored, currentFrame=%d pauseNumFrame=%d currentCycle=%d", debugInterface->GetEmulationFrameNumber(), pauseNumFrame, debugInterface->GetMainCpuCycleCounter());
 
 		if (pauseNumFrame == -1 && pauseNumCycle == -1)
@@ -489,13 +497,16 @@ bool CSnapshotsManager::CheckSnapshotRestore()
 
 		// TODO: WTF c64d_reset_sound_clk?   generalize
 		c64d_reset_sound_clk();
-				
+
 		gSoundEngine->UnlockMutex("CSnapshotsManager::CheckSnapshotRestore: restore snapshot");
 
 		LOGS("CSnapshotsManager::CheckSnapshotRestore: UnlockMutex (1)");
 
 		this->UnlockMutex();
-		
+
+		// Refresh screen AFTER releasing all mutexes to avoid lock ordering deadlock
+		debugInterface->RefreshScreenNoCallback();
+
 		LOGS("!!!!!!!!!!!!!!!!!!!!!!!      SNAPSHOT RESTORED / FINISHED");
 		return true;
 	}
@@ -585,8 +596,12 @@ bool CSnapshotsManager::RestoreSnapshotByFrame(int frame, long cycleNum, u8 targ
 	{
 		LOGS(".... found snapshot frame %d", nearestChipSnapshot->frame);
 		snapshotToRestore = nearestChipSnapshot;
+
+		// Reset replay marker so input events after this snapshot's cycle
+		// will be replayed when emulation runs forward
+		lastReplayedCycle = nearestChipSnapshot->cycle;
 	}
-	
+
 	lastStoredFrameCounter = 0;
 	
 	// should we pause after restoring state to cycle?
@@ -722,26 +737,7 @@ CByteBuffer *CSnapshotsManager::StoreNewInputEventsSnapshotAtCurrentCycle()
 bool CSnapshotsManager::CheckInputEventsAtCurrentCycle()
 {
 	u64 cycle = debugInterface->GetMainCpuCycleCounter();
-	
-	if (isOverwriteInputEventsEnabled == true)
-	{
-		// TODO: note the OPTIMIZE below
-		
-		// TODO: add virtual method in CDebugInterface to override this and allow f.e. removal only of one controller from buffer
-		//       (bool return if we can add to inputEventsToReuse)
-		std::map<u64, CStoredInputEvent *>::iterator it = inputEventsByCycle.find(cycle);
-		
-		if (it != inputEventsByCycle.end())
-		{
-			CStoredInputEvent *inputEvent = it->second;
-			inputEventsByCycle.erase(it);
-			inputEvent->Clear();
-			inputEventsToReuse.push_back(inputEvent);
-		}
-		
-		return false;
-	}
-	
+
 	if (isReplayInputEventsEnabled == false)
 		return false;
 		
@@ -753,19 +749,185 @@ bool CSnapshotsManager::CheckInputEventsAtCurrentCycle()
 //	if (inputEventsByCycle.empty() == false)
 //		DebugPrintInputEventsSnapshots();
 	
-	// check if there's event buffer already associated to this cycle
-	std::map<u64, CStoredInputEvent *>::iterator it = inputEventsByCycle.find(cycle);
-	
-	if (it != inputEventsByCycle.end())
+	// Replay events with cycle > lastReplayedCycle and cycle <= current.
+	// Events are NOT erased — they stay in the map for save/display/re-replay.
+	// The lastReplayedCycle marker prevents double-replay.
+	this->LockMutex();
+
+	bool replayed = false;
+	auto it = inputEventsByCycle.upper_bound(lastReplayedCycle);
+	while (it != inputEventsByCycle.end() && it->first <= cycle)
 	{
-		LOGD("ReplayInputEventsFromSnapshotsManager: cycle=%d", cycle);
 		CStoredInputEvent *inputEvents = it->second;
 		inputEvents->byteBuffer->Rewind();
 		debugInterface->ReplayInputEventsFromSnapshotsManager(inputEvents->byteBuffer);
-		return true;
+		lastReplayedCycle = it->first;
+		replayed = true;
+		it++;
 	}
-	
-	return false;
+
+	this->UnlockMutex();
+	return replayed;
+}
+
+void CSnapshotsManager::TruncateInputEventsAfterCycle(u64 cycle)
+{
+	LOGD("CSnapshotsManager::TruncateInputEventsAfterCycle: cycle=%llu", cycle);
+	auto it = inputEventsByCycle.upper_bound(cycle);
+	while (it != inputEventsByCycle.end())
+	{
+		it->second->Clear();
+		inputEventsToReuse.push_back(it->second);
+		it = inputEventsByCycle.erase(it);
+	}
+}
+
+bool CSnapshotsManager::SaveInputEventsToFile(const char *filePath)
+{
+	LOGM("CSnapshotsManager::SaveInputEventsToFile: %s", filePath);
+
+	FILE *fp = fopen(filePath, "wb");
+	if (!fp) return false;
+
+	// Header: magic + version + emulator type
+	fwrite("RDIE", 1, 4, fp);
+	u8 version = 1;
+	fwrite(&version, 1, 1, fp);
+	u8 emuType = debugInterface->GetEmulatorType();
+	fwrite(&emuType, 1, 1, fp);
+
+	u32 numEvents = (u32)inputEventsByCycle.size();
+	fwrite(&numEvents, sizeof(u32), 1, fp);
+
+	for (auto &pair : inputEventsByCycle)
+	{
+		CStoredInputEvent *ev = pair.second;
+		u64 cycle = ev->cycle;
+		u32 frame = ev->frame;
+		u32 bufLen = ev->byteBuffer->length;
+
+		fwrite(&cycle, sizeof(u64), 1, fp);
+		fwrite(&frame, sizeof(u32), 1, fp);
+		fwrite(&bufLen, sizeof(u32), 1, fp);
+		fwrite(ev->byteBuffer->data, 1, bufLen, fp);
+	}
+
+	fclose(fp);
+	LOGM("CSnapshotsManager::SaveInputEventsToFile: saved %d events", numEvents);
+	return true;
+}
+
+bool CSnapshotsManager::LoadInputEventsFromFile(const char *filePath)
+{
+	LOGM("CSnapshotsManager::LoadInputEventsFromFile: %s", filePath);
+
+	FILE *fp = fopen(filePath, "rb");
+	if (!fp) return false;
+
+	// Read header
+	char magic[4];
+	if (fread(magic, 1, 4, fp) != 4 || memcmp(magic, "RDIE", 4) != 0)
+	{
+		LOGError("Invalid input events file magic");
+		fclose(fp);
+		return false;
+	}
+
+	u8 version;
+	if (fread(&version, 1, 1, fp) != 1)
+	{
+		LOGError("Truncated input events file (missing version)");
+		fclose(fp);
+		return false;
+	}
+	if (version != 1)
+	{
+		LOGError("Unsupported input events file version: %d", version);
+		fclose(fp);
+		return false;
+	}
+
+	u8 emuType;
+	if (fread(&emuType, 1, 1, fp) != 1)
+	{
+		LOGError("Truncated input events file (missing emulator type)");
+		fclose(fp);
+		return false;
+	}
+
+	// Validate emulator type matches current emulator
+	u8 currentEmuType = debugInterface->GetEmulatorType();
+	if (emuType != currentEmuType)
+	{
+		LOGError("Input events file emulator type mismatch: file=%d current=%d", emuType, currentEmuType);
+		fclose(fp);
+		return false;
+	}
+
+	u32 numEvents;
+	if (fread(&numEvents, sizeof(u32), 1, fp) != 1)
+	{
+		LOGError("Truncated input events file (missing event count)");
+		fclose(fp);
+		return false;
+	}
+
+	// Clear existing events
+	for (auto &pair : inputEventsByCycle)
+	{
+		pair.second->Clear();
+		inputEventsToReuse.push_back(pair.second);
+	}
+	inputEventsByCycle.clear();
+
+	// Load events
+	bool loadError = false;
+	for (u32 i = 0; i < numEvents; i++)
+	{
+		u64 cycle;
+		u32 frame;
+		u32 bufLen;
+
+		if (fread(&cycle, sizeof(u64), 1, fp) != 1) { loadError = true; break; }
+		if (fread(&frame, sizeof(u32), 1, fp) != 1) { loadError = true; break; }
+		if (fread(&bufLen, sizeof(u32), 1, fp) != 1) { loadError = true; break; }
+
+		// Validate buffer length (cap at 1MB to prevent corrupt files from OOM)
+		if (bufLen > 1024 * 1024)
+		{
+			LOGError("CSnapshotsManager::LoadInputEventsFromFile: bufLen too large: %u", bufLen);
+			loadError = true;
+			break;
+		}
+
+		CStoredInputEvent *ev = GetNewInputEventSnapshot(frame, cycle);
+		inputEventsByCycle[cycle] = ev;
+
+		if (bufLen > 0)
+		{
+			u8 *tmpBuf = new u8[bufLen];
+			if (fread(tmpBuf, 1, bufLen, fp) != bufLen)
+			{
+				delete[] tmpBuf;
+				loadError = true;
+				break;
+			}
+			ev->byteBuffer->PutBytes(tmpBuf, bufLen);
+			delete[] tmpBuf;
+		}
+	}
+
+	fclose(fp);
+
+	if (loadError)
+	{
+		LOGError("CSnapshotsManager::LoadInputEventsFromFile: file truncated or corrupt, loaded %d events",
+				 (int)inputEventsByCycle.size());
+		return false;
+	}
+
+	LOGM("CSnapshotsManager::LoadInputEventsFromFile: loaded %d events", (int)inputEventsByCycle.size());
+	return true;
 }
 
 CStoredChipsSnapshot *CSnapshotsManager::GetNewChipSnapshot(u32 frame, u64 cycle, CStoredDiskSnapshot *diskSnapshot)
@@ -960,7 +1122,7 @@ CStoredInputEvent *CSnapshotsManager::GetNewInputEventSnapshot(u32 frame, u64 cy
 			{
 				it = inputEventsByCycle.begin();
 				inputEventsSnapshot = it->second;
-				inputEventsByCycle.erase(inputEventsSnapshot->frame);
+				inputEventsByCycle.erase(it);
 			}
 			else
 			{
@@ -974,7 +1136,7 @@ CStoredInputEvent *CSnapshotsManager::GetNewInputEventSnapshot(u32 frame, u64 cy
 	else
 	{
 		inputEventsSnapshot = it->second;
-		inputEventsByCycle.erase(inputEventsSnapshot->frame);
+		inputEventsByCycle.erase(it);
 		inputEventsSnapshot->Clear();
 		inputEventsSnapshot->Use(frame, cycle);
 	}
@@ -1240,7 +1402,10 @@ bool CSnapshotsManager::RestoreSnapshotByCycle(u64 cycle, u8 targetDebugMode)
 
 	LOGD("RestoreSnapshotByCycle: OK run RestoreSnapshotByFrame frame=%d cycle=%d", nearestChipSnapshot->frame, cycle);
 	bool ret = RestoreSnapshotByFrame(nearestChipSnapshot->frame-2, cycle, targetDebugMode);
-	
+
+	// Reset replay marker so events replay from the restored cycle
+	lastReplayedCycle = nearestChipSnapshot->cycle;
+
 	if (targetDebugMode == DEBUGGER_MODE_RUNNING)
 	{
 		debugInterface->SetDebugMode(targetDebugMode);

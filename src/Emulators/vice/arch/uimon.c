@@ -57,8 +57,9 @@ void uimon_window_close(void)
 
 console_t c64d_console_log = { 80, 25, 1, 0 };
 
-console_t *uimon_window_open(void)
+console_t *uimon_window_open(bool display_now)
 {
+	(void)display_now;
 	return &c64d_console_log;
 	
 //    sdl_ui_activate_pre_action();
@@ -78,7 +79,7 @@ void uimon_window_suspend(void)
 
 console_t *uimon_window_resume(void)
 {
-    return uimon_window_open();
+    return uimon_window_open(true);
 }
 
 int uimon_out(const char *buffer)
@@ -125,7 +126,7 @@ char *uimon_get_in(char **ppchCommandLine, const char *prompt)
     sdl_ui_scroll_screen_up();
 
     if (input == NULL) {
-        input = lib_stralloc("x");
+        input = lib_strdup("x");
     }
 
     return input;
@@ -138,4 +139,30 @@ void uimon_notify_change(void)
 
 void uimon_set_interface(monitor_interface_t **monitor_interface_init, int count)
 {
+}
+
+/* VICE 3.10: new uimon character-encoding output functions.
+   We treat them the same as regular ASCII output. */
+int uimon_petscii_out(const char *buffer, int num)
+{
+    (void)num;
+    return uimon_out(buffer);
+}
+
+int uimon_petscii_upper_out(const char *buffer, int num)
+{
+    (void)num;
+    return uimon_out(buffer);
+}
+
+int uimon_scrcode_out(const char *buffer, int num)
+{
+    (void)num;
+    return uimon_out(buffer);
+}
+
+int uimon_scrcode_upper_out(const char *buffer, int num)
+{
+    (void)num;
+    return uimon_out(buffer);
 }

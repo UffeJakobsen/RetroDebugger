@@ -38,6 +38,6 @@ struct sdl_lightpen_adjust_s {
 typedef struct sdl_lightpen_adjust_s sdl_lightpen_adjust_t;
 extern sdl_lightpen_adjust_t sdl_lightpen_adjust;
 
-extern void sdl_lightpen_update(void);
+void sdl_lightpen_update(void);
 
 #endif

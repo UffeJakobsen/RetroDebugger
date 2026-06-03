@@ -23,9 +23,12 @@ enum loadPRGResetMode : u8
 	MACHINE_LOADPRG_RESET_MODE_NONE = 0,
 	MACHINE_LOADPRG_RESET_MODE_SOFT = 1,
 	MACHINE_LOADPRG_RESET_MODE_HARD = 2,
-	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC = 3,
-	MACHINE_LOADPRG_RESET_MODE_END_OF_ENUM = 4,
-	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM = 5
+	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL = 3,
+	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL = 4,
+	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC = 5,
+	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC = 6,
+	MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_CUSTOM = 7,
+	MACHINE_LOADPRG_RESET_MODE_END_OF_ENUM = 8
 };
 
 enum muteSIDMode : u8
@@ -116,6 +119,17 @@ extern CByteBuffer *c64SettingsWindowPosition;
 
 extern float c64SettingsScreenGridLinesAlpha;
 extern uint8 c64SettingsScreenGridLinesColorScheme;
+
+// VIC display marker line colors (right-click popup configurable, RGBA floats 0..1)
+extern float c64SettingsVicDisplayIrqLineColorR;
+extern float c64SettingsVicDisplayIrqLineColorG;
+extern float c64SettingsVicDisplayIrqLineColorB;
+extern float c64SettingsVicDisplayIrqLineColorA;
+extern float c64SettingsVicDisplayBadLineColorR;
+extern float c64SettingsVicDisplayBadLineColorG;
+extern float c64SettingsVicDisplayBadLineColorB;
+extern float c64SettingsVicDisplayBadLineColorA;
+
 extern float c64SettingsScreenRasterViewfinderScale;
 extern float c64SettingsScreenRasterCrossLinesAlpha;
 extern uint8 c64SettingsScreenRasterCrossLinesColorScheme;
@@ -154,6 +168,7 @@ extern CSlrString *c64SettingsPathToAtariSnapshot;
 extern CSlrString *c64SettingsDefaultSnapshotsFolder;
 extern CSlrString *c64SettingsDefaultMemoryDumpFolder;
 extern CSlrString *c64SettingsPathToC64MemoryMapFile;
+extern CSlrString *c64SettingsPathToCustomStartupSnapshot;
 
 extern CSlrString *c64SettingsPathToTAP;
 extern CSlrString *c64SettingsDefaultTAPFolder;
@@ -178,6 +193,10 @@ extern CSlrString *c64SettingsDefaultAtariCartridgeFolder;
 extern CSlrString *c64SettingsPathToNES;
 extern CSlrString *c64SettingsDefaultNESFolder;
 extern CSlrString *c64SettingsPathToNESRoms;
+
+// Renoise import
+extern CSlrString *c64SettingsPathToXRNS;
+extern CSlrString *c64SettingsDefaultXRNSFolder;
 
 extern CSlrString *c64SettingsPathToSymbols;
 extern CSlrString *c64SettingsPathToWatches;
@@ -259,6 +278,10 @@ extern bool c64SettingsDisassemblyUseNearLabels;
 extern bool c64SettingsDisassemblyUseNearLabelsForJumps;
 extern int c64SettingsDisassemblyNearLabelMaxOffset;
 extern bool c64SettingsDisassemblyColorizeHexOpcodes;
+extern bool c64SettingsDisassemblyShowEffectiveAddress;
+extern int c64SettingsDisassemblyEAInstructionBudget;
+extern int c64SettingsDisassemblyEAJsrDepthLimit;
+extern bool c64SettingsDisassemblyEAHideUnknown;
 
 extern int c64SettingsMenusColorTheme;
 
@@ -281,10 +304,36 @@ extern u8 c64SettingsAtariRamSizeOption;
 extern bool c64SettingsRunVice;
 extern bool c64SettingsRunAtari800;
 extern bool c64SettingsRunNestopia;
+extern bool c64SettingsRunC64U;
+
+// C64 Ultimate
+extern CSlrString *c64SettingsC64UHostname;
+extern int c64SettingsC64UHttpPort;
+extern int c64SettingsC64UTcpPort;
+extern int c64SettingsC64UVideoPort;
+extern CSlrString *c64SettingsC64UPassword;
+extern bool c64SettingsC64UAutoConnect;
+extern int c64SettingsC64UMemoryRefreshRate;
+extern bool c64SettingsC64UAutoRefreshMemory;
+extern bool c64SettingsC64URefreshIORange;   // allow PEEK of $D000-$DFFF (has side effects)
+extern CSlrString *c64SettingsC64ULocalIP;
+extern int c64SettingsC64UTraceMode;       // 0=Auto, 1=6510, 2=VIC, 3=6510+VIC, 4=1541, 5=6510+1541
+extern int c64SettingsC64UTraceBufferSize; // in millions of entries, default 4
+extern bool c64SettingsC64UAudioEnabled;
+extern int c64SettingsC64UAudioBufferMs;     // jitter buffer size in ms, default 200
+extern bool c64SettingsC64UUseMulticast;
+extern bool c64SettingsC64UHelperAssisted;
+extern int c64SettingsC64UFtpPort;
+extern int c64SettingsC64UTelnetPort;
 
 // debugger websockets server
 extern bool c64SettingsRunDebuggerServerWebSockets;
 extern int c64SettingsRunDebuggerServerWebSocketsPort;
+
+// MCP server
+extern bool c64SettingsRunMCPServer;
+extern int c64SettingsMCPServerMode;     // 0=alongside GUI, 1=headless
+extern int c64SettingsMCPLogOutput;      // 0=file, 1=stderr, 2=off
 
 // set setting
 void C64DebuggerSetSetting(const char *name, void *value);

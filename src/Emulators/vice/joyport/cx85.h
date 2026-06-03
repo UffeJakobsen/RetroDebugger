@@ -27,8 +27,8 @@
 #ifndef VICE_CX85_H
 #define VICE_CX85_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int joyport_cx85_resources_init(void);
+int joyport_cx85_resources_init(void);
 
 #endif

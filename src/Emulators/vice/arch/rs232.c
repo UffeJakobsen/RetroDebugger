@@ -78,7 +78,6 @@
 #include "log.h"
 #include "resources.h"
 #include "rs232.h"
-#include "translate.h"
 #include "vicetypes.h"
 
 #if defined(NEXTSTEP_COMPILE) || defined(OPENSTEP_COMPILE)
@@ -160,25 +159,17 @@ void rs232_resources_shutdown(void)
 static const cmdline_option_t cmdline_options[] = {
     { "-rsdev1baud", SET_RESOURCE, -1,
       NULL, NULL, "RsDevice1Baud", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING,
-      IDCLS_UNUSED, IDCLS_UNUSED,
       N_("baudrate"), N_("Specify baudrate of first RS232 device") },
     { "-rsdev2baud", SET_RESOURCE, -1,
       NULL, NULL, "RsDevice2Baud", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING,
-      IDCLS_UNUSED, IDCLS_UNUSED,
       N_("baudrate"), N_("Specify baudrate of second RS232 device") },
     { "-rsdev3baud", SET_RESOURCE, -1,
       NULL, NULL, "RsDevice3Baud", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING,
-      IDCLS_UNUSED, IDCLS_UNUSED,
       N_("baudrate"), N_("Specify baudrate of third RS232 device") },
     { "-rsdev4baud", SET_RESOURCE, -1,
       NULL, NULL, "RsDevice4Baud", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING,
-      IDCLS_UNUSED, IDCLS_UNUSED,
       N_("baudrate"), N_("Specify baudrate of 4th RS232 device") },
-    { NULL }
+    { NULL },
 };
 
 int rs232_cmdline_options_init(void)
@@ -203,7 +194,7 @@ typedef struct rs232 {
 
 static rs232_t fds[RS232_NUM_DEVICES];
 
-static log_t rs232_log = LOG_ERR;
+static log_t rs232_log = LOG_DEFAULT;
 
 /* ------------------------------------------------------------------------- */
 
@@ -387,7 +378,7 @@ void rs232_close(int fd)
 }
 
 /* sends a byte to the RS232 line */
-int rs232_putc(int fd, BYTE b)
+int rs232_putc(int fd, uint8_t b)
 {
     ssize_t n;
 
@@ -417,7 +408,7 @@ int rs232_putc(int fd, BYTE b)
 }
 
 /* gets a byte to the RS232 line, returns !=0 if byte received, byte in *b. */
-int rs232_getc(int fd, BYTE * b)
+int rs232_getc(int fd, uint8_t * b)
 {
     int ret;
     size_t n;

@@ -116,12 +116,8 @@ CImageData *CVicEditorLayerC64Screen::GetScreenImage(int *width, int *height)
 {
 	CViewC64Screen *viewC64Screen = viewC64->viewC64Screen;
 
-	viewC64Screen->debugInterface->LockRenderScreenMutex();
-	
 	// refresh texture of C64's screen
-	CImageData *imageData = viewC64Screen->debugInterface->GetScreenImageData();
-
-	viewC64Screen->debugInterface->UnlockRenderScreenMutex();
+	CImageData *imageData = viewC64Screen->debugInterface->AcquireScreenImageForRendering();
 
 	*width = viewC64Screen->debugInterface->GetScreenSizeX();
 	*height = viewC64Screen->debugInterface->GetScreenSizeY();
@@ -138,8 +134,8 @@ CImageData *CVicEditorLayerC64Screen::GetScreenImage(int *width, int *height)
 			imgDataSave->SetPixelResultRGBA(x, y, r, g, b, a);
 		}
 	}
-	
-	viewC64Screen->debugInterface->UnlockRenderScreenMutex();
+
+	viewC64Screen->debugInterface->ReleaseScreenImageAfterRendering();
 
 	return imgDataSave;
 }
@@ -149,11 +145,9 @@ CImageData *CVicEditorLayerC64Screen::GetInteriorScreenImage()
 	LOGTODO("CVicEditorLayerC64Screen::GetInteriorScreenImage: check vicii borderMode");
 	CViewC64Screen *viewC64Screen = viewC64->viewC64Screen;
 	
-	viewC64Screen->debugInterface->LockRenderScreenMutex();
-	
 	// refresh texture of C64's screen
-	CImageData *imageData = viewC64Screen->debugInterface->GetScreenImageData();
-	
+	CImageData *imageData = viewC64Screen->debugInterface->AcquireScreenImageForRendering();
+
 	CImageData *imgDataSave = new CImageData(320, 200);
 	for (int x = 0; x < 320; x++)
 	{
@@ -166,8 +160,8 @@ CImageData *CVicEditorLayerC64Screen::GetInteriorScreenImage()
 			imgDataSave->SetPixelResultRGBA(x, y, r, g, b, a);
 		}
 	}
-	
-	viewC64Screen->debugInterface->UnlockRenderScreenMutex();
+
+	viewC64Screen->debugInterface->ReleaseScreenImageAfterRendering();
 
 	return imgDataSave;
 }

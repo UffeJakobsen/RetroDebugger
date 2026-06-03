@@ -29,10 +29,10 @@
 #define VICE_DD3_H
 
 struct drive_context_s;
-extern void dd3_init(struct drive_context_s *drv);
-extern void dd3_reset(struct drive_context_s *drv);
-extern void dd3_mem_init(struct drive_context_s *drv, unsigned int type);
+void dd3_init(struct drive_context_s *drv);
+void dd3_reset(struct drive_context_s *drv);
+void dd3_mem_init(struct drive_context_s *drv, unsigned int type);
 
-extern void dd3_set_signal(struct drive_context_s *drive_context);
+void dd3_set_signal(struct drive_context_s *drive_context);
 
 #endif

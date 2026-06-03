@@ -163,6 +163,21 @@
 #define VICE_DEBUG_H
 #include "lib.h"
 
+/* Stubs for missing TCHAR utility functions from old VICE */
+static void lib_sntprintf(TCHAR *buf, size_t count, const TCHAR *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    _vsntprintf(buf, count, fmt, ap);
+    va_end(ap);
+}
+static void lib_tcstostr(char *dst, const TCHAR *src, size_t count) {
+#ifdef UNICODE
+    WideCharToMultiByte(CP_ACP, 0, src, -1, dst, (int)count, NULL, NULL);
+#else
+    strncpy(dst, src, count);
+#endif
+}
+
 
 /* platform ids */
 #ifndef VER_NT_WORKSTATION
@@ -799,12 +814,12 @@
 #define _tcsncmp strncmp
 #endif
 
-typedef BOOL (WINAPI *VGPI)(DWORD, DWORD, DWORD, DWORD, PDWORD);
+typedef BOOL (WINAPI *VGPI)(uint32_t, uint32_t, uint32_t, uint32_t, PDWORD);
 typedef void (WINAPI *VGNSI)(LPSYSTEM_INFO);
 
 #if (_MSC_VER >= 1300)
-typedef ULONGLONG (WINAPI *VSCM)(ULONGLONG, DWORD, BYTE);
-typedef BOOL (WINAPI *VVI)(LPOSVERSIONINFOEX, DWORD, DWORDLONG);
+typedef ULONGLONG (WINAPI *VSCM)(ULONGLONG, uint32_t, uint8_t);
+typedef BOOL (WINAPI *VVI)(LPOSVERSIONINFOEX, uint32_t, DWORDLONG);
 #endif
 
 typedef struct winver_s {
@@ -1070,23 +1085,23 @@ static OSVERSIONINFO os_version_info;
    don't seem to agree on what OSVERSIONINFOEX should
    be defined as */
 typedef struct _VICE_OSVERSIONINFOEX {
-    DWORD dwOSVersionInfoSize;
-    DWORD dwMajorVersion;
-    DWORD dwMinorVersion;
-    DWORD dwBuildNumber;
-    DWORD dwPlatformId;
+    uint32_t dwOSVersionInfoSize;
+    uint32_t dwMajorVersion;
+    uint32_t dwMinorVersion;
+    uint32_t dwBuildNumber;
+    uint32_t dwPlatformId;
     TCHAR szCSDVersion[128];
-    WORD wServicePackMajor;
-    WORD wServicePackMinor;
-    WORD wSuiteMask;
-    BYTE wProductType;
-    BYTE wReserved;
+    uint16_t wServicePackMajor;
+    uint16_t wServicePackMinor;
+    uint16_t wSuiteMask;
+    uint8_t wProductType;
+    uint8_t wReserved;
 } VICE_OSVERSIONINFOEX;
 
 static VICE_OSVERSIONINFOEX os_version_ex_info;
 
 /* RegOpenKeyEx wrapper for smart access to both 32bit and 64bit registry entries */
-static LONG RegOpenKeyEx3264(HKEY hKey, LPCTSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult)
+static LONG RegOpenKeyEx3264(HKEY hKey, LPCTSTR lpSubKey, uint32_t ulOptions, REGSAM samDesired, PHKEY phkResult)
 {
     LONG retval = 0;
 
@@ -1234,7 +1249,7 @@ static char *get_win95_version(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     if (!_tcsncmp(os_version_info.szCSDVersion, TEXT(" A"), 2)) {
@@ -1317,7 +1332,7 @@ static int get_product_type_from_reg(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SYSTEM\\CurrentControlSet\\Control\\ProductOptions"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1450,7 +1465,7 @@ static int is_embedded_2009(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SYSTEM\\CurrentControlSet\\Control\\WindowsEmbedded\\ProductVersion"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1475,7 +1490,7 @@ static int is_posready(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\POSReady"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1501,7 +1516,7 @@ static int is_windows8_embedded(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1527,7 +1542,7 @@ static int is_storage_server(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1569,7 +1584,7 @@ static int IsWindows8plus(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1604,7 +1619,7 @@ static int get_windows_10_edition(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1644,7 +1659,7 @@ static int get_sbs_4x(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
     LONG retval = 0;
 
@@ -1698,7 +1713,7 @@ static int get_mce_version(void)
 {
     HKEY hKey;
     TCHAR PT[128];
-    DWORD PTlen = 128;
+    uint32_t PTlen = 128;
     LONG ret;
 
     ret = RegOpenKeyEx3264(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Media Center"), 0, KEY_QUERY_VALUE, &hKey);
@@ -1747,7 +1762,7 @@ char *platform_get_windows_runtime_os(void)
     VGPI ViceGetProductInfo;
     VGNSI ViceGetNativeSystemInfo;
     SYSTEM_INFO systeminfo;
-    DWORD PT;
+    uint32_t PT;
     int sp;
     int exinfo_valid = 0;
     char *reactos_ver = NULL;
@@ -1761,29 +1776,29 @@ char *platform_get_windows_runtime_os(void)
 
         GetVersionEx(&os_version_info);
 
-        windows_versions[0].platformid = (DWORD)os_version_info.dwPlatformId;
-        windows_versions[0].majorver = (DWORD)os_version_info.dwMajorVersion;
-        windows_versions[0].minorver = (DWORD)os_version_info.dwMinorVersion;
+        windows_versions[0].platformid = (uint32_t)os_version_info.dwPlatformId;
+        windows_versions[0].majorver = (uint32_t)os_version_info.dwMajorVersion;
+        windows_versions[0].minorver = (uint32_t)os_version_info.dwMinorVersion;
         windows_versions[0].realos = GetRealOS();
 
         /* check for windows 8.1 when windows 8 was found */
         if (windows_versions[0].majorver == 6 && windows_versions[0].minorver == 2) {
             if (IsWindows8plus() == 1) {
-                windows_versions[0].minorver = (DWORD)3;
+                windows_versions[0].minorver = (uint32_t)3;
             } else if (IsWindows8plus() == 2) {
-                windows_versions[0].majorver = (DWORD)10;
-                windows_versions[0].minorver = (DWORD)0;
+                windows_versions[0].majorver = (uint32_t)10;
+                windows_versions[0].minorver = (uint32_t)0;
             }
         }
 
         if (windows_versions[0].platformid == VER_PLATFORM_WIN32_NT) {
             if (GetVersionEx((LPOSVERSIONINFO)&os_version_ex_info)) {
                 if (os_version_ex_info.wProductType == VER_NT_DOMAIN_CONTROLLER) {
-                    windows_versions[0].producttype = (BYTE)VER_NT_SERVER;
+                    windows_versions[0].producttype = (uint8_t)VER_NT_SERVER;
                 } else {
-                    windows_versions[0].producttype = (BYTE)os_version_ex_info.wProductType;
+                    windows_versions[0].producttype = (uint8_t)os_version_ex_info.wProductType;
                 }
-                windows_versions[0].suite = (WORD)os_version_ex_info.wSuiteMask;
+                windows_versions[0].suite = (uint16_t)os_version_ex_info.wSuiteMask;
                 exinfo_valid = 1;
             } else {
                 switch (get_product_type_from_reg()) {

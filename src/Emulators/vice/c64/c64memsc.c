@@ -44,12 +44,13 @@
 #include "c64memlimit.h"
 #include "c64memrom.h"
 #include "c64pla.h"
+#include "c64model.h"
 #include "c64ui.h"
+#include "lib.h"
 #include "c64cartmem.h"
 #include "cartio.h"
 #include "cartridge.h"
 #include "cia.h"
-#include "clkguard.h"
 #include "cpmcart.h"
 #include "machine.h"
 #include "mainc64cpu.h"
@@ -74,6 +75,9 @@
 /* Machine class (moved from c64.c to distinguish between x64 and x64sc) */
 int machine_class = VICE_MACHINE_C64SC;
 
+/* import from c64-resources.c - don't use the resource for performance reasons */
+extern int board_type;
+
 /* C64 memory-related resources.  */
 
 /* ------------------------------------------------------------------------- */
@@ -85,33 +89,36 @@ int machine_class = VICE_MACHINE_C64SC;
 #define NUM_VBANKS      4
 
 /* The C64 memory.  */
-//BYTE mem_ram[C64_RAM_SIZE];
-BYTE *mem_ram;
+//uint8_t mem_ram[C64_RAM_SIZE];
+uint8_t *mem_ram;
 
 #ifdef USE_EMBEDDED
 #include "c64chargen.h"
 #else
-BYTE mem_chargen_rom[C64_CHARGEN_ROM_SIZE];
+uint8_t mem_chargen_rom[C64_CHARGEN_ROM_SIZE];
 #endif
 
 /* Internal color memory.  */
-static BYTE mem_color_ram[0x400];
-BYTE *mem_color_ram_cpu, *mem_color_ram_vicii;
+static uint8_t mem_color_ram[0x400];
+uint8_t *mem_color_ram_cpu, *mem_color_ram_vicii;
 
 /* Pointer to the chargen ROM.  */
-BYTE *mem_chargen_rom_ptr;
+uint8_t *mem_chargen_rom_ptr;
 
 /* Pointers to the currently used memory read and write tables.  */
 read_func_ptr_t *_mem_read_tab_ptr;
 store_func_ptr_t *_mem_write_tab_ptr;
-static BYTE **_mem_read_base_tab_ptr;
-static DWORD *mem_read_limit_tab_ptr;
+/* VICE 3.10: dummy access table pointers for watchpoint on dummy accesses */
+read_func_ptr_t *_mem_read_tab_ptr_dummy;
+store_func_ptr_t *_mem_write_tab_ptr_dummy;
+static uint8_t **_mem_read_base_tab_ptr;
+static uint32_t *mem_read_limit_tab_ptr;
 
 /* Memory read and write tables.  */
 static store_func_ptr_t mem_write_tab[NUM_CONFIGS][0x101];
 static read_func_ptr_t mem_read_tab[NUM_CONFIGS][0x101];
-static BYTE *mem_read_base_tab[NUM_CONFIGS][0x101];
-static DWORD mem_read_limit_tab[NUM_CONFIGS][0x101];
+static uint8_t *mem_read_base_tab[NUM_CONFIGS][0x101];
+static uint32_t mem_read_limit_tab[NUM_CONFIGS][0x101];
 
 static store_func_ptr_t mem_write_tab_watch[0x101];
 static read_func_ptr_t mem_read_tab_watch[0x101];
@@ -133,41 +140,58 @@ static int watchpoints_active;
 
 /* ------------------------------------------------------------------------- */
 
-static BYTE zero_read_watch(WORD addr)
+static uint8_t zero_read_watch(uint16_t addr)
 {
     addr &= 0xff;
     monitor_watch_push_load_addr(addr, e_comp_space);
     return mem_read_tab[mem_config][0](addr);
 }
 
-static void zero_store_watch(WORD addr, BYTE value)
+static void zero_store_watch(uint16_t addr, uint8_t value)
 {
     addr &= 0xff;
     monitor_watch_push_store_addr(addr, e_comp_space);
     mem_write_tab[mem_config][0](addr, value);
 }
 
-static BYTE read_watch(WORD addr)
+static uint8_t read_watch(uint16_t addr)
 {
     monitor_watch_push_load_addr(addr, e_comp_space);
     return mem_read_tab[mem_config][addr >> 8](addr);
 }
 
-static void store_watch(WORD addr, BYTE value)
+static void store_watch(uint16_t addr, uint8_t value)
 {
     monitor_watch_push_store_addr(addr, e_comp_space);
     mem_write_tab[mem_config][addr >> 8](addr, value);
 }
 
-void mem_toggle_watchpoints(int flag, void *context)
+/* called by mem_pla_config_changed(), mem_toggle_watchpoints() */
+static void mem_update_tab_ptrs(int flag)
 {
     if (flag) {
         _mem_read_tab_ptr = mem_read_tab_watch;
         _mem_write_tab_ptr = mem_write_tab_watch;
+        if (flag > 1) {
+            /* enable watchpoints on dummy accesses */
+            _mem_read_tab_ptr_dummy = mem_read_tab_watch;
+            _mem_write_tab_ptr_dummy = mem_write_tab_watch;
+        } else {
+            _mem_read_tab_ptr_dummy = mem_read_tab[mem_config];
+            _mem_write_tab_ptr_dummy = mem_write_tab[mem_config];
+        }
     } else {
+        /* all watchpoints disabled */
         _mem_read_tab_ptr = mem_read_tab[mem_config];
         _mem_write_tab_ptr = mem_write_tab[mem_config];
+        _mem_read_tab_ptr_dummy = mem_read_tab[mem_config];
+        _mem_write_tab_ptr_dummy = mem_write_tab[mem_config];
     }
+}
+
+void mem_toggle_watchpoints(int flag, void *context)
+{
+    mem_update_tab_ptrs(flag);
     watchpoints_active = flag;
 }
 
@@ -190,28 +214,10 @@ void mem_toggle_watchpoints(int flag, void *context)
     see testprogs/CPU/cpuport for details and tests
 */
 
-static void clk_overflow_callback(CLOCK sub, void *unused_data)
-{
-    if (pport.data_set_clk_bit6 > (CLOCK)0) {
-        pport.data_set_clk_bit6 -= sub;
-    }
-    if (pport.data_falloff_bit6 && (pport.data_set_clk_bit6 < maincpu_clk)) {
-        pport.data_falloff_bit6 = 0;
-        pport.data_set_bit6 = 0;
-    }
-    if (pport.data_set_clk_bit7 > (CLOCK)0) {
-        pport.data_set_clk_bit7 -= sub;
-    }
-    if (pport.data_falloff_bit7 && (pport.data_set_clk_bit7 < maincpu_clk)) {
-        pport.data_falloff_bit7 = 0;
-        pport.data_set_bit7 = 0;
-    }
-}
+/* VICE 3.10: clk_overflow_callback removed — 64-bit CLOCK eliminates overflow */
 
 void c64_mem_init(void)
 {
-    clk_guard_add_callback(maincpu_clk_guard, clk_overflow_callback, NULL);
-
     /* Initialize REU BA low interface (FIXME find a better place for this) */
     reu_ba_register(vicii_cycle_reu, vicii_steal_cycles, &maincpu_ba_low_flags, MAINCPU_BA_LOW_REU);
 
@@ -219,19 +225,22 @@ void c64_mem_init(void)
     cpmcart_ba_register(vicii_cycle, vicii_steal_cycles, &maincpu_ba_low_flags, MAINCPU_BA_LOW_VICII);
 }
 
+int mem_get_current_bank_config(void) {
+    return mem_config;
+}
+
 void mem_pla_config_changed(void)
 {
     mem_config = (((~pport.dir | pport.data) & 0x7) | (export.exrom << 3) | (export.game << 4));
 
-    c64pla_config_changed(tape_sense, tape_write_in, tape_motor_in, 1, 0x17);
-
-    if (watchpoints_active) {
-        _mem_read_tab_ptr = mem_read_tab_watch;
-        _mem_write_tab_ptr = mem_write_tab_watch;
+    /* NOTE: CPU port bits 3,4,5 are not connected on the SX64 board */
+    if (board_type == BOARD_SX64) {
+        c64pla_config_changed(1, 1, 1, 1, 0x07);
     } else {
-        _mem_read_tab_ptr = mem_read_tab[mem_config];
-        _mem_write_tab_ptr = mem_write_tab[mem_config];
+        c64pla_config_changed(tape_sense, tape_write_in, tape_motor_in, 1, 0x17);
     }
+
+    mem_update_tab_ptrs(watchpoints_active);
 
     _mem_read_base_tab_ptr = mem_read_base_tab[mem_config];
     mem_read_limit_tab_ptr = mem_read_limit_tab[mem_config];
@@ -239,20 +248,56 @@ void mem_pla_config_changed(void)
     maincpu_resync_limits();
 }
 
-BYTE zero_read(WORD addr)
+/* reads zeropage, 0/1 comes from RAM */
+uint8_t zero_read_dma(uint16_t addr)
 {
-    BYTE retval;
+    addr &= 0xff;
+
+    if (c64_256k_enabled) {
+        return c64_256k_ram_segment0_read(addr);
+    } else {
+        if (plus256k_enabled) {
+            return plus256k_ram_low_read(addr);
+        } else {
+            return mem_ram[addr & 0xff];
+        }
+    }
+}
+
+/* reads zeropage, 0/1 comes from CPU port */
+uint8_t zero_read(uint16_t addr)
+{
+    uint8_t retval;
 
     addr &= 0xff;
 
-    switch ((BYTE)addr) {
+    switch ((uint8_t)addr) {
         case 0:
-            /* printf("zero_read %02x %02x: ddr:%02x data:%02x (rd: ddr:%02x data:%02x)\n", addr, pport.dir_read, pport.dir, pport.data, pport.dir_read, pport.data_read); */
             return pport.dir_read;
         case 1:
             retval = pport.data_read;
 
             /* discharge the "capacitor" */
+
+            /* FIXME: bits 3,4,5 are not connected on SX-64 boards - whether they
+                      show similar behaviour needs to be tested */
+            if (board_type == BOARD_SX64) {
+                /* set real value of read bit 3 */
+                if (pport.data_falloff_bit3 && (pport.data_set_clk_bit3 < maincpu_clk)) {
+                    pport.data_falloff_bit3 = 0;
+                    pport.data_set_bit3 = 0;
+                }
+                /* set real value of read bit 4 */
+                if (pport.data_falloff_bit4 && (pport.data_set_clk_bit4 < maincpu_clk)) {
+                    pport.data_falloff_bit4 = 0;
+                    pport.data_set_bit4 = 0;
+                }
+                /* set real value of read bit 5 */
+                if (pport.data_falloff_bit5 && (pport.data_set_clk_bit5 < maincpu_clk)) {
+                    pport.data_falloff_bit5 = 0;
+                    pport.data_set_bit5 = 0;
+                }
+            }
 
             /* set real value of read bit 6 */
             if (pport.data_falloff_bit6 && (pport.data_set_clk_bit6 < maincpu_clk)) {
@@ -267,6 +312,23 @@ BYTE zero_read(WORD addr)
             }
 
             /* for unused bits in input mode, the value comes from the "capacitor" */
+            if (board_type == BOARD_SX64) {
+                /* set real value of bit 3 */
+                if (!(pport.dir_read & 0x08)) {
+                    retval &= ~0x08;
+                    retval |= pport.data_set_bit3;
+                }
+                /* set real value of bit 4 */
+                if (!(pport.dir_read & 0x10)) {
+                    retval &= ~0x10;
+                    retval |= pport.data_set_bit4;
+                }
+                /* set real value of bit 5 */
+                if (!(pport.dir_read & 0x20)) {
+                    retval &= ~0x20;
+                    retval |= pport.data_set_bit5;
+                }
+            }
 
             /* set real value of bit 6 */
             if (!(pport.dir_read & 0x40)) {
@@ -279,34 +341,48 @@ BYTE zero_read(WORD addr)
                 retval &= ~0x80;
                 retval |= pport.data_set_bit7;
             }
-            /* printf("zero_read %02x %02x: ddr:%02x data:%02x (rd: ddr:%02x data:%02x)\n", addr, retval, pport.dir, pport.data, pport.dir_read, pport.data_read); */
             return retval;
     }
 
-    if (c64_256k_enabled) {
-        return c64_256k_ram_segment0_read(addr);
-    } else {
-        if (plus256k_enabled) {
-            return plus256k_ram_low_read(addr);
-        } else {
-            return mem_ram[addr & 0xff];
-        }
-    }
+    return zero_read_dma(addr);
 }
 
-void zero_store(WORD addr, BYTE value)
+/* store zeropage, 0/1 goes to RAM */
+void zero_store_dma(uint16_t addr, uint8_t value)
 {
     addr &= 0xff;
 
-    switch ((BYTE)addr) {
+    if (vbank == 0) {
+        if (c64_256k_enabled) {
+            c64_256k_ram_segment0_store(addr, value);
+        } else {
+            if (plus256k_enabled) {
+                plus256k_ram_low_store(addr, value);
+            } else {
+                mem_ram[addr] = value;
+            }
+        }
+    } else {
+        mem_ram[addr] = value;
+    }
+}
+
+#define FALLOFF_RANDOM (C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES / 5)
+#define FALLOFF_RANDOM_SX (SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES / 5)
+
+/* store zeropage, 0/1 goes to CPU port */
+void zero_store(uint16_t addr, uint8_t value)
+{
+    addr &= 0xff;
+
+    switch ((uint8_t)addr) {
         case 0:
-            /* printf("zero_store %02x %02x: ddr:%02x data:%02x\n", addr, value, pport.dir, pport.data); */
             if (vbank == 0) {
                 if (c64_256k_enabled) {
-                    c64_256k_ram_segment0_store((WORD)0, vicii_read_phi1());
+                    c64_256k_ram_segment0_store((uint16_t)0, vicii_read_phi1());
                 } else {
                     if (plus256k_enabled) {
-                        plus256k_ram_low_store((WORD)0, vicii_read_phi1());
+                        plus256k_ram_low_store((uint16_t)0, vicii_read_phi1());
                     } else {
                         mem_ram[0] = vicii_read_phi1();
                     }
@@ -319,10 +395,34 @@ void zero_store(WORD addr, BYTE value)
                stable value) to input mode (where the input is floating), some
                of the charge is transferred to the floating input */
 
+            if (board_type == BOARD_SX64) {
+                if ((pport.dir & 0x08)) {
+                    if ((pport.dir ^ value) & 0x08) {
+                        pport.data_set_clk_bit3 = maincpu_clk + SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM_SX);
+                        pport.data_set_bit3 = pport.data & 0x08;
+                        pport.data_falloff_bit3 = 1;
+                    }
+                }
+                if ((pport.dir & 0x10)) {
+                    if ((pport.dir ^ value) & 0x10) {
+                        pport.data_set_clk_bit4 = maincpu_clk + SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM_SX);
+                        pport.data_set_bit4 = pport.data & 0x10;
+                        pport.data_falloff_bit4 = 1;
+                    }
+                }
+                if ((pport.dir & 0x20)) {
+                    if ((pport.dir ^ value) & 0x20) {
+                        pport.data_set_clk_bit5 = maincpu_clk + SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM_SX);
+                        pport.data_set_bit5 = pport.data & 0x20;
+                        pport.data_falloff_bit5 = 1;
+                    }
+                }
+            }
+
             /* check if bit 6 has flipped */
             if ((pport.dir & 0x40)) {
                 if ((pport.dir ^ value) & 0x40) {
-                    pport.data_set_clk_bit6 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES;
+                    pport.data_set_clk_bit6 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM);
                     pport.data_set_bit6 = pport.data & 0x40;
                     pport.data_falloff_bit6 = 1;
                 }
@@ -331,7 +431,7 @@ void zero_store(WORD addr, BYTE value)
             /* check if bit 7 has flipped */
             if ((pport.dir & 0x80)) {
                 if ((pport.dir ^ value) & 0x80) {
-                    pport.data_set_clk_bit7 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES;
+                    pport.data_set_clk_bit7 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM);
                     pport.data_set_bit7 = pport.data & 0x80;
                     pport.data_falloff_bit7 = 1;
                 }
@@ -343,13 +443,12 @@ void zero_store(WORD addr, BYTE value)
             }
             break;
         case 1:
-            /* printf("zero_store %02x %02x: ddr:%02x data:%02x\n", addr, value, pport.dir, pport.data); */
             if (vbank == 0) {
                 if (c64_256k_enabled) {
-                    c64_256k_ram_segment0_store((WORD)1, vicii_read_phi1());
+                    c64_256k_ram_segment0_store((uint16_t)1, vicii_read_phi1());
                 } else {
                     if (plus256k_enabled) {
-                        plus256k_ram_low_store((WORD)1, vicii_read_phi1());
+                        plus256k_ram_low_store((uint16_t)1, vicii_read_phi1());
                     } else {
                         mem_ram[1] = vicii_read_phi1();
                     }
@@ -363,14 +462,32 @@ void zero_store(WORD addr, BYTE value)
                otherwise don't touch it */
             if (pport.dir & 0x80) {
                 pport.data_set_bit7 = value & 0x80;
-                pport.data_set_clk_bit7 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES;
+                pport.data_set_clk_bit7 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM);
                 pport.data_falloff_bit7 = 1;
             }
 
             if (pport.dir & 0x40) {
                 pport.data_set_bit6 = value & 0x40;
-                pport.data_set_clk_bit6 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES;
+                pport.data_set_clk_bit6 = maincpu_clk + C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM);
                 pport.data_falloff_bit6 = 1;
+            }
+
+            if (board_type == BOARD_SX64) {
+                if (pport.dir & 0x20) {
+                    pport.data_set_bit5 = value & 0x20;
+                    pport.data_set_clk_bit5 = maincpu_clk + SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM_SX);
+                    pport.data_falloff_bit5 = 1;
+                }
+                if (pport.dir & 0x10) {
+                    pport.data_set_bit4 = value & 0x10;
+                    pport.data_set_clk_bit4 = maincpu_clk + SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM_SX);
+                    pport.data_falloff_bit4 = 1;
+                }
+                if (pport.dir & 0x08) {
+                    pport.data_set_bit3 = value & 0x08;
+                    pport.data_set_clk_bit3 = maincpu_clk + SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES + lib_unsigned_rand(0, FALLOFF_RANDOM_SX);
+                    pport.data_falloff_bit3 = 1;
+                }
             }
 
             if (pport.data != value) {
@@ -379,89 +496,98 @@ void zero_store(WORD addr, BYTE value)
             }
             break;
         default:
-            if (vbank == 0) {
-                if (c64_256k_enabled) {
-                    c64_256k_ram_segment0_store(addr, value);
-                } else {
-                    if (plus256k_enabled) {
-                        plus256k_ram_low_store(addr, value);
-                    } else {
-                        mem_ram[addr] = value;
-                    }
-                }
-            } else {
-                mem_ram[addr] = value;
-            }
+            zero_store_dma(addr, value);
+            break;
     }
 }
 
 /* ------------------------------------------------------------------------- */
 
-BYTE chargen_read(WORD addr)
+uint8_t chargen_read(uint16_t addr)
 {
     return mem_chargen_rom[addr & 0xfff];
 }
 
-void chargen_store(WORD addr, BYTE value)
+void chargen_store(uint16_t addr, uint8_t value)
 {
     mem_chargen_rom[addr & 0xfff] = value;
 }
 
-BYTE ram_read(WORD addr)
+uint8_t ram_read(uint16_t addr)
 {
     return mem_ram[addr];
 }
 
-void ram_store(WORD addr, BYTE value)
+void ram_store(uint16_t addr, uint8_t value)
 {
     mem_ram[addr] = value;
 }
 
-void ram_hi_store(WORD addr, BYTE value)
+void ram_hi_store(uint16_t addr, uint8_t value)
 {
     mem_ram[addr] = value;
-
-    if (addr == 0xff00) {
-        reu_dma(-1);
-    }
 }
 
 /* unconnected memory space */
-static BYTE void_read(WORD addr)
+static uint8_t void_read(uint16_t addr)
 {
     return vicii_read_phi1();
 }
 
-static void void_store(WORD addr, BYTE value)
+static void void_store(uint16_t addr, uint8_t value)
 {
     return;
 }
 
 /* ------------------------------------------------------------------------- */
 
+/* DMA memory access, this is the same as generic memory access, but needs to
+   bypass the CPU port, so it accesses RAM at $00/$01 (from VICE 3.10) */
+
+void mem_dma_store(uint16_t addr, uint8_t value)
+{
+    if ((addr & 0xff00) == 0) {
+        /* exception: 0/1 accesses RAM! */
+        zero_store_dma(addr, value);
+    } else {
+        _mem_write_tab_ptr[addr >> 8](addr, value);
+    }
+}
+
+uint8_t mem_dma_read(uint16_t addr)
+{
+    if ((addr & 0xff00) == 0) {
+        /* exception: 0/1 accesses RAM! */
+        return zero_read_dma(addr);
+    }
+    return _mem_read_tab_ptr[addr >> 8](addr);
+}
+
+/* ------------------------------------------------------------------------- */
+
 /* Generic memory access.  */
 
-void mem_store(WORD addr, BYTE value)
+void mem_store(uint16_t addr, uint8_t value)
 {
     _mem_write_tab_ptr[addr >> 8](addr, value);
 }
 
-BYTE mem_read(WORD addr)
+uint8_t mem_read(uint16_t addr)
 {
     return _mem_read_tab_ptr[addr >> 8](addr);
 }
 
-void mem_store_without_ultimax(WORD addr, BYTE value)
+void mem_store_without_ultimax(uint16_t addr, uint8_t value)
 {
     mem_write_tab[mem_config & 7][addr >> 8](addr, value);
 }
 
-BYTE mem_read_without_ultimax(WORD addr)
+uint8_t mem_read_without_ultimax(uint16_t addr)
 {
     return mem_read_tab[mem_config & 7][addr >> 8](addr);
 }
 
-void mem_store_without_romlh(WORD addr, BYTE value)
+void mem_store_without_romlh(uint16_t addr, uint8_t value)
 {
     mem_write_tab[0][addr >> 8](addr, value);
 }
@@ -469,17 +595,17 @@ void mem_store_without_romlh(WORD addr, BYTE value)
 
 /* ------------------------------------------------------------------------- */
 
-void colorram_store(WORD addr, BYTE value)
+void colorram_store(uint16_t addr, uint8_t value)
 {
     mem_color_ram[addr & 0x3ff] = value & 0xf;
 }
 
-BYTE colorram_read(WORD addr)
+uint8_t colorram_read(uint16_t addr)
 {
     return mem_color_ram[addr & 0x3ff] | (vicii_read_phi1() & 0xf0);
 }
 
-BYTE c64d_colorram_peek(WORD addr)
+uint8_t c64d_colorram_peek(uint16_t addr)
 {
 	return mem_color_ram[addr & 0x3ff] | (vicii_read_phi1() & 0xf0);
 }
@@ -497,12 +623,12 @@ static int check_256k_ram_write(int i, int j)
     }
 }
 
-void c64_256k_init_config(void)
+static void c64_256k_init_config(void)
 {
     int i, j;
 
     if (c64_256k_enabled) {
-        mem_limit_256k_init(mem_read_limit_tab);
+        mem_limit_256k_init();
         for (i = 0; i < NUM_CONFIGS; i++) {
             for (j = 1; j <= 0xff; j++) {
                 if (check_256k_ram_write(i, j) == 1) {
@@ -542,12 +668,12 @@ void c64_256k_init_config(void)
 
 /* init plus256k memory table changes */
 
-void plus256k_init_config(void)
+static void plus256k_init_config(void)
 {
     int i, j;
 
     if (plus256k_enabled) {
-        mem_limit_256k_init(mem_read_limit_tab);
+        mem_limit_256k_init();
         for (i = 0; i < NUM_CONFIGS; i++) {
             for (j = 1; j <= 0xff; j++) {
                 if (check_256k_ram_write(i, j) == 1) {
@@ -577,7 +703,7 @@ static void plus60k_init_config(void)
     int i, j;
 
     if (plus60k_enabled) {
-        mem_limit_plus60k_init(mem_read_limit_tab);
+        mem_limit_plus60k_init();
         for (i = 0; i < NUM_CONFIGS; i++) {
             for (j = 0x10; j <= 0xff; j++) {
                 if (mem_write_tab[i][j] == ram_hi_store) {
@@ -607,9 +733,20 @@ void mem_read_tab_set(unsigned int base, unsigned int index, read_func_ptr_t rea
     mem_read_tab[base][index] = read_func;
 }
 
-void mem_read_base_set(unsigned int base, unsigned int index, BYTE *mem_ptr)
+void mem_read_base_set(unsigned int base, unsigned int index, uint8_t *mem_ptr)
 {
     mem_read_base_tab[base][index] = mem_ptr;
+}
+
+/* add actual pointer (from VICE 3.10) */
+void mem_read_addr_set(unsigned int base, unsigned int index, uintptr_t addr)
+{
+    mem_read_base_tab[base][index] += addr;
+}
+
+void mem_read_limit_set(unsigned int base, unsigned int index, uint32_t limit)
+{
+    mem_read_limit_tab[base][index] = limit;
 }
 
 void c64d_init_memory(uint8 *c64memory)
@@ -627,7 +764,7 @@ void mem_initialize_memory(void)
     mem_color_ram_cpu = mem_color_ram;
     mem_color_ram_vicii = mem_color_ram;
 
-    mem_limit_init(mem_read_limit_tab);
+    mem_limit_init();
 
     /* setup watchpoint tables */
     mem_read_tab_watch[0] = zero_read_watch;
@@ -645,7 +782,7 @@ void mem_initialize_memory(void)
         mem_read_tab[i][0] = zero_read;
         mem_read_base_tab[i][0] = mem_ram;
         for (j = 1; j <= 0xfe; j++) {
-            if (board == 1 && j >= 0x08) {
+            if (board == BOARD_MAX && j >= 0x08) {
                 mem_read_tab[i][j] = void_read;
                 mem_read_base_tab[i][j] = NULL;
                 mem_set_write_hook(0, j, void_store);
@@ -655,7 +792,7 @@ void mem_initialize_memory(void)
             mem_read_base_tab[i][j] = mem_ram;
             mem_write_tab[i][j] = ram_store;
         }
-        if (board == 1) {
+        if (board == BOARD_MAX) {
             mem_read_tab[i][0xff] = void_read;
             mem_read_base_tab[i][0xff] = NULL;
             mem_set_write_hook(0, 0xff, void_store);
@@ -678,14 +815,14 @@ void mem_initialize_memory(void)
         mem_read_tab[11][i] = chargen_read;
         mem_read_tab[26][i] = chargen_read;
         mem_read_tab[27][i] = chargen_read;
-        mem_read_base_tab[1][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[2][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[3][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[9][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[10][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[11][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[26][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
-        mem_read_base_tab[27][i] = (BYTE *)(mem_chargen_rom - (BYTE *)0xd000);
+        mem_read_base_tab[1][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[2][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[3][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[9][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[10][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[11][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[26][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
+        mem_read_base_tab[27][i] = (uint8_t *)(mem_chargen_rom - (uint8_t *)0xd000);
     }
 
     c64meminit(0);
@@ -718,14 +855,14 @@ void mem_initialize_memory(void)
     c64_256k_init_config();
 
     if (board == 1) {
-        mem_limit_max_init(mem_read_limit_tab);
+        mem_limit_max_init();
     }
 }
 
-void mem_mmu_translate(unsigned int addr, BYTE **base, int *start, int *limit)
+void mem_mmu_translate(unsigned int addr, uint8_t **base, int *start, int *limit)
 {
-    BYTE *p = _mem_read_base_tab_ptr[addr >> 8];
-    DWORD limits;
+    uint8_t *p = _mem_read_base_tab_ptr[addr >> 8];
+    uint32_t limits;
 
     if (p != NULL && addr > 1) {
         *base = p;
@@ -743,7 +880,7 @@ void mem_mmu_translate(unsigned int addr, BYTE **base, int *start, int *limit)
 void mem_powerup(void)
 {
     ram_init(mem_ram, 0x10000);
-    cartridge_ram_init();  /* Clean cartridge ram too */
+    /* cartridge_ram_init() removed in VICE 3.10 — cart RAM init handled by individual carts */
 }
 
 /* ------------------------------------------------------------------------- */
@@ -781,7 +918,7 @@ void mem_set_tape_motor_in(int val)
 
 /* FIXME: this part needs to be checked.  */
 
-void mem_get_basic_text(WORD *start, WORD *end)
+void mem_get_basic_text(uint16_t *start, uint16_t *end)
 {
     if (start != NULL) {
         *start = mem_ram[0x2b] | (mem_ram[0x2c] << 8);
@@ -791,7 +928,7 @@ void mem_get_basic_text(WORD *start, WORD *end)
     }
 }
 
-void mem_set_basic_text(WORD start, WORD end)
+void mem_set_basic_text(uint16_t start, uint16_t end)
 {
     mem_ram[0x2b] = mem_ram[0xac] = start & 0xff;
     mem_ram[0x2c] = mem_ram[0xad] = start >> 8;
@@ -799,7 +936,7 @@ void mem_set_basic_text(WORD start, WORD end)
     mem_ram[0x2e] = mem_ram[0x30] = mem_ram[0x32] = mem_ram[0xaf] = end >> 8;
 }
 
-void mem_inject(DWORD addr, BYTE value)
+void mem_inject(uint32_t addr, uint8_t value)
 {
     /* could be made to handle various internal expansions in some sane way */
     mem_ram[addr & 0xffff] = value;
@@ -807,7 +944,7 @@ void mem_inject(DWORD addr, BYTE value)
 
 /* ------------------------------------------------------------------------- */
 
-int mem_rom_trap_allowed(WORD addr)
+int mem_rom_trap_allowed(uint16_t addr)
 {
     if (addr >= 0xe000) {
         switch (mem_config) {
@@ -836,7 +973,7 @@ int mem_rom_trap_allowed(WORD addr)
 
 /* Banked memory access functions for the monitor.  */
 
-void store_bank_io(WORD addr, BYTE byte)
+void store_bank_io(uint16_t addr, uint8_t byte)
 {
     switch (addr & 0xff00) {
         case 0xd000:
@@ -885,7 +1022,7 @@ void store_bank_io(WORD addr, BYTE byte)
     return;
 }
 
-BYTE read_bank_io(WORD addr)
+uint8_t read_bank_io(uint16_t addr)
 {
     switch (addr & 0xff00) {
         case 0xd000:
@@ -921,7 +1058,7 @@ BYTE read_bank_io(WORD addr)
     return 0xff;
 }
 
-static BYTE peek_bank_io(WORD addr)
+static uint8_t peek_bank_io(uint16_t addr)
 {
     switch (addr & 0xff00) {
         case 0xd000:
@@ -991,7 +1128,7 @@ int mem_bank_from_name(const char *name)
     return -1;
 }
 
-BYTE mem_bank_read(int bank, WORD addr, void *context)
+uint8_t mem_bank_read(int bank, uint16_t addr, void *context)
 {
     switch (bank) {
         case 0:                   /* current */
@@ -1021,10 +1158,10 @@ BYTE mem_bank_read(int bank, WORD addr, void *context)
 
 // Slaj: unfortunately mem_bank_peek DOES affect CIA I/O when run from async so can't be used here :(
 
-BYTE c64d_cia1_peek(WORD addr);
-BYTE c64d_cia2_peek(WORD addr);
+uint8_t c64d_cia1_peek(uint16_t addr);
+uint8_t c64d_cia2_peek(uint16_t addr);
 
-BYTE c64d_peek_io(WORD addr)
+uint8_t c64d_peek_io(uint16_t addr)
 {
 	switch ((addr >> 8) & 0x0F)
 	{
@@ -1057,35 +1194,35 @@ BYTE c64d_peek_io(WORD addr)
 
 /* from c64cart.c */
 extern int mem_cartridge_type; /* Type of the cartridge attached. ("Main Slot") */
-BYTE roml_read_slotmain(WORD addr);
-BYTE romh_read_slotmain(WORD addr);
-BYTE cartridge_peek_mem_slotmain(WORD addr);
+uint8_t roml_read_slotmain(uint16_t addr);
+uint8_t romh_read_slotmain(uint16_t addr);
+uint8_t cartridge_peek_mem_slotmain(uint16_t addr);
 
 // https://www.c64-wiki.com/index.php/Bank_Switching
 
-BYTE c64d_peek_memory0001()
+uint8_t c64d_peek_memory0001()
 {
 	return (pport.data_read & (0xff - (((!pport.data_set_bit6) << 6) + ((!pport.data_set_bit7) << 7))));
 }
 
-BYTE c64d_peek_c64(WORD addr)
+uint8_t c64d_peek_c64(uint16_t addr)
 {
 	int addrHi;
-	BYTE mem_config;
+	uint8_t mem_config;
 	int exrom;
 	int game;
-	BYTE basic_in;
-	BYTE kernal_in;
-	BYTE char_in;
-	BYTE io_in;
+	uint8_t basic_in;
+	uint8_t kernal_in;
+	uint8_t char_in;
+	uint8_t io_in;
 
-	BYTE charen;
-	BYTE hiram;
-	BYTE loram;
+	uint8_t charen;
+	uint8_t hiram;
+	uint8_t loram;
 	
-	BYTE mem01;
+	uint8_t mem01;
 	
-	BYTE ret;
+	uint8_t ret;
 	
 
 	if (addr == 0x0000)
@@ -1260,17 +1397,17 @@ BYTE c64d_peek_c64(WORD addr)
 	return mem_ram[addr];
 }
 
-BYTE c64d_peek_c64_for_cycle(WORD addr, BYTE memory0001, BYTE exrom_state, BYTE game_state)
+uint8_t c64d_peek_c64_for_cycle(uint16_t addr, uint8_t memory0001, uint8_t exrom_state, uint8_t game_state)
 {
 	int addrHi;
 	int exrom;
 	int game;
-	BYTE basic_in;
-	BYTE kernal_in;
-	BYTE char_in;
-	BYTE io_in;
-	BYTE mem01;
-	BYTE ret;
+	uint8_t basic_in;
+	uint8_t kernal_in;
+	uint8_t char_in;
+	uint8_t io_in;
+	uint8_t mem01;
+	uint8_t ret;
 
 	if (addr == 0x0000 || addr == 0x0001)
 	{
@@ -1408,20 +1545,20 @@ BYTE c64d_peek_c64_for_cycle(WORD addr, BYTE memory0001, BYTE exrom_state, BYTE 
 	return mem_ram[addr];
 }
 
-void c64d_peek_memory_c64(BYTE *buffer, int addrStart, int addrEnd)
+void c64d_peek_memory_c64(uint8_t *buffer, int addrStart, int addrEnd)
 {
 	int addr;
-	BYTE *bufPtr = buffer + addrStart;
+	uint8_t *bufPtr = buffer + addrStart;
 	for (addr = addrStart; addr < addrEnd; addr++)
 	{
 		*bufPtr++ = c64d_peek_c64(addr);
 	}
 }
 
-void c64d_copy_ram_memory_c64(BYTE *buffer, int addrStart, int addrEnd)
+void c64d_copy_ram_memory_c64(uint8_t *buffer, int addrStart, int addrEnd)
 {
 	int addr;
-	BYTE *bufPtr = buffer + addrStart;
+	uint8_t *bufPtr = buffer + addrStart;
 	for (addr = addrStart; addr < addrEnd; addr++)
 	{
 		*bufPtr++ = mem_ram[addr];
@@ -1443,22 +1580,22 @@ void c64d_copy_ram_memory_c64(BYTE *buffer, int addrStart, int addrEnd)
 
 
 //
-void c64d_peek_whole_map_c64(BYTE *memoryBuffer)
+void c64d_peek_whole_map_c64(uint8_t *memoryBuffer)
 {
 	int exrom;
 	int game;
-	BYTE basic_in;
-	BYTE kernal_in;
-	BYTE char_in;
-	BYTE io_in;
+	uint8_t basic_in;
+	uint8_t kernal_in;
+	uint8_t char_in;
+	uint8_t io_in;
 	
-	BYTE charen;
-	BYTE hiram;
-	BYTE loram;
+	uint8_t charen;
+	uint8_t hiram;
+	uint8_t loram;
 	
-	BYTE mem01;
+	uint8_t mem01;
 	
-	BYTE ret;
+	uint8_t ret;
 	
 	uint32 addr;
 	uint8 *bufPtr;
@@ -1695,35 +1832,35 @@ void c64d_peek_whole_map_c64(BYTE *memoryBuffer)
 }
 
 
-void c64d_get_exrom_game(BYTE *exrom, BYTE *game)
+void c64d_get_exrom_game(uint8_t *exrom, uint8_t *game)
 {
 	*exrom = !export.exrom;
 	*game = !export.game;
 }
 
-void c64d_get_ultimax_phi(BYTE *ultimax_phi1, BYTE *ultimax_phi2)
+void c64d_get_ultimax_phi(uint8_t *ultimax_phi1, uint8_t *ultimax_phi2)
 {
 	*ultimax_phi1 = export.ultimax_phi1;
 	*ultimax_phi2 = export.ultimax_phi2;
 }
 
 
-void c64d_mem_ram_write_c64(WORD addr, BYTE value)
+void c64d_mem_ram_write_c64(uint16_t addr, uint8_t value)
 {
 	mem_ram[addr] = value;
 }
 
-void c64d_mem_ram_fill_c64(WORD addr, WORD size, BYTE value)
+void c64d_mem_ram_fill_c64(uint16_t addr, uint16_t size, uint8_t value)
 {
 	memset((mem_ram + addr), value, size);
 }
 
-BYTE c64d_mem_ram_read_c64(WORD addr)
+uint8_t c64d_mem_ram_read_c64(uint16_t addr)
 {
 	return mem_ram[addr];
 }
 
-void c64d_copy_whole_mem_ram_c64(BYTE *destBuf)
+void c64d_copy_whole_mem_ram_c64(uint8_t *destBuf)
 {
 	memcpy(destBuf, mem_ram, 0x010000);
 	
@@ -1800,7 +1937,7 @@ void c64d_un_patch_kernal_fast_boot()
 
 
 // Slaj: unfortunately mem_bank_peek DOES affect I/O state :( :(
-BYTE mem_bank_peek(int bank, WORD addr, void *context)
+uint8_t mem_bank_peek(int bank, uint16_t addr, void *context)
 {
     switch (bank) {
         case 0:                   /* current */
@@ -1823,7 +1960,7 @@ BYTE mem_bank_peek(int bank, WORD addr, void *context)
     return mem_bank_read(bank, addr, context);
 }
 
-void mem_bank_write(int bank, WORD addr, BYTE byte, void *context)
+void mem_bank_write(int bank, uint16_t addr, uint8_t byte, void *context)
 {
     switch (bank) {
         case 0:                   /* current */
@@ -1850,7 +1987,7 @@ void mem_bank_write(int bank, WORD addr, BYTE byte, void *context)
     mem_ram[addr] = byte;
 }
 
-static int mem_dump_io(void *context, WORD addr)
+static int mem_dump_io(void *context, uint16_t addr)
 {
     if ((addr >= 0xdc00) && (addr <= 0xdc3f)) {
         return ciacore_dump(machine_context.cia1);
@@ -1864,15 +2001,15 @@ mem_ioreg_list_t *mem_ioreg_list_get(void *context)
 {
     mem_ioreg_list_t *mem_ioreg_list = NULL;
 
-    mon_ioreg_add_list(&mem_ioreg_list, "CIA1", 0xdc00, 0xdc0f, mem_dump_io, NULL);
-    mon_ioreg_add_list(&mem_ioreg_list, "CIA2", 0xdd00, 0xdd0f, mem_dump_io, NULL);
+    mon_ioreg_add_list(&mem_ioreg_list, "CIA1", 0xdc00, 0xdc0f, mem_dump_io, NULL, IO_MIRROR_NONE);
+    mon_ioreg_add_list(&mem_ioreg_list, "CIA2", 0xdd00, 0xdd0f, mem_dump_io, NULL, IO_MIRROR_NONE);
 
     io_source_ioreg_add_list(&mem_ioreg_list);
 
     return mem_ioreg_list;
 }
 
-void mem_get_screen_parameter(WORD *base, BYTE *rows, BYTE *columns, int *bank)
+void mem_get_screen_parameter(uint16_t *base, uint8_t *rows, uint8_t *columns, int *bank)
 {
     *base = ((vicii_peek(0xd018) & 0xf0) << 6) | ((~cia2_peek(0xdd00) & 0x03) << 14);
     *rows = 25;
@@ -1882,12 +2019,12 @@ void mem_get_screen_parameter(WORD *base, BYTE *rows, BYTE *columns, int *bank)
 
 /* ------------------------------------------------------------------------- */
 
-void mem_color_ram_to_snapshot(BYTE *color_ram)
+void mem_color_ram_to_snapshot(uint8_t *color_ram)
 {
     memcpy(color_ram, mem_color_ram, 0x400);
 }
 
-void mem_color_ram_from_snapshot(BYTE *color_ram)
+void mem_color_ram_from_snapshot(uint8_t *color_ram)
 {
     memcpy(mem_color_ram, color_ram, 0x400);
 }

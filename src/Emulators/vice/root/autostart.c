@@ -1,13 +1,15 @@
+/** \file   autostart.c
+ * \brief   Automatic image loading and starting.
+ *
+ * \author  Teemu Rantanen <tvr@cs.hut.fi>
+ * \author  Ettore Perazzoli <ettore@comm2000.it>
+ * \author  Andre Fachat <a.fachat@physik.tu-chemnitz.de>
+ * \author  Andreas Boose <viceteam@t-online.de>
+ * \author  Thomas Bretz <tbretz@ph.tum.de>
+ * \author  groepaz <groepaz@gmx.net>
+ */
+
 /*
- * autostart.c - Automatic image loading and starting.
- *
- * Written by
- *  Teemu Rantanen <tvr@cs.hut.fi>
- *  Ettore Perazzoli <ettore@comm2000.it>
- *  Andre Fachat <a.fachat@physik.tu-chemnitz.de>
- *  Andreas Boose <viceteam@t-online.de>
- *  Thomas Bretz <tbretz@ph.tum.de>
- *
  * This file is part of VICE, the Versatile Commodore Emulator.
  * See README for copyright notice.
  *
@@ -66,7 +68,7 @@
 #include "resources.h"
 #include "snapshot.h"
 #include "tape.h"
-#include "translate.h"
+#include "tapeport.h"
 #include "vicetypes.h"
 #include "uiapi.h"
 #include "util.h"
@@ -75,7 +77,7 @@
 #include "vice-event.h"
 
 #ifdef DEBUG_AUTOSTART
-#define DBG(_x_)        log_debug _x_
+#define DBG(_x_) log_printf  _x_
 #else
 #define DBG(_x_)
 #endif
@@ -85,7 +87,7 @@ static void autostart_finish(void);
 
 /* Kernal addresses.  Set by `autostart_init()'.  */
 
-static WORD blnsw;           /* Cursor Blink enable: 0 = Flash Cursor */
+static uint16_t blnsw;           /* Cursor Blink enable: 0 = Flash Cursor */
 static int pnt;                 /* Pointer: Current Screen Line Address */
 static int pntr;                /* Cursor Column on Current Line */
 static int lnmx;                /* Physical Screen Line Length */
@@ -111,7 +113,7 @@ static enum {
 #define AUTOSTART_NOWAIT_BLINK 1
 
 /* Log descriptor.  */
-static log_t autostart_log = LOG_ERR;
+static log_t autostart_log = LOG_DEFAULT;
 
 /* Flag: was true drive emulation turned on when we started booting the disk
    image?  */
@@ -153,6 +155,7 @@ static int entered_rom = 0;
 static int trigger_monitor = 0;
 
 int autostart_ignore_reset = 0; /* FIXME: only used by datasette.c, does it really have to be global? */
+int autostart_tape_basic_load = 1; /* VICE 3.10: tape basic load flag */
 
 /* flag for special case handling of C128 80 columns mode */
 static int c128_column4080_key;
@@ -338,71 +341,45 @@ void autostart_resources_shutdown(void)
 
 static const cmdline_option_t cmdline_options[] =
 {
-    { "-basicload", SET_RESOURCE, 0,
+    { "-basicload", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartBasicLoad", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_AUTOSTART_LOAD_TO_BASIC_START,
-      NULL, NULL },
-    { "+basicload", SET_RESOURCE, 0,
+      NULL, "On autostart, load to BASIC start (without ',1')" },
+    { "+basicload", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartBasicLoad", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_AUTOSTART_LOAD_WITH_1,
-      NULL, NULL },
-    { "-autostartwithcolon", SET_RESOURCE, 0,
+      NULL, "On autostart, load with ',1'" },
+    { "-autostartwithcolon", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartRunWithColon", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_AUTOSTARTWITHCOLON,
-      NULL, NULL },
-    { "+autostartwithcolon", SET_RESOURCE, 0,
+      NULL, "On autostart, use the 'RUN' command with a colon, i.e., 'RUN:'" },
+    { "+autostartwithcolon", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartRunWithColon", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_AUTOSTARTWITHCOLON,
-      NULL, NULL },
-    { "-autostart-handle-tde", SET_RESOURCE, 0,
+      NULL, "On autostart, do not use the 'RUN' command with a colon; i.e., 'RUN'" },
+    { "-autostart-handle-tde", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartHandleTrueDriveEmulation", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_AUTOSTART_HANDLE_TDE,
-      NULL, NULL },
-    { "+autostart-handle-tde", SET_RESOURCE, 0,
+      NULL, "Handle True Drive Emulation on autostart" },
+    { "+autostart-handle-tde", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartHandleTrueDriveEmulation", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_AUTOSTART_HANDLE_TDE,
-      NULL, NULL },
-    { "-autostart-warp", SET_RESOURCE, 0,
+      NULL, "Do not handle True Drive Emulation on autostart" },
+    { "-autostart-warp", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartWarp", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_WARP_MODE_AUTOSTART,
-      NULL, NULL },
-    { "+autostart-warp", SET_RESOURCE, 0,
+      NULL, "Enable warp mode during autostart" },
+    { "+autostart-warp", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartWarp", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_WARP_MODE_AUTOSTART,
-      NULL, NULL },
-    { "-autostartprgmode", SET_RESOURCE, 1,
+      NULL, "Disable warp mode during autostart" },
+    { "-autostartprgmode", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "AutostartPrgMode", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_MODE, IDCLS_SET_AUTOSTART_MODE_FOR_PRG,
-      NULL, NULL },
-    { "-autostartprgdiskimage", SET_RESOURCE, 1,
+      "<Mode>", "Set autostart mode for PRG files (0: VirtualFS, 1: Inject, 2: Disk image)" },
+    { "-autostartprgdiskimage", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "AutostartPrgDiskImage", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_SET_DISK_IMAGE_FOR_AUTOSTART_PRG,
-      NULL, NULL },
-    { "-autostart-delay", SET_RESOURCE, 1,
+      "<Name>", "Set disk image for autostart of PRG files" },
+    { "-autostart-delay", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "AutostartDelay", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_FRAMES, IDCLS_SET_AUTOSTART_DELAY,
-      NULL, NULL },
-    { "-autostart-delay-random", SET_RESOURCE, 0,
+      "<frames>", "Set initial autostart delay (0: use default)" },
+    { "-autostart-delay-random", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartDelayRandom", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_AUTOSTART_RANDOM_DELAY,
-      NULL, NULL },
-    { "+autostart-delay-random", SET_RESOURCE, 0,
+      NULL, "Enable random initial autostart delay." },
+    { "+autostart-delay-random", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "AutostartDelayRandom", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_AUTOSTART_RANDOM_DELAY,
-      NULL, NULL },
+      NULL, "Disable random initial autostart delay." },
     CMDLINE_LIST_END
 };
 
@@ -432,10 +409,10 @@ static enum { YES, NO, NOT_YET } check(const char *s, unsigned int blink_mode)
 {
     int screen_addr, line_length, cursor_column, addr, i;
 
-    screen_addr = (int)(mem_read((WORD)(pnt)) | (mem_read((WORD)(pnt + 1)) << 8));
-    cursor_column = (int)mem_read((WORD)(pntr));
+    screen_addr = (int)(mem_read((uint16_t)(pnt)) | (mem_read((uint16_t)(pnt + 1)) << 8));
+    cursor_column = (int)mem_read((uint16_t)(pntr));
 
-    line_length = (int)(lnmx < 0 ? -lnmx : mem_read((WORD)(lnmx)) + 1);
+    line_length = (int)(lnmx < 0 ? -lnmx : mem_read((uint16_t)(lnmx)) + 1);
 
     DBG(("check(%s) pnt:%04x pntr:%04x addr:%04x column:%d, linelen:%d blnsw:%04x(%d)",
          s, pnt, pntr, screen_addr, cursor_column, line_length, blnsw, mem_read(blnsw)));
@@ -459,8 +436,8 @@ static enum { YES, NO, NOT_YET } check(const char *s, unsigned int blink_mode)
     }
 
     for (i = 0; s[i] != '\0'; i++) {
-        if (mem_read((WORD)(addr + i)) != s[i] % 64) {
-            if (mem_read((WORD)(addr + i)) != (BYTE)32) {
+        if (mem_read((uint16_t)(addr + i)) != s[i] % 64) {
+            if (mem_read((uint16_t)(addr + i)) != (uint8_t)32) {
                 return NO;
             }
             return NOT_YET;
@@ -558,7 +535,7 @@ static void check_rom_area(void)
 
 /* ------------------------------------------------------------------------- */
 
-static void load_snapshot_trap(WORD unused_addr, void *unused_data)
+static void load_snapshot_trap(uint16_t unused_addr, void *unused_data)
 {
     if (autostart_program_name
         && machine_read_snapshot((char *)autostart_program_name, 0) < 0) {
@@ -574,7 +551,7 @@ static void load_snapshot_trap(WORD unused_addr, void *unused_data)
 void autostart_reinit(CLOCK _min_cycles, int _handle_drive_true_emulation,
                       int _blnsw, int _pnt, int _pntr, int _lnmx)
 {
-    blnsw = (WORD)(_blnsw);
+    blnsw = (uint16_t)(_blnsw);
     pnt = _pnt;
     pntr = _pntr;
     lnmx = _lnmx;
@@ -601,9 +578,9 @@ int autostart_init(CLOCK _min_cycles, int handle_drive_true_emulation,
     autostart_reinit(_min_cycles, handle_drive_true_emulation, blnsw, pnt,
                      pntr, lnmx);
 
-    if (autostart_log == LOG_ERR) {
+    if (autostart_log == LOG_DEFAULT) {
         autostart_log = log_open("AUTOSTART");
-        if (autostart_log == LOG_ERR) {
+        if (autostart_log == LOG_DEFAULT) {
             return -1;
         }
     }
@@ -683,12 +660,12 @@ static void autostart_done(void)
 static void disk_eof_callback(void)
 {
     if (handle_drive_true_emulation_overridden) {
-        BYTE id[2], *buffer = NULL;
+        uint8_t id[2], *buffer = NULL;
         unsigned int track, sector;
         /* FIXME: shouldnt this loop over all drives? */
         if (orig_drive_true_emulation_state) {
             log_message(autostart_log, "Turning true drive emulation on.");
-            if (vdrive_bam_get_disk_id(8, id) == 0) {
+            if (vdrive_bam_get_disk_id(8, 0, id) == 0) {
                 vdrive_get_last_read(&track, &sector, &buffer);
             }
         }
@@ -760,7 +737,7 @@ static void advance_pressplayontape(void)
     switch (check("PRESS PLAY ON TAPE", AUTOSTART_NOWAIT_BLINK)) {
         case YES:
             autostartmode = AUTOSTART_LOADINGTAPE;
-            datasette_control(DATASETTE_CONTROL_START);
+            datasette_control(TAPEPORT_PORT_1, DATASETTE_CONTROL_START);
             break;
         case NO:
             disable_warp_if_was_requested();
@@ -802,7 +779,7 @@ static void advance_hasdisk(void)
                ANDing the charcodes with 0x7f here is a cheap way to prevent
                illegal characters in the printed message */
             if (autostart_program_name) {
-                temp_name = tmp = lib_stralloc(autostart_program_name);
+                temp_name = tmp = lib_strdup(autostart_program_name);
                 while (*tmp) {
                     *tmp++ &= 0x7f;
                 }
@@ -1035,7 +1012,7 @@ static void reboot_for_autostart(const char *program_name, unsigned int mode,
        with 0x7f here is a cheap way to prevent illegal characters in the
        printed message */
     if (program_name) {
-        temp_name = temp = lib_stralloc(program_name);
+        temp_name = temp = lib_strdup(program_name);
         while (*temp) {
             *temp++ &= 0x7f;
         }
@@ -1059,7 +1036,7 @@ static void reboot_for_autostart(const char *program_name, unsigned int mode,
     autostart_ignore_reset = 1;
     deallocate_program_name();
     if (program_name && program_name[0]) {
-        autostart_program_name = lib_stralloc(program_name);
+        autostart_program_name = lib_strdup(program_name);
     }
 
     autostart_initial_delay_cycles = min_cycles;
@@ -1070,7 +1047,7 @@ static void reboot_for_autostart(const char *program_name, unsigned int mode,
     }
     DBG(("autostart_initial_delay_cycles: %d", autostart_initial_delay_cycles));
 
-    machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+    machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
 
     /* The autostartmode must be set AFTER the shutdown to make the autostart
        threadsafe for OS/2 */
@@ -1089,7 +1066,7 @@ static void reboot_for_autostart(const char *program_name, unsigned int mode,
 /* Autostart snapshot file `file_name'.  */
 int autostart_snapshot(const char *file_name, const char *program_name)
 {
-    BYTE vmajor, vminor;
+    uint8_t vmajor, vminor;
     snapshot_t *snap;
 
     if (network_connected() || event_record_active() || event_playback_active()
@@ -1107,7 +1084,7 @@ int autostart_snapshot(const char *file_name, const char *program_name)
     log_message(autostart_log, "Loading snapshot file `%s'.", file_name);
     snapshot_close(snap);
 
-    /*autostart_program_name = lib_stralloc(file_name);
+    /*autostart_program_name = lib_strdup(file_name);
     interrupt_maincpu_trigger_trap(load_snapshot_trap, 0);*/
     /* use for snapshot */
     reboot_for_autostart(file_name, AUTOSTART_HASSNAPSHOT, AUTOSTART_MODE_RUN);
@@ -1119,7 +1096,7 @@ int autostart_snapshot(const char *file_name, const char *program_name)
 int autostart_tape(const char *file_name, const char *program_name,
                    unsigned int program_number, unsigned int runmode)
 {
-    BYTE do_seek = 1;
+    uint8_t do_seek = 1;
 
     if (network_connected() || event_record_active() || event_playback_active()
         || !file_name || !autostart_enabled) {
@@ -1129,7 +1106,7 @@ int autostart_tape(const char *file_name, const char *program_name,
     if (!(tape_image_attach(1, file_name) < 0)) {
         log_message(autostart_log,
                     "Attached file `%s' as a tape image.", file_name);
-        if (!tape_tap_attached()) {
+        if (!tape_tap_attached(TAPEPORT_PORT_1)) {
             if (program_number == 0 || program_number == 1) {
                 do_seek = 0;
             }
@@ -1138,12 +1115,12 @@ int autostart_tape(const char *file_name, const char *program_name,
         if (do_seek) {
             if (program_number > 0) {
                 /* program numbers in tape_seek_to_file() start at 0 */
-                tape_seek_to_file(tape_image_dev1, program_number - 1);
+                tape_seek_to_file(tape_image_dev[TAPEPORT_PORT_1], program_number - 1);
             } else {
-                tape_seek_start(tape_image_dev1);
+                tape_seek_start(tape_image_dev[TAPEPORT_PORT_1]);
             }
         }
-        if (!tape_tap_attached()) {
+        if (!tape_tap_attached(TAPEPORT_PORT_1)) {
             resources_set_int("VirtualDevices", 1); /* Kludge: for t64 images we need devtraps ON */
         }
         reboot_for_autostart(program_name, AUTOSTART_HASTAPE, runmode);
@@ -1199,12 +1176,12 @@ int autostart_disk(const char *file_name, const char *program_name,
             image_contents_destroy(contents);
         }
     } else {
-        name = lib_stralloc(program_name ? program_name : "*");
+        name = lib_strdup(program_name ? program_name : "*");
     }
 
     if (name) {
         autostart_disk_cook_name(&name);
-        if (!(file_system_attach_disk(8, file_name) < 0)) {
+        if (!(file_system_attach_disk(8, 0, file_name) < 0)) {
             log_message(autostart_log,
                         "Attached file `%s' as a disk image.", file_name);
             reboot_for_autostart(name, AUTOSTART_HASDISK, runmode);
@@ -1237,7 +1214,7 @@ int autostart_prg(const char *file_name, unsigned int runmode)
     /* open prg file */
     finfo = fileio_open(file_name, NULL, FILEIO_FORMAT_RAW | FILEIO_FORMAT_P00,
                         FILEIO_COMMAND_READ | FILEIO_COMMAND_FSNAME,
-                        FILEIO_TYPE_PRG);
+                        FILEIO_TYPE_PRG, NULL);
 
     /* can't open file */
     if (finfo == NULL) {
@@ -1305,14 +1282,14 @@ int autostart_autodetect_opt_prgname(const char *file_prog_name,
         char *autostart_prg_name;
         char *autostart_file;
 
-        autostart_file = lib_stralloc(file_prog_name);
+        autostart_file = lib_strdup(file_prog_name);
         autostart_prg_name = strrchr(autostart_file, ':');
         *autostart_prg_name++ = '\0';
         /* Does the image exist?  */
         if (util_file_exists(autostart_file)) {
             char *name;
 
-            charset_petconvstring((BYTE *)autostart_prg_name, 0);
+            charset_petconvstring((uint8_t *)autostart_prg_name, 0);
             name = charset_replace_hexcodes(autostart_prg_name);
             result = autostart_autodetect(autostart_file, name, 0, runmode);
             lib_free(name);

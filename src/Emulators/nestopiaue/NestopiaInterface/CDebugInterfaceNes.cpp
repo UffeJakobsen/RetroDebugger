@@ -19,6 +19,7 @@
 #include "CDebugInterfaceNes.h"
 #include "CDebugInterfaceNesTasks.h"
 #include "CDebuggerApiNestopia.h"
+#include "CDebuggerServerApiNes.h"
 #include "RES_ResourceManager.h"
 #include "CByteBuffer.h"
 #include "CSlrString.h"
@@ -107,10 +108,12 @@ void CDebugInterfaceNes::StepOneCycle()
 CDebugInterfaceNes::~CDebugInterfaceNes()
 {
 	debugInterfaceNes = NULL;
-	if (screenImageData)
+	for (int i = 0; i < 3; i++)
 	{
-		delete screenImageData;
+		delete screenImageDataBuf[i];
+		screenImageDataBuf[i] = NULL;
 	}
+	screenImageData = NULL;
 	
 	if (dataAdapter)
 	{
@@ -164,6 +167,15 @@ const char *CDebugInterfaceNes::GetPlatformNameString()
 const char *CDebugInterfaceNes::GetPlatformNameEndpointString()
 {
 	return "nes";
+}
+
+CDebuggerServerApi *CDebugInterfaceNes::GetDebuggerServerApi()
+{
+	if (debuggerServerApi)
+		return debuggerServerApi;
+
+	debuggerServerApi = new CDebuggerServerApiNes(this);
+	return debuggerServerApi;
 }
 
 bool CDebugInterfaceNes::IsPal()
@@ -306,6 +318,12 @@ void CDebugInterfaceNes::GetWholeMemoryMapFromRam(uint8 *buffer)
 	return GetWholeMemoryMap(buffer);
 }
 
+void CDebugInterfaceNes::GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S)
+{
+	u8 irq;
+	nesd_get_cpu_regs(PC, A, X, Y, P, S, &irq);
+}
+
 void CDebugInterfaceNes::GetCpuRegs(u16 *PC,
 				u8 *A,
 				u8 *X,
@@ -352,8 +370,8 @@ void CDebugInterfaceNes::SetDebugMode(uint8 debugMode)
 
 uint8 CDebugInterfaceNes::GetDebugMode()
 {
-	this->debugMode = nesd_debug_mode;
-	return debugMode;
+	this->debugMode.store(nesd_debug_mode, std::memory_order_release);
+	return this->debugMode.load(std::memory_order_acquire);
 }
 
 CDebugDataAdapter *CDebugInterfaceNes::GetDataAdapter()
@@ -426,6 +444,12 @@ void CDebugInterfaceNes::JoystickUp(int port, uint32 axis)
 	AddCpuDebugInterruptTask(joystickEventTask);
 }
 
+uint32 CDebugInterfaceNes::GetJoystickState(int port)
+{
+	u8 padButtons = nesd_get_api_input_buttons(port);
+	return nesd_convert_pad_buttons_to_joypad(padButtons);
+}
+
 void CDebugInterfaceNes::ProcessJoystickEventSynced(int port, u32 axis, u8 buttonState)
 {
 	LOGD("ProcessJoystickEventSynced: port=%d axis=%d buttonState=%d ", port, axis, buttonState);
@@ -443,15 +467,31 @@ void CDebugInterfaceNes::ProcessJoystickEventSynced(int port, u32 axis, u8 butto
 // this is called by CSnapshotManager to replay events at current cycle
 void CDebugInterfaceNes::ReplayInputEventsFromSnapshotsManager(CByteBuffer *inputEventsBuffer)
 {
-	LOGD("ReplayInputEventsFromSnapshotsManager");
+	LOGD("CDebugInterfaceNes::ReplayInputEventsFromSnapshotsManager");
 
 	while (inputEventsBuffer->IsEof() == false)
 	{
-		int port = inputEventsBuffer->GetI32();
-		u32 axis = inputEventsBuffer->GetU32();
-		u8 buttonState = inputEventsBuffer->GetU8();
+		u8 eventType = inputEventsBuffer->GetU8();
 
-		ProcessJoystickEventSynced(port, axis, buttonState);
+		if (eventType == DEBUGGER_EVENT_TYPE_JOYSTICK)
+		{
+			int port = inputEventsBuffer->GetI32();
+			u32 axis = inputEventsBuffer->GetU32();
+			u8 buttonState = inputEventsBuffer->GetU8();
+			ProcessJoystickEventSynced(port, axis, buttonState);
+		}
+		else if (eventType == DEBUGGER_EVENT_TYPE_KEYBOARD)
+		{
+			// NES has no keyboard — skip but log
+			LOGD("CDebugInterfaceNes::ReplayInputEventsFromSnapshotsManager: skipping keyboard event (NES has no keyboard)");
+			inputEventsBuffer->GetU32(); // keyCode
+			inputEventsBuffer->GetU8();  // buttonState
+		}
+		else
+		{
+			LOGError("CDebugInterfaceNes::ReplayInputEventsFromSnapshotsManager: unknown event type %d", eventType);
+			break;
+		}
 	}
 }
 

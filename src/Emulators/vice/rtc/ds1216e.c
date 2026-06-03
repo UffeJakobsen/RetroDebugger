@@ -97,15 +97,17 @@ rtc_ds1216e_t *ds1216e_init(char *device)
 
     if (loaded) {
         retval->offset = rtc_get_loaded_offset();
+        retval->day_offset = rtc_get_loaded_day_offset();
         retval->clock_regs = rtc_get_loaded_clockregs();
     } else {
         retval->offset = 0;
+        retval->day_offset = 0;
         retval->clock_regs = lib_calloc(1, DS1216E_REG_SIZE);
     }
     retval->old_offset = retval->offset;
     memcpy(retval->old_clock_regs, retval->clock_regs, DS1216E_REG_SIZE);
 
-    retval->device = lib_stralloc(device);
+    retval->device = lib_strdup(device);
 
     return retval;
 }
@@ -115,7 +117,7 @@ void ds1216e_destroy(rtc_ds1216e_t *context, int save)
     if (save) {
         if (memcmp(context->clock_regs, context->old_clock_regs, DS1216E_REG_SIZE) ||
             context->offset != context->old_offset) {
-            rtc_save_context(NULL, 0, context->clock_regs, DS1216E_REG_SIZE, context->device, context->offset);
+            rtc_save_context(NULL, 0, context->clock_regs, DS1216E_REG_SIZE, context->device, context->offset, context->day_offset);
         }
     }
     lib_free(context->clock_regs);
@@ -125,7 +127,7 @@ void ds1216e_destroy(rtc_ds1216e_t *context, int save)
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-static BYTE pattern[64] = {
+static const uint8_t pattern[64] = {
     1, 0, 1, 0, 0, 0, 1, 1,
     0, 1, 0, 1, 1, 1, 0, 0,
     1, 1, 0, 0, 0, 1, 0, 1,
@@ -151,13 +153,18 @@ static void ds1216e_latch_regs(rtc_ds1216e_t *context)
     }
     context->clock_regs[DS1216E_REGISTER_WEEKDAYS] = (context->inactive) ? 0x20 : 0;
     context->clock_regs[DS1216E_REGISTER_WEEKDAYS] |= (context->reset) ? 0x10 : 0;
-    context->clock_regs[DS1216E_REGISTER_WEEKDAYS] |= ((rtc_get_weekday(latch) - 1) % 7) + 1;
+    /* apply a day offset if necessary */
+    if (context->inactive) {
+        context->clock_regs[DS1216E_REGISTER_WEEKDAYS] |= ( (7 + rtc_get_weekday(latch) + context->day_latch ) % 7);
+    } else {
+        context->clock_regs[DS1216E_REGISTER_WEEKDAYS] |= ( (7 + rtc_get_weekday(latch) + context->day_offset ) % 7);
+    }
     context->clock_regs[DS1216E_REGISTER_MONTHDAYS] = rtc_get_day_of_month(latch, 1);
     context->clock_regs[DS1216E_REGISTER_MONTHS] = rtc_get_month(latch, 1);
     context->clock_regs[DS1216E_REGISTER_YEARS] = rtc_get_year(latch, 1);
 }
 
-static void ds1216e_match_pattern(rtc_ds1216e_t *context, WORD address)
+static void ds1216e_match_pattern(rtc_ds1216e_t *context, uint16_t address)
 {
     int i;
 
@@ -194,6 +201,7 @@ static void ds1216e_update_clock(rtc_ds1216e_t *context)
     int new_osc;
     int new_reset;
     int new_12;
+    int8_t rday,uday;
 
     /* setting centiseconds has no effect on the offset used for the clock,
        as this is defined in seconds, so any changes to the centiseconds
@@ -224,9 +232,6 @@ static void ds1216e_update_clock(rtc_ds1216e_t *context)
         if (context->clock_regs_changed[DS1216E_REGISTER_MONTHDAYS]) {
             context->latch = rtc_set_latched_day_of_month(context->clock_regs[DS1216E_REGISTER_MONTHDAYS], context->latch, 1);
         }
-        if (context->clock_regs_changed[DS1216E_REGISTER_WEEKDAYS]) {
-            context->latch = rtc_set_latched_weekday(context->clock_regs[DS1216E_REGISTER_WEEKDAYS] % 7, context->latch);
-        }
         if (context->clock_regs_changed[DS1216E_REGISTER_HOURS]) {
             if (new_12) {
                 context->latch = rtc_set_latched_hour_am_pm(context->clock_regs[DS1216E_REGISTER_HOURS], context->latch, 1);
@@ -240,8 +245,14 @@ static void ds1216e_update_clock(rtc_ds1216e_t *context)
         if (context->clock_regs_changed[DS1216E_REGISTER_SECONDS]) {
             context->latch = rtc_set_latched_second(context->clock_regs[DS1216E_REGISTER_SECONDS], context->latch, 1);
         }
+        /* since the whole date is latched after the transfer, we can determine
+            the day offset easily unlike the rtc-72421. */
+        uday = context->clock_regs[DS1216E_REGISTER_WEEKDAYS] % 7;
+        rday = rtc_get_weekday(rtc_get_latch(context->latch));
+        context->day_latch = uday - rday;
         if (!new_osc) {
             context->offset = context->offset - (rtc_get_latch(0) - (context->latch - context->offset));
+            context->day_offset = context->day_latch;
             context->inactive = 0;
         }
     } else {
@@ -253,9 +264,6 @@ static void ds1216e_update_clock(rtc_ds1216e_t *context)
         }
         if (context->clock_regs_changed[DS1216E_REGISTER_MONTHDAYS]) {
             context->offset = rtc_set_day_of_month(context->clock_regs[DS1216E_REGISTER_MONTHDAYS], context->offset, 1);
-        }
-        if (context->clock_regs_changed[DS1216E_REGISTER_WEEKDAYS]) {
-            context->offset = rtc_set_weekday(context->clock_regs[DS1216E_REGISTER_WEEKDAYS] % 7, context->offset);
         }
         if (context->clock_regs_changed[DS1216E_REGISTER_HOURS]) {
             if (new_12) {
@@ -270,8 +278,14 @@ static void ds1216e_update_clock(rtc_ds1216e_t *context)
         if (context->clock_regs_changed[DS1216E_REGISTER_SECONDS]) {
             context->offset = rtc_set_second(context->clock_regs[DS1216E_REGISTER_SECONDS], context->offset, 1);
         }
+        /* since the whole date is latched after the transfer, we can determine
+            the day offset easily unlike the rtc-72421. */
+        uday = context->clock_regs[DS1216E_REGISTER_WEEKDAYS] % 7;
+        rday = rtc_get_weekday(rtc_get_latch(context->offset));
+        context->day_offset = uday - rday;
         if (new_osc) {
             context->latch = rtc_get_latch(context->offset);
+            context->day_latch = context->day_offset;
             context->inactive = new_osc;
         }
     }
@@ -290,11 +304,11 @@ static void inc_output_pos(rtc_ds1216e_t *context)
     }
 }
 
-static BYTE ds1216e_output_bit(rtc_ds1216e_t *context, BYTE val)
+static uint8_t ds1216e_output_bit(rtc_ds1216e_t *context, uint8_t val)
 {
     int reg;
     int bit;
-    BYTE mask;
+    uint8_t mask;
 
     /* clear bit 0 */
     val &= 0xfe;
@@ -314,11 +328,11 @@ static BYTE ds1216e_output_bit(rtc_ds1216e_t *context, BYTE val)
     return val;
 }
 
-static void ds1216e_input_bit(rtc_ds1216e_t *context, WORD address)
+static void ds1216e_input_bit(rtc_ds1216e_t *context, uint16_t address)
 {
     int reg;
     int bit;
-    BYTE mask;
+    uint8_t mask;
 
     /* decode the position */
     reg = context->output_pos >> 3;
@@ -337,7 +351,7 @@ static void ds1216e_input_bit(rtc_ds1216e_t *context, WORD address)
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-BYTE ds1216e_read(rtc_ds1216e_t *context, WORD address, BYTE origbyte)
+uint8_t ds1216e_read(rtc_ds1216e_t *context, uint16_t address, uint8_t origbyte)
 {
     if (context->output) {
         if (address & 4) {
@@ -357,51 +371,51 @@ BYTE ds1216e_read(rtc_ds1216e_t *context, WORD address, BYTE origbyte)
 
    type   | name               | description
    -------------------------------------
-   BYTE   | reset              | reset flag
-   BYTE   | inactive           | inactive flag
-   BYTE   | 12hours            | 12 hours flag
-   BYTE   | pattern pos        | pattern position
-   BYTE   | pattern ignore     | pattern ignore flag
-   BYTE   | output             | current output bit
-   BYTE   | output pos         | current output position
-   DWORD  | latch hi           | high DWORD of the latch offset
-   DWORD  | latch lo           | low DWORD of the latch offset
-   DWORD  | offset hi          | high DWORD of the RTC offset
-   DWORD  | offset lo          | low DWORD of the RTC offset
-   DWORD  | old offset hi      | high DWORD of the old RTC offset
-   DWORD  | old offset lo      | low DWORD of the old RTC offset
+   uint8_t   | reset              | reset flag
+   uint8_t   | inactive           | inactive flag
+   uint8_t   | 12hours            | 12 hours flag
+   uint8_t   | pattern pos        | pattern position
+   uint8_t   | pattern ignore     | pattern ignore flag
+   uint8_t   | output             | current output bit
+   uint8_t   | output pos         | current output position
+   uint32_t  | latch hi           | high uint32_t of the latch offset
+   uint32_t  | latch lo           | low uint32_t of the latch offset
+   uint32_t  | offset hi          | high uint32_t of the RTC offset
+   uint32_t  | offset lo          | low uint32_t of the RTC offset
+   uint32_t  | old offset hi      | high uint32_t of the old RTC offset
+   uint32_t  | old offset lo      | low uint32_t of the old RTC offset
    ARRAY  | clock regs         | 8 BYTES of register data
    ARRAY  | old clock regs     | 8 BYTES of old register data
    ARRAY  | clock regs changed | 8 BYTES of changed register data
    STRING | device             | device name STRING
  */
 
-static char snap_module_name[] = "RTC_DS1216E";
+static const char snap_module_name[] = "RTC_DS1216E";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   0
 
 int ds1216e_write_snapshot(rtc_ds1216e_t *context, snapshot_t *s)
 {
-    DWORD latch_lo = 0;
-    DWORD latch_hi = 0;
-    DWORD offset_lo = 0;
-    DWORD offset_hi = 0;
-    DWORD old_offset_lo = 0;
-    DWORD old_offset_hi = 0;
+    uint32_t latch_lo = 0;
+    uint32_t latch_hi = 0;
+    uint32_t offset_lo = 0;
+    uint32_t offset_hi = 0;
+    uint32_t old_offset_lo = 0;
+    uint32_t old_offset_hi = 0;
     snapshot_module_t *m;
 
     /* time_t can be either 32bit or 64bit, so we save as 64bit */
 #if (SIZE_OF_TIME_T == 8)
-    latch_hi = (DWORD)(context->latch >> 32);
-    latch_lo = (DWORD)(context->latch & 0xffffffff);
-    offset_hi = (DWORD)(context->offset >> 32);
-    offset_lo = (DWORD)(context->offset & 0xffffffff);
-    old_offset_hi = (DWORD)(context->old_offset >> 32);
-    old_offset_lo = (DWORD)(context->old_offset & 0xffffffff);
+    latch_hi = (uint32_t)(context->latch >> 32);
+    latch_lo = (uint32_t)(context->latch & 0xffffffff);
+    offset_hi = (uint32_t)(context->offset >> 32);
+    offset_lo = (uint32_t)(context->offset & 0xffffffff);
+    old_offset_hi = (uint32_t)(context->old_offset >> 32);
+    old_offset_lo = (uint32_t)(context->old_offset & 0xffffffff);
 #else
-    latch_lo = (DWORD)context->latch;
-    offset_lo = (DWORD)context->offset;
-    old_offset_lo = (DWORD)context->old_offset;
+    latch_lo = (uint32_t)context->latch;
+    offset_lo = (uint32_t)context->offset;
+    old_offset_lo = (uint32_t)context->old_offset;
 #endif
 
     m = snapshot_module_create(s, snap_module_name, SNAP_MAJOR, SNAP_MINOR);
@@ -411,13 +425,13 @@ int ds1216e_write_snapshot(rtc_ds1216e_t *context, snapshot_t *s)
     }
 
     if (0
-        || SMW_B(m, (BYTE)context->reset) < 0
-        || SMW_B(m, (BYTE)context->inactive) < 0
-        || SMW_B(m, (BYTE)context->hours12) < 0
-        || SMW_B(m, (BYTE)context->pattern_pos) < 0
-        || SMW_B(m, (BYTE)context->pattern_ignore) < 0
-        || SMW_B(m, (BYTE)context->output) < 0
-        || SMW_B(m, (BYTE)context->output_pos) < 0
+        || SMW_B(m, (uint8_t)context->reset) < 0
+        || SMW_B(m, (uint8_t)context->inactive) < 0
+        || SMW_B(m, (uint8_t)context->hours12) < 0
+        || SMW_B(m, (uint8_t)context->pattern_pos) < 0
+        || SMW_B(m, (uint8_t)context->pattern_ignore) < 0
+        || SMW_B(m, (uint8_t)context->output) < 0
+        || SMW_B(m, (uint8_t)context->output_pos) < 0
         || SMW_DW(m, latch_hi) < 0
         || SMW_DW(m, latch_lo) < 0
         || SMW_DW(m, offset_hi) < 0
@@ -436,13 +450,13 @@ int ds1216e_write_snapshot(rtc_ds1216e_t *context, snapshot_t *s)
 
 int ds1216e_read_snapshot(rtc_ds1216e_t *context, snapshot_t *s)
 {
-    DWORD latch_lo = 0;
-    DWORD latch_hi = 0;
-    DWORD offset_lo = 0;
-    DWORD offset_hi = 0;
-    DWORD old_offset_lo = 0;
-    DWORD old_offset_hi = 0;
-    BYTE vmajor, vminor;
+    uint32_t latch_lo = 0;
+    uint32_t latch_hi = 0;
+    uint32_t offset_lo = 0;
+    uint32_t offset_hi = 0;
+    uint32_t old_offset_lo = 0;
+    uint32_t old_offset_hi = 0;
+    uint8_t vmajor, vminor;
     snapshot_module_t *m;
 
     m = snapshot_module_open(s, snap_module_name, &vmajor, &vminor);
@@ -452,7 +466,7 @@ int ds1216e_read_snapshot(rtc_ds1216e_t *context, snapshot_t *s)
     }
 
     /* Do not accept versions higher than current */
-    if (vmajor > SNAP_MAJOR || vminor > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }

@@ -60,7 +60,6 @@
 #include "cartio.h"
 #include "cartridge.h"
 #include "cia.h"
-#include "clkguard.h"
 #include "clockport-mp3at64.h"
 #include "coplin_keypad.h"
 #include "cx21.h"
@@ -111,11 +110,11 @@
 #include "sid-cmdline-options.h"
 #include "sid-resources.h"
 #include "sid.h"
+#include "snapshot.h"
 #include "sound.h"
 #include "tape.h"
 #include "tape_diag_586220_harness.h"
 #include "tapeport.h"
-#include "translate.h"
 #include "traps.h"
 #include "vicetypes.h"
 #include "userport.h"
@@ -213,144 +212,184 @@ static const tape_init_t tapeinit = {
     100 * 8
 };
 
-static log_t c64_log = LOG_ERR;
+static log_t c64_log = LOG_DEFAULT;
 static machine_timing_t machine_timing;
 
 /* ------------------------------------------------------------------------ */
 
 static io_source_t vicii_d000_device = {
     "VIC-II",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd000, 0xd0ff, 0x3f,
     1, /* read is always valid */
     vicii_store,
+    NULL,
     vicii_read,
     vicii_peek,
     vicii_dump,
-    0, /* dummy (not a cartridge) */
+    IO_CART_ID_NONE,
     IO_PRIO_HIGH, /* priority, device and mirrors never involved in collisions */
-    0
+    0,
+    IO_MIRROR_MASK
 };
 
 static io_source_t vicii_d100_device = {
     "VIC-II $D100-$D1FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd100, 0xd1ff, 0x3f,
     1, /* read is always valid */
     vicii_store,
+    NULL,
     vicii_read,
     vicii_peek,
     vicii_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_HIGH, /* priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_HIGH,
+    0,
+    IO_MIRROR_OTHER
 };
 
 static io_source_t vicii_d200_device = {
     "VIC-II $D200-$D2FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd200, 0xd2ff, 0x3f,
     1, /* read is always valid */
     vicii_store,
+    NULL,
     vicii_read,
     vicii_peek,
     vicii_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_HIGH, /* priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_HIGH,
+    0,
+    IO_MIRROR_OTHER
 };
 
 static io_source_t vicii_d300_device = {
     "VIC-II $D300-$D3FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd300, 0xd3ff, 0x3f,
     1, /* read is always valid */
     vicii_store,
+    NULL,
     vicii_read,
     vicii_peek,
     vicii_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_HIGH, /* priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_HIGH,
+    0,
+    IO_MIRROR_OTHER
 };
 
 static io_source_t sid_d400_device = {
     "SID",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd400, 0xd41f, 0x1f,
     1, /* read is always valid */
     sid_store,
+    NULL,
     sid_read,
     sid_peek,
     sid_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_HIGH, /* priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_HIGH,
+    0,
+    IO_MIRROR_NONE
 };
 
 static io_source_t sid_d420_device = {
     "SID $D420-$D4FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd420, 0xd4ff, 0x1f,
     1, /* read is always valid */
     sid_store,
+    NULL,
     sid_read,
     sid_peek,
     sid_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_LOW, /* low priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_LOW,
+    0,
+    IO_MIRROR_OTHER
 };
 
 static io_source_t sid_d500_device = {
     "SID $D500-$D5FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd500, 0xd5ff, 0x1f,
     1, /* read is always valid */
     sid_store,
+    NULL,
     sid_read,
     sid_peek,
     sid_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_LOW, /* low priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_LOW,
+    0,
+    IO_MIRROR_OTHER
 };
 
 static io_source_t sid_d600_device = {
     "SID $D600-$D6FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd600, 0xd6ff, 0x1f,
     1, /* read is always valid */
     sid_store,
+    NULL,
     sid_read,
     sid_peek,
     sid_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_LOW, /* low priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_LOW,
+    0,
+    IO_MIRROR_OTHER
 };
 
 static io_source_t sid_d700_device = {
     "SID $D700-$D7FF mirrors",
-    IO_DETACH_CART, /* dummy */
-    NULL,           /* dummy */
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
     0xd700, 0xd7ff, 0x1f,
     1, /* read is always valid */
     sid_store,
+    NULL,
     sid_read,
     sid_peek,
     sid_dump,
-    0, /* dummy (not a cartridge) */
-    IO_PRIO_LOW, /* low priority, device and mirrors never involved in collisions */
-    0
+    IO_CART_ID_NONE,
+    IO_PRIO_LOW,
+    0,
+    IO_MIRROR_OTHER
+};
+
+static int cia2_dump(void)
+{
+    return ciacore_dump(machine_context.cia2);
+}
+
+static io_source_t cia2_dd00_device = {
+    "CIA2",
+    IO_DETACH_NEVER,
+    IO_DETACH_NO_RESOURCE,
+    0xdd00, 0xddff, 0x0f,
+    1, /* read is always valid */
+    cia2_store,
+    NULL,
+    cia2_read,
+    cia2_peek,
+    cia2_dump,
+    IO_CART_ID_NONE,
+    IO_PRIO_HIGH,
+    0,
+    IO_MIRROR_NONE
 };
 
 static io_source_list_t *vicii_d000_list_item = NULL;
@@ -362,13 +401,47 @@ static io_source_list_t *sid_d420_list_item = NULL;
 static io_source_list_t *sid_d500_list_item = NULL;
 static io_source_list_t *sid_d600_list_item = NULL;
 static io_source_list_t *sid_d700_list_item = NULL;
+static io_source_list_t *cia2_dd00_list_item = NULL;
 
-void c64io_vicii_init(void)
+static int c64_cia2_active = 1;
+
+void c64_cia2_enable(int val)
+{
+    if (c64_cia2_active != val) {
+        if (cia2_dd00_list_item != NULL) {
+            io_source_unregister(cia2_dd00_list_item);
+            cia2_dd00_list_item = NULL;
+        }
+        if (val) {
+            cia2_dd00_list_item = io_source_register(&cia2_dd00_device);
+        }
+    }
+
+    c64_cia2_active = val;
+}
+
+int c64_cia2_get_active_state(void)
+{
+    return c64_cia2_active;
+}
+
+static void c64io_vicii_reinit(void)
 {
     vicii_d000_list_item = io_source_register(&vicii_d000_device);
     vicii_d100_list_item = io_source_register(&vicii_d100_device);
     vicii_d200_list_item = io_source_register(&vicii_d200_device);
     vicii_d300_list_item = io_source_register(&vicii_d300_device);
+}
+
+void c64io_vicii_init(void)
+{
+    int memhack = 0;
+
+    resources_get_int("MemoryHack", &memhack);
+
+    if (memhack != MEMORY_HACK_PLUS60K && memhack != MEMORY_HACK_PLUS256K) {
+        c64io_vicii_reinit();
+    }
 }
 
 void c64io_vicii_deinit(void)
@@ -403,44 +476,56 @@ static void c64io_init(void)
     sid_d500_list_item = io_source_register(&sid_d500_device);
     sid_d600_list_item = io_source_register(&sid_d600_device);
     sid_d700_list_item = io_source_register(&sid_d700_device);
+
+    if (c64_cia2_active) {
+        cia2_dd00_list_item = io_source_register(&cia2_dd00_device);
+    }
 }
 
 /* ------------------------------------------------------------------------ */
 
-static joyport_port_props_t control_port_1 = 
+static joyport_port_props_t control_port_1 =
 {
     "Control port 1",
-    IDGS_CONTROL_PORT_1,
-    1,				/* has a potentiometer connected to this port */
-    1,				/* has lightpen support on this port */
-    1					/* port is always active */
+    1,                  /* has a potentiometer connected to this port */
+    1,                  /* has lightpen support on this port */
+    1,                  /* has joystick adapter on this port */
+    1,                  /* has output support on this port */
+    1,                  /* has +5vdc line on this port */
+    1                   /* port is always active */
 };
 
-static joyport_port_props_t control_port_2 = 
+static joyport_port_props_t control_port_2 =
 {
     "Control port 2",
-    IDGS_CONTROL_PORT_2,
-    1,				/* has a potentiometer connected to this port */
-    0,				/* has NO lightpen support on this port */
-    1					/* port is always active */
+    1,                  /* has a potentiometer connected to this port */
+    0,                  /* has NO lightpen support on this port */
+    1,                  /* has joystick adapter on this port */
+    1,                  /* has output support on this port */
+    1,                  /* has +5vdc line on this port */
+    1                   /* port is always active */
 };
 
-static joyport_port_props_t userport_joy_control_port_1 = 
+static joyport_port_props_t userport_joy_control_port_1 =
 {
     "Userport joystick adapter port 1",
-    IDGS_USERPORT_JOY_ADAPTER_PORT_1,
-    0,				/* has NO potentiometer connected to this port */
-    0,				/* has NO lightpen support on this port */
-    0					/* port can be switched on/off */
+    0,                  /* has NO potentiometer connected to this port */
+    0,                  /* has NO lightpen support on this port */
+    0,                  /* has NO joystick adapter on this port */
+    1,                  /* has output support on this port */
+    0,                  /* has NO +5vdc line on this port */
+    0                   /* port can be switched on/off */
 };
 
-static joyport_port_props_t userport_joy_control_port_2 = 
+static joyport_port_props_t userport_joy_control_port_2 =
 {
     "Userport joystick adapter port 2",
-    IDGS_USERPORT_JOY_ADAPTER_PORT_2,
-    0,				/* has NO potentiometer connected to this port */
-    0,				/* has NO lightpen support on this port */
-    0					/* port can be switched on/off */
+    0,                  /* has NO potentiometer connected to this port */
+    0,                  /* has NO lightpen support on this port */
+    0,                  /* has NO joystick adapter on this port */
+    1,                  /* has output support on this port */
+    0,                  /* has NO +5vdc line on this port */
+    0                   /* port can be switched on/off */
 };
 
 static int init_joyport_ports(void)
@@ -505,10 +590,9 @@ int machine_resources_init(void)
         init_resource_fail("rs232drv");
         return -1;
     }
-    if (rsuser_resources_init() < 0) {
-        init_resource_fail("rsuser");
-        return -1;
-    }
+    /* NOTE: rsuser_resources_init() is now called internally by
+       userport_resources_init() via the userport_devices_init[] table
+       (VICE 3.10 redesign). */
     if (serial_resources_init() < 0) {
         init_resource_fail("serial");
         return -1;
@@ -517,10 +601,9 @@ int machine_resources_init(void)
         init_resource_fail("printer");
         return -1;
     }
-    if (printer_userport_resources_init() < 0) {
-        init_resource_fail("userport printer");
-        return -1;
-    }
+    /* NOTE: printer_userport_resources_init() is now called internally by
+       userport_resources_init() via the userport_devices_init[] table
+       (VICE 3.10 redesign). */
     if (init_joyport_ports() < 0) {
         init_resource_fail("joyport ports");
         return -1;
@@ -529,50 +612,10 @@ int machine_resources_init(void)
         init_resource_fail("joyport devices");
         return -1;
     }
-    if (joyport_sampler2bit_resources_init() < 0) {
-        init_resource_fail("joyport 2bit sampler");
-        return -1;
-    }
-    if (joyport_sampler4bit_resources_init() < 0) {
-        init_resource_fail("joyport 4bit sampler");
-        return -1;
-    }
-    if (joyport_bbrtc_resources_init() < 0) {
-        init_resource_fail("joyport bbrtc");
-        return -1;
-    }
-    if (joyport_paperclip64_resources_init() < 0) {
-        init_resource_fail("joyport paperclip64 dongle");
-        return -1;
-    }
-    if (joyport_coplin_keypad_resources_init() < 0) {
-        init_resource_fail("joyport coplin keypad");
-        return -1;
-    }
-    if (joyport_cx21_resources_init() < 0) {
-        init_resource_fail("joyport cx21 keypad");
-        return -1;
-    }
-    if (joyport_script64_dongle_resources_init() < 0) {
-        init_resource_fail("joyport script64 dongle");
-        return -1;
-    }
-    if (joyport_vizawrite64_dongle_resources_init() < 0) {
-        init_resource_fail("joyport vizawrite64 dongle");
-        return -1;
-    }
-    if (joyport_cx85_resources_init() < 0) {
-        init_resource_fail("joyport cx85 keypad");
-        return -1;
-    }
-    if (joyport_rushware_keypad_resources_init() < 0) {
-        init_resource_fail("joyport rushware keypad");
-        return -1;
-    }
-    if (joyport_cardkey_resources_init() < 0) {
-        init_resource_fail("joyport cardkey keypad");
-        return -1;
-    }
+    /* NOTE: individual joyport device resource inits (sampler2bit, sampler4bit,
+       bbrtc, paperclip64, coplin, cx21, cx85, rushware, cardkey, script64,
+       vizawrite64, etc.) are now called internally by joyport_resources_init()
+       via the joyport_devices_init[] table (VICE 3.10 redesign). */
     if (joystick_resources_init() < 0) {
         init_resource_fail("joystick");
         return -1;
@@ -656,54 +699,18 @@ int machine_resources_init(void)
         init_resource_fail("drive");
         return -1;
     }
-    if (tapeport_resources_init() < 0) {
+    if (tapeport_resources_init(1) < 0) {
         init_resource_fail("tapeport");
-        return -1;
-    }
-    if (tape_diag_586220_harness_resources_init() < 0) {
-        init_resource_fail("tape diag 586220 harness");
-        return -1;
-    }
-    if (datasette_resources_init() < 0) {
-        init_resource_fail("datasette");
         return -1;
     }
     if (c64_glue_resources_init() < 0) {
         init_resource_fail("c64 glue");
         return -1;
     }
-    if (userport_joystick_resources_init() < 0) {
-        init_resource_fail("userport joystick");
-        return -1;
-    }
-    if (userport_dac_resources_init() < 0) {
-        init_resource_fail("userport dac");
-        return -1;
-    }
-    if (userport_digimax_resources_init() < 0) {
-        init_resource_fail("userport dac");
-        return -1;
-    }
-    if (userport_rtc_58321a_resources_init() < 0) {
-        init_resource_fail("userport rtc (58321a)");
-        return -1;
-    }
-    if (userport_rtc_ds1307_resources_init() < 0) {
-        init_resource_fail("userport rtc (ds1307)");
-        return -1;
-    }
-    if (userport_4bit_sampler_resources_init() < 0) {
-        init_resource_fail("userport 4bit sampler");
-        return -1;
-    }
-    if (userport_8bss_resources_init() < 0) {
-        init_resource_fail("userport 8bit stereo sampler");
-        return -1;
-    }
-    if (userport_diag_586220_harness_resources_init() < 0) {
-        init_resource_fail("userport diag 586220 harness");
-        return -1;
-    }
+    /* NOTE: individual userport device resource inits (joystick, dac, digimax,
+       rtc_58321a, rtc_ds1307, 4bit_sampler, 8bss, diag_586220_harness) are now
+       called internally by userport_resources_init() via the userport_devices_init[]
+       table (VICE 3.10 redesign). */
     if (cartio_resources_init() < 0) {
         init_resource_fail("cartio");
         return -1;
@@ -727,15 +734,17 @@ void machine_resources_shutdown(void)
     drive_resources_shutdown();
     cartridge_resources_shutdown();
     rombanks_resources_shutdown();
-    userport_rtc_58321a_resources_shutdown();
-    userport_rtc_ds1307_resources_shutdown();
+    /* NOTE: userport_rtc_58321a/ds1307 shutdown is now done inside
+       userport_resources_shutdown() (VICE 3.10 redesign) */
     cartio_shutdown();
     fsdevice_resources_shutdown();
     disk_image_resources_shutdown();
     sampler_resources_shutdown();
     userport_resources_shutdown();
-    joyport_bbrtc_resources_shutdown();
+    /* NOTE: joyport_bbrtc_resources_shutdown() is now done inside
+       joyport_resources_shutdown() (VICE 3.10 redesign) */
     tapeport_resources_shutdown();
+    joyport_resources_shutdown();
 }
 
 /* C64-specific command-line option initialization.  */
@@ -777,10 +786,8 @@ int machine_cmdline_options_init(void)
         init_cmdline_options_fail("rs232drv");
         return -1;
     }
-    if (rsuser_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("rsuser");
-        return -1;
-    }
+    /* NOTE: rsuser_cmdline_options_init() is now called internally by
+       userport_cmdline_options_init() (VICE 3.10 redesign). */
     if (serial_cmdline_options_init() < 0) {
         init_cmdline_options_fail("serial");
         return -1;
@@ -789,18 +796,15 @@ int machine_cmdline_options_init(void)
         init_cmdline_options_fail("printer");
         return -1;
     }
-    if (printer_userport_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport printer");
-        return -1;
-    }
+    /* NOTE: printer_userport_cmdline_options_init() is now called internally
+       by userport_cmdline_options_init() (VICE 3.10 redesign). */
     if (joyport_cmdline_options_init() < 0) {
         init_cmdline_options_fail("joyport");
         return -1;
     }
-    if (joyport_bbrtc_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("bbrtc");
-        return -1;
-    }
+    /* NOTE: joyport_bbrtc_cmdline_options_init() is now called internally by
+       joyport_cmdline_options_init() via joyport_devices_cmdline_options_init()
+       (VICE 3.10 redesign). */
     if (joystick_cmdline_options_init() < 0) {
         init_cmdline_options_fail("joystick");
         return -1;
@@ -881,50 +885,17 @@ int machine_cmdline_options_init(void)
         init_cmdline_options_fail("tapeport");
         return -1;
     }
-    if (tape_diag_586220_harness_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("tape diag 586220 harness");
-        return -1;
-    }
-    if (datasette_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("datasette");
-        return -1;
-    }
+    /* NOTE: tape_diag_586220_harness, datasette device cmdline inits are now
+       called internally by tapeport_cmdline_options_init() via
+       tapeport_devices_cmdline_options_init() (VICE 3.10 redesign). */
     if (c64_glue_cmdline_options_init() < 0) {
         init_cmdline_options_fail("c64 glue");
         return -1;
     }
-    if (userport_joystick_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport joystick");
-        return -1;
-    }
-    if (userport_dac_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport dac");
-        return -1;
-    }
-    if (userport_digimax_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport digimax");
-        return -1;
-    }
-    if (userport_rtc_58321a_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport rtc (58321a)");
-        return -1;
-    }
-    if (userport_rtc_ds1307_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport rtc (ds1307)");
-        return -1;
-    }
-    if (userport_4bit_sampler_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport 4bit sampler");
-        return -1;
-    }
-    if (userport_8bss_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport 8bit stereo sampler");
-        return -1;
-    }
-    if (userport_diag_586220_harness_cmdline_options_init() < 0) {
-        init_cmdline_options_fail("userport diag 586220 harness");
-        return -1;
-    }
+    /* NOTE: individual userport device cmdline inits (joystick, dac, digimax,
+       rtc_58321a, rtc_ds1307, 4bit_sampler, 8bss, diag_586220_harness) are now
+       called internally by userport_cmdline_options_init() via
+       userport_devices_cmdline_options_init() (VICE 3.10 redesign). */
     if (cartio_cmdline_options_init() < 0) {
         init_cmdline_options_fail("cartio");
         return -1;
@@ -940,7 +911,7 @@ static void c64_monitor_init(void)
 {
     unsigned int dnr;
     monitor_cpu_type_t asm6502, asmR65C02, asmz80;
-    monitor_interface_t *drive_interface_init[DRIVE_NUM];
+    monitor_interface_t *drive_interface_init[NUM_DISK_UNITS];
     monitor_cpu_type_t *asmarray[4];
     int i = 0;
 
@@ -953,7 +924,7 @@ static void c64_monitor_init(void)
     asmR65C02_init(&asmR65C02);
     asmz80_init(&asmz80);
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
         drive_interface_init[dnr] = drive_cpu_monitor_interface_get(dnr);
     }
 
@@ -1146,12 +1117,13 @@ void machine_specific_reset(void)
 
     serial_traps_reset();
 
+    /* These calls must be before the CIA initialization */
+    rs232drv_reset();
+    rsuser_reset();
+
     ciacore_reset(machine_context.cia1);
     ciacore_reset(machine_context.cia2);
     sid_reset();
-
-    rs232drv_reset(); /* driver is used by both user- and expansion port ? */
-    rsuser_reset();
 
     printer_reset();
 
@@ -1212,7 +1184,7 @@ void machine_specific_shutdown(void)
     }
 }
 
-void machine_handle_pending_alarms(int num_write_cycles)
+void machine_handle_pending_alarms(CLOCK num_write_cycles)
 {
     vicii_handle_pending_alarms_external(num_write_cycles);
 }
@@ -1222,8 +1194,6 @@ void machine_handle_pending_alarms(int num_write_cycles)
 /* This hook is called at the end of every frame.  */
 static void machine_vsync_hook(void)
 {
-    CLOCK sub;
-
     network_hook();
 
     drive_vsync_hook();
@@ -1231,15 +1201,9 @@ static void machine_vsync_hook(void)
 	/* C64D: do not use autostart feature in C64 debugger as we have our own methods
     autostart_advance();
 	*/
- 
-	
+
+
     screenshot_record();
-
-    sub = clk_guard_prevent_overflow(maincpu_clk_guard);
-
-    /* The drive has to deal both with our overflowing and its own one, so
-       it is called even when there is no overflowing in the main CPU.  */
-    drive_cpu_prevent_clk_overflow_all(sub);
 }
 
 void machine_set_restore_key(int v)
@@ -1271,7 +1235,7 @@ void machine_get_line_cycle(unsigned int *line, unsigned int *cycle, int *half_c
     *half_cycle = (int)-1;
 }
 
-void machine_change_timing(int timeval, int border_mode)
+void machine_change_timing(int timeval, int powerfreq, int border_mode)
 {
     switch (timeval) {
         case MACHINE_SYNC_PAL:
@@ -1280,7 +1244,7 @@ void machine_change_timing(int timeval, int border_mode)
             machine_timing.rfsh_per_sec = C64_PAL_RFSH_PER_SEC;
             machine_timing.cycles_per_line = C64_PAL_CYCLES_PER_LINE;
             machine_timing.screen_lines = C64_PAL_SCREEN_LINES;
-            machine_timing.power_freq = 50;
+            machine_timing.power_freq = powerfreq > 0 ? powerfreq : 50;
             break;
         case MACHINE_SYNC_NTSC:
             machine_timing.cycles_per_sec = C64_NTSC_CYCLES_PER_SEC;
@@ -1288,7 +1252,7 @@ void machine_change_timing(int timeval, int border_mode)
             machine_timing.rfsh_per_sec = C64_NTSC_RFSH_PER_SEC;
             machine_timing.cycles_per_line = C64_NTSC_CYCLES_PER_LINE;
             machine_timing.screen_lines = C64_NTSC_SCREEN_LINES;
-            machine_timing.power_freq = 60;
+            machine_timing.power_freq = powerfreq > 0 ? powerfreq : 60;
             break;
         case MACHINE_SYNC_NTSCOLD:
             machine_timing.cycles_per_sec = C64_NTSCOLD_CYCLES_PER_SEC;
@@ -1296,7 +1260,7 @@ void machine_change_timing(int timeval, int border_mode)
             machine_timing.rfsh_per_sec = C64_NTSCOLD_RFSH_PER_SEC;
             machine_timing.cycles_per_line = C64_NTSCOLD_CYCLES_PER_LINE;
             machine_timing.screen_lines = C64_NTSCOLD_SCREEN_LINES;
-            machine_timing.power_freq = 60;
+            machine_timing.power_freq = powerfreq > 0 ? powerfreq : 60;
             break;
         case MACHINE_SYNC_PALN:
             machine_timing.cycles_per_sec = C64_PALN_CYCLES_PER_SEC;
@@ -1304,7 +1268,7 @@ void machine_change_timing(int timeval, int border_mode)
             machine_timing.rfsh_per_sec = C64_PALN_RFSH_PER_SEC;
             machine_timing.cycles_per_line = C64_PALN_CYCLES_PER_LINE;
             machine_timing.screen_lines = C64_PALN_SCREEN_LINES;
-            machine_timing.power_freq = 50;
+            machine_timing.power_freq = powerfreq > 0 ? powerfreq : 50;
             break;
         default:
             log_error(c64_log, "Unknown machine timing.");
@@ -1319,26 +1283,32 @@ void machine_change_timing(int timeval, int border_mode)
 #ifdef HAVE_MOUSE
     neos_mouse_set_machine_parameter(machine_timing.cycles_per_sec);
 #endif
-    clk_guard_set_clk_base(maincpu_clk_guard, machine_timing.cycles_per_rfsh);
-
     vicii_change_timing(&machine_timing, border_mode);
 
     cia1_set_timing(machine_context.cia1, machine_timing.cycles_per_sec, machine_timing.power_freq);
     cia2_set_timing(machine_context.cia2, machine_timing.cycles_per_sec, machine_timing.power_freq);
 
-    machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+    machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
 }
 
 /* ------------------------------------------------------------------------- */
 
 int machine_write_snapshot(const char *name, int save_roms, int save_disks, int event_mode)
 {
-    return c64_snapshot_write(name, save_roms, save_disks, event_mode, 1, 1, 1);
+    int err = c64_snapshot_write(name, save_roms, save_disks, event_mode, 1, 1, 1);
+    if ((err < 0) && (snapshot_get_error() == SNAPSHOT_NO_ERROR)) {
+        snapshot_set_error(SNAPSHOT_CANNOT_WRITE_SNAPSHOT);
+    }
+    return err;
 }
 
 int machine_read_snapshot(const char *name, int event_mode)
 {
-    return c64_snapshot_read(name, event_mode, 1, 1, 1, 1);
+    int err = c64_snapshot_read(name, event_mode, 1, 1, 1, 1);
+    if ((err < 0) && (snapshot_get_error() == SNAPSHOT_NO_ERROR)) {
+        snapshot_set_error(SNAPSHOT_CANNOT_READ_SNAPSHOT);
+    }
+    return err;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1392,39 +1362,41 @@ struct image_contents_s *machine_diskcontents_bus_read(unsigned int unit)
     return diskcontents_iec_read(unit);
 }
 
-BYTE machine_tape_type_default(void)
+uint8_t machine_tape_type_default(void)
 {
     return TAPE_CAS_TYPE_PRG;
 }
 
-BYTE machine_tape_behaviour(void)
+uint8_t machine_tape_behaviour(void)
 {
     return TAPE_BEHAVIOUR_NORMAL;
 }
 
 static int get_cart_emulation_state(void)
 {
-    int value;
-
-    if (resources_get_int("CartridgeType", &value) < 0) {
-        return CARTRIDGE_NONE;
-    }
-
+    int value = cart_getid_slotmain();
     return value;
 }
 
+/* returns TRUE if in RAM, FALSE if in cartridge ROM or IO */
 static int check_cart_range(unsigned int addr)
 {
     if (get_cart_emulation_state() == CARTRIDGE_NONE) {
         return 1;
     }
-
-    return (!(addr >= 0x8000 && addr < 0xa000));
+    /* check ROML, ROMH as well as IO1 and IO2 */
+    return (!(addr >= 0x8000 && addr < 0xa000) && !(addr >= 0xde00 && addr < 0xe000));
 }
 
+/* returns TRUE if in RAM */
 int machine_addr_in_ram(unsigned int addr)
 {
-    return ((addr < 0xe000 && !(addr >= 0xa000 && addr < 0xc000)) && check_cart_range(addr));
+    return (
+        (addr < 0xe000
+            && !(addr >= 0xa000 && addr < 0xc000)
+            && !(addr >= 0x0073 && addr <= 0x008a))
+        && check_cart_range(addr)
+        );
 }
 
 const char *machine_get_name(void)
@@ -1438,7 +1410,7 @@ const char *machine_get_name(void)
 
 /* ------------------------------------------------------------------------- */
 
-static void c64_userport_set_flag(BYTE b)
+static void c64_userport_set_flag(uint8_t b)
 {
     if (b != 0) {
         ciacore_set_flag(machine_context.cia2);
@@ -1450,7 +1422,8 @@ static userport_port_props_t userport_props = {
     1, /* has pa3 pin */
     c64_userport_set_flag, /* has flag pin */
     1, /* has pc pin */
-    1  /* has cnt1, cnt2 and sp pins */
+    1, /* has cnt1, cnt2 and sp pins */
+    1  /* port has the reset line */
 };
 
 int machine_register_userport(void)

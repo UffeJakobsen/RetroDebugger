@@ -9,6 +9,8 @@ void C64DebuggerParseCommandLine1();
 void C64DebuggerParseCommandLine2();
 
 void C64DebuggerPerformStartupTasks();
+bool C64DebuggerStartupTasksInProgress();
+bool C64DebuggerStartupTasksDone();
 
 typedef enum c64d_pass_config_data_e {
 	C64D_PASS_CONFIG_DATA_EOF = 0,
@@ -54,4 +56,3 @@ public:
 void C64DebuggerAddStartupTaskCallback(C64DebuggerStartupTaskCallback *callback);
 
 #endif
-

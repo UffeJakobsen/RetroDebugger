@@ -23,6 +23,7 @@ void CTest::StepCompleted(int stepId, bool success, const char *message)
 void CTest::TestCompleted(bool success, const char *summary)
 {
 	isRunning = false;
+	Teardown();
 	if (callback)
 	{
 		callback->OnTestCompleted(this, success, summary);

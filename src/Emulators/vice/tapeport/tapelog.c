@@ -47,11 +47,11 @@ TAPEPORT | TAPELOG
 #include "cmdline.h"
 #include "lib.h"
 #include "log.h"
+#include "machine.h"
 #include "maincpu.h"
 #include "resources.h"
 #include "snapshot.h"
 #include "tapeport.h"
-#include "translate.h"
 #include "util.h"
 
 /* Device enabled */
@@ -64,53 +64,46 @@ static int tapelog_destination = 0;
 static char *tapelog_filename = NULL;
 
 /* keep track of lines */
-static BYTE tapelog_motor_in = 2;
-static BYTE tapelog_motor_out = 2;
-static BYTE tapelog_sense_in = 2;
-static BYTE tapelog_sense_out = 2;
-static BYTE tapelog_write_in = 2;
-static BYTE tapelog_write_out = 2;
+static uint8_t tapelog_motor_in = 2;
+static uint8_t tapelog_motor_out = 2;
+static uint8_t tapelog_sense_in = 2;
+static uint8_t tapelog_sense_out = 2;
+static uint8_t tapelog_write_in = 2;
+static uint8_t tapelog_write_out = 2;
 static unsigned int tapelog_read_in = 0;
-static BYTE tapelog_read_out = 2;
+static uint8_t tapelog_read_out = 2;
 
 /* ------------------------------------------------------------------------- */
 
 /* Some prototypes are needed */
-static void tapelog_set_motor(int flag);
-static void tapelog_toggle_write_bit(int write_bit);
-static void tapelog_set_sense_out(int sense);
-static void tapelog_set_read_out(int val);
-static void tapelog_trigger_flux_change_passthrough(unsigned int on);
-static void tapelog_set_tape_sense_passthrough(int sense);
-static void tapelog_set_tape_write_in_passthrough(int val);
-static void tapelog_set_tape_motor_in_passthrough(int val);
-static int tapelog_write_snapshot(struct snapshot_s *s, int write_image);
-static int tapelog_read_snapshot(struct snapshot_s *s);
+static int tapelog_enable(int port, int val);
+static void tapelog_set_motor(int port, int flag);
+static void tapelog_toggle_write_bit(int port, int write_bit);
+static void tapelog_set_sense_out(int port, int sense);
+static void tapelog_set_read_out(int port, int val);
+static int tapelog_write_snapshot(int port, struct snapshot_s *s, int write_image);
+static int tapelog_read_snapshot(int port, struct snapshot_s *s);
+
+/* TAPEPORT_DEVICE_TAPE_LOG was removed in VICE 3.10 along with tapelog.c itself.
+   Since no device ID exists for tape log in 3.10 and the file is compiled as a
+   legacy stub, register as TAPEPORT_DEVICE_NONE with a unique init path. */
+#define TAPELOG_DEVICE_ID   TAPEPORT_DEVICE_NONE
 
 static tapeport_device_t tapelog_device = {
-    TAPEPORT_DEVICE_TAPE_LOG,
-    "Tape Log",
-    IDGS_TAPE_LOG,
-    0,
-    "TapeLog",
-    NULL,
-    tapelog_set_motor,
-    tapelog_toggle_write_bit,
-    tapelog_set_sense_out,
-    tapelog_set_read_out,
-    tapelog_trigger_flux_change_passthrough,
-    tapelog_set_tape_sense_passthrough,
-    tapelog_set_tape_write_in_passthrough,
-    tapelog_set_tape_motor_in_passthrough
+    "Tape Log",                 /* device name */
+    TAPEPORT_DEVICE_TYPE_NONE,  /* device type */
+    VICE_MACHINE_ALL,           /* machine mask */
+    TAPEPORT_PORT_ALL_MASK,     /* port mask */
+    tapelog_enable,             /* enable function */
+    NULL,                       /* NO powerup function */
+    NULL,                       /* NO shutdown function */
+    tapelog_set_motor,          /* set motor line */
+    tapelog_toggle_write_bit,   /* toggle write bit */
+    tapelog_set_sense_out,      /* set sense out */
+    tapelog_set_read_out,       /* set read out */
+    tapelog_write_snapshot,     /* snapshot write */
+    tapelog_read_snapshot       /* snapshot read */
 };
-
-static tapeport_snapshot_t tapelog_snapshot = {
-    TAPEPORT_DEVICE_TAPE_LOG,
-    tapelog_write_snapshot,
-    tapelog_read_snapshot
-};
-
-static tapeport_device_list_t *tapelog_list_item = NULL;
 
 static log_t log_tapelog;
 
@@ -142,19 +135,7 @@ static void disable_tapelog(void)
     }
 }
 
-#if 0
-/* Maybe to be used in the future */
-static void tapelog_message(char *msg)
-{
-    if (tapelog_destination) {
-        fprintf(tapelog_out, "%s\n", msg);
-    } else {
-        log_message(log_tapelog, msg);
-    }
-}
-#endif
-
-static void tapelog_initial_set(char *line, BYTE val)
+static void tapelog_initial_set(char *line, uint8_t val)
 {
     if (tapelog_destination) {
         fprintf(tapelog_out, "Initial set of %s to %d at %X\n", line, val, (unsigned int)maincpu_clk);
@@ -163,7 +144,7 @@ static void tapelog_initial_set(char *line, BYTE val)
     }
 }
 
-static void tapelog_transition(char *line, BYTE val)
+static void tapelog_transition(char *line, uint8_t val)
 {
     if (tapelog_destination) {
         fprintf(tapelog_out, "%s: %d -> %d at %X\n", line, !val, val, (unsigned int)maincpu_clk);
@@ -174,31 +155,29 @@ static void tapelog_transition(char *line, BYTE val)
 
 /* ------------------------------------------------------------------------- */
 
-static int set_tapelog_enabled(int value, void *param)
+static int tapelog_enable(int port, int val)
 {
-    int val = value ? 1 : 0;
+    int newval = val ? 1 : 0;
 
-    if (tapelog_enabled == val) {
+    if (tapelog_enabled == newval) {
         return 0;
     }
 
-    if (val) {
+    if (newval) {
         if (enable_tapelog() < 0) {
-            return -1;
-        }
-        tapelog_list_item = tapeport_device_register(&tapelog_device);
-        if (tapelog_list_item == NULL) {
-            disable_tapelog();
             return -1;
         }
     } else {
         disable_tapelog();
-        tapeport_device_unregister(tapelog_list_item);
-        tapelog_list_item = NULL;
     }
 
-    tapelog_enabled = val;
+    tapelog_enabled = newval;
     return 0;
+}
+
+static int set_tapelog_enabled(int value, void *param)
+{
+    return tapelog_enable(0, value);
 }
 
 static int set_tapelog_destination(int value, void *param)
@@ -267,8 +246,6 @@ static const resource_string_t resources_string[] = {
 
 int tapelog_resources_init(void)
 {
-    tapeport_snapshot_register(&tapelog_snapshot);
-
     if (resources_register_string(resources_string) < 0) {
         return -1;
     }
@@ -289,31 +266,21 @@ void tapelog_resources_shutdown(void)
 
 static const cmdline_option_t cmdline_options[] =
 {
-    { "-tapelog", SET_RESOURCE, 0,
+    { "-tapelog", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "TapeLog", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_TAPELOG,
-      NULL, NULL },
-    { "+tapelog", SET_RESOURCE, 0,
+      NULL, "Enable the tape log device" },
+    { "+tapelog", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "TapeLog", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DISABLE_TAPELOG,
-      NULL, NULL },
-    { "-tapelogtofile", SET_RESOURCE, 0,
+      NULL, "Disable the tape log device" },
+    { "-tapelogtofile", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "TapeLogDestination", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_TAPELOG_LOG_TO_FILE,
-      NULL, NULL },
-    { "-tapelogtolog", SET_RESOURCE, 0,
+      NULL, "Enable logging to a file" },
+    { "-tapelogtolog", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "TapeLogDestination", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ENABLE_TAPELOG_LOG_TO_LOG,
-      NULL, NULL },
-    { "-tapelogimage", SET_RESOURCE, 1,
+      NULL, "Enable logging to the emulator log file" },
+    { "-tapelogimage", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "TapeLogfilename", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_SPECIFY_TAPELOG_NAME,
-      NULL, NULL },
+      "<Name>", "Specify tape log file name" },
     CMDLINE_LIST_END
 };
 
@@ -324,9 +291,9 @@ int tapelog_cmdline_options_init(void)
 
 /* ---------------------------------------------------------------------*/
 
-static void tapelog_set_motor(int flag)
+static void tapelog_set_motor(int port, int flag)
 {
-    BYTE val = flag ? 1 : 0;
+    uint8_t val = flag ? 1 : 0;
 
     if (tapelog_motor_out == val) {
         return;
@@ -339,12 +306,11 @@ static void tapelog_set_motor(int flag)
     }
 
     tapelog_motor_out = val;
-    tapeport_set_motor_next(flag, tapelog_device.id);
 }
 
-static void tapelog_toggle_write_bit(int write_bit)
+static void tapelog_toggle_write_bit(int port, int write_bit)
 {
-    BYTE val = write_bit ? 1 : 0;
+    uint8_t val = write_bit ? 1 : 0;
 
     if (tapelog_write_out == val) {
         return;
@@ -357,12 +323,11 @@ static void tapelog_toggle_write_bit(int write_bit)
     }
 
     tapelog_write_out = val;
-    tapeport_toggle_write_bit_next(write_bit, tapelog_device.id);
 }
 
-static void tapelog_set_sense_out(int sense)
+static void tapelog_set_sense_out(int port, int sense)
 {
-    BYTE val = sense ? 1 : 0;
+    uint8_t val = sense ? 1 : 0;
 
     if (tapelog_sense_out == val) {
         return;
@@ -375,12 +340,11 @@ static void tapelog_set_sense_out(int sense)
     }
 
     tapelog_sense_out = val;
-    tapeport_set_sense_out_next(sense, tapelog_device.id);
 }
 
-static void tapelog_set_read_out(int value)
+static void tapelog_set_read_out(int port, int value)
 {
-    BYTE val = value ? 1 : 0;
+    uint8_t val = value ? 1 : 0;
 
     if (tapelog_read_out == val) {
         return;
@@ -393,70 +357,6 @@ static void tapelog_set_read_out(int value)
     }
 
     tapelog_read_out = val;
-    tapeport_set_read_out_next(value, tapelog_device.id);
-}
-
-static void tapelog_set_tape_sense_passthrough(int sense)
-{
-    BYTE val = sense ? 1 : 0;
-
-    if (tapelog_sense_in == val) {
-        return;
-    }
-
-    if (tapelog_sense_in == 2) {
-        tapelog_initial_set("sense in", val);
-    } else {
-        tapelog_transition("sense in", val);
-    }
-
-    tapelog_sense_in = val;
-    tapeport_set_tape_sense(sense, tapelog_device.id);
-}
-
-static void tapelog_set_tape_write_in_passthrough(int value)
-{
-    BYTE val = value ? 1 : 0;
-
-    if (tapelog_write_in == val) {
-        return;
-    }
-
-    if (tapelog_write_in == 2) {
-        tapelog_initial_set("write in", val);
-    } else {
-        tapelog_transition("write in", val);
-    }
-
-    tapelog_write_in = val;
-    tapeport_set_write_in(val, tapelog_device.id);
-}
-
-static void tapelog_set_tape_motor_in_passthrough(int value)
-{
-    BYTE val = value ? 1 : 0;
-
-    if (tapelog_motor_in == val) {
-        return;
-    }
-
-    if (tapelog_motor_in == 2) {
-        tapelog_initial_set("motor in", val);
-    } else {
-        tapelog_transition("motor in", val);
-    }
-
-    tapelog_motor_in = val;
-    tapeport_set_motor_in(val, tapelog_device.id);
-}
-
-void tapelog_trigger_flux_change_passthrough(unsigned int on)
-{
-    tapeport_trigger_flux_change(on, tapelog_device.id);
-
-    tapelog_transition("read", (BYTE)on);
-
-    tapelog_read_in = on;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -465,21 +365,21 @@ void tapelog_trigger_flux_change_passthrough(unsigned int on)
 
    type  | name      | version | description
    -----------------------------------------
-   BYTE  | motor out | 0.0+    | motor out state
-   BYTE  | motor in  | 0.1     | motor in state
-   BYTE  | sense in  | 0.0+    | sense in state
-   BYTE  | sense out | 0.0+    | sense out state
-   BYTE  | write out | 0.0+    | write out state
-   BYTE  | write in  | 0.1     | write in state
-   BYTE  | read out  | 0.1     | read out state
-   DWORD | read in   | 0.0+    | read in state
+   uint8_t  | motor out | 0.0+    | motor out state
+   uint8_t  | motor in  | 0.1     | motor in state
+   uint8_t  | sense in  | 0.0+    | sense in state
+   uint8_t  | sense out | 0.0+    | sense out state
+   uint8_t  | write out | 0.0+    | write out state
+   uint8_t  | write in  | 0.1     | write in state
+   uint8_t  | read out  | 0.1     | read out state
+   uint32_t | read in   | 0.0+    | read in state
  */
 
-static char snap_module_name[] = "TP_TAPELOG";
+static const char snap_module_name[] = "TP_TAPELOG";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   1
 
-static int tapelog_write_snapshot(struct snapshot_s *s, int write_image)
+static int tapelog_write_snapshot(int port, struct snapshot_s *s, int write_image)
 {
     snapshot_module_t *m;
 
@@ -497,20 +397,20 @@ static int tapelog_write_snapshot(struct snapshot_s *s, int write_image)
         || SMW_B(m, tapelog_write_out) < 0
         || SMW_B(m, tapelog_write_in) < 0
         || SMW_B(m, tapelog_read_out) < 0
-        || SMW_DW(m, (DWORD)tapelog_read_in) < 0) {
+        || SMW_DW(m, (uint32_t)tapelog_read_in) < 0) {
         snapshot_module_close(m);
         return -1;
     }
     return snapshot_module_close(m);
 }
 
-static int tapelog_read_snapshot(struct snapshot_s *s)
+static int tapelog_read_snapshot(int port, struct snapshot_s *s)
 {
-    BYTE major_version, minor_version;
+    uint8_t major_version, minor_version;
     snapshot_module_t *m;
 
     /* enable device */
-    set_tapelog_enabled(1, NULL);
+    tapelog_enable(0, 1);
 
     m = snapshot_module_open(s, snap_module_name, &major_version, &minor_version);
 
@@ -529,7 +429,7 @@ static int tapelog_read_snapshot(struct snapshot_s *s)
     }
 
     /* new in 0.1 */
-    if (SNAPVAL(major_version, minor_version, 0, 1)) {
+    if (!snapshot_version_is_smaller(major_version, minor_version, 0, 1)) {
         if (SMR_B(m, &tapelog_motor_in) < 0) {
             goto fail;
         }
@@ -545,7 +445,7 @@ static int tapelog_read_snapshot(struct snapshot_s *s)
     }
 
     /* new in 0.1 */
-    if (SNAPVAL(major_version, minor_version, 0, 1)) {
+    if (!snapshot_version_is_smaller(major_version, minor_version, 0, 1)) {
         if (0
             || SMR_B(m, &tapelog_write_in) < 0
             || SMR_B(m, &tapelog_read_out) < 0) {

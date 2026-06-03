@@ -9,6 +9,7 @@
 #include <list>
 #include <vector>
 
+class CDisassemblyInterpreter;
 class CDebugDataAdapter;
 class CSlrFont;
 class CDebugInterface;
@@ -53,6 +54,9 @@ public:
 	virtual void DoLogic();
 
 	virtual bool DoTap(float x, float y);
+	virtual bool DoMove(float x, float y, float distX, float distY, float diffX, float diffY);
+	virtual bool FinishMove(float x, float y, float distX, float distY, float accelerationX, float accelerationY);
+	virtual bool DoFinishTap(float x, float y);
 
 	virtual bool DoScrollWheel(float deltaX, float deltaY);
 
@@ -209,6 +213,16 @@ public:
 	void PasteHexValuesFromClipboard();
 	void CopyAssemblyToClipboard();
 	void CopyHexAddressToClipboard();
+
+	// Selection
+	int selectionStartAddr;
+	int selectionEndAddr;
+	bool isSelecting;
+	long autoScrollLastTime;
+	int FindAddrAtScreenY(float y);
+	bool GetSelectionRange(int *fromAddr, int *toAddr);
+	bool IsAddressSelected(int addr);
+	void ClearSelection();
 	
 	void PasteKeysFromClipboard();
 	
@@ -222,6 +236,11 @@ public:
 	virtual void RenderContextMenuItems();
 	virtual void Serialize(CByteBuffer *byteBuffer);
 	virtual void Deserialize(CByteBuffer *byteBuffer);
+
+	// Effective address interpreter
+	CDisassemblyInterpreter *interpreter;
+	void RunInterpreterForVisibleRange();
+	void RenderEffectiveAddressAnnotation(float py, int addr);
 
 private:
 	char localLabelText[MAX_STRING_LENGTH];

@@ -80,6 +80,13 @@ CViewC64StateVIC::CViewC64StateVIC(const char *name, float posX, float posY, flo
 		spritesImages->push_back(imageSprite);
 	}
 	
+	// Sprite dirty-tracking init
+	spriteDataInitialized = false;
+	memset(prevSpriteData, 0, sizeof(prevSpriteData));
+	memset(prevSpriteColorRegs, 0, sizeof(prevSpriteColorRegs));
+
+
+
 	// do not force colors
 	for (int i = 0; i < 0x0F; i++)
 	{
@@ -92,11 +99,13 @@ CViewC64StateVIC::CViewC64StateVIC(const char *name, float posX, float posY, flo
 
 void CViewC64StateVIC::SetPosition(float posX, float posY)
 {
+
 	CGuiView::SetPosition(posX, posY, posZ, fontSize*62, fontSize*29);
 }
 
 void CViewC64StateVIC::SetPosition(float posX, float posY, float posZ, float sizeX, float sizeY)
 {
+
 	bool sizeChanged = (fabs(sizeX - this->sizeX) > 0.5f || fabs(sizeY - this->sizeY) > 0.5f);
 
 	if (hasManualFontSize && !sizeChanged)
@@ -117,11 +126,13 @@ void CViewC64StateVIC::SetPosition(float posX, float posY, float posZ, float siz
 
 void CViewC64StateVIC::SetPosition(float posX, float posY, float sizeX, float sizeY)
 {
+
 	CGuiView::SetPosition(posX, posY, posZ, sizeX, sizeY);
 }
 
 void CViewC64StateVIC::LayoutParameterChanged(CLayoutParameter *layoutParameter)
 {
+
 	if (layoutParameter != NULL)
 	{
 		hasManualFontSize = true;
@@ -431,9 +442,10 @@ bool CViewC64StateVIC::DoTap(float x, float y)
 	// replace mode of display
 	showRegistersOnly = !showRegistersOnly;
 	editingRegisterValueIndex = -1;
-	
+
+
 	guiMain->UnlockMutex();
-	return false;
+	return true;
 }
 
 bool CViewC64StateVIC::DoRightClick(float x, float y)
@@ -573,10 +585,12 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 	v_bank = viciiState->vbank_phi1;
 	v_vram = ((viciiState->regs[0x18] >> 4) * 0x0400) + viciiState->vbank_phi2;
 	
+	{
+
 	if (showRegistersOnly)
 	{
 		float fs2 = fontSize; // * 0.75f;
-		
+
 		float plx = px;
 		float ply = py;
 		for (int i = 0; i < 0x2F; i++)
@@ -584,31 +598,31 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 			if (editingRegisterValueIndex == i)
 			{
 				sprintf(buf, "D0%02x", i);
-				fontBytes->BlitText(buf, plx, ply, posZ, fs2);
+				fontBytes->BlitText(buf, plx, ply, posZ, fontSize);
 				fontBytes->BlitTextColor(editHex->textWithCursor, plx + fontSize*5.0f, ply, posZ, fontSize, 1.0f, 1.0f, 1.0f, 1.0f);
 			}
 			else
 			{
 				sprintf(buf, "D0%02x %02x", i, viciiState->regs[i]);
-				fontBytes->BlitText(buf, plx, ply, posZ, fs2);
+				fontBytes->BlitText(buf, plx, ply, posZ, fontSize);
 			}
-			
+
 			ply += fs2;
-			
+
 			if (i % numValuesPerColumn == numValuesPerColumn-1)
 			{
 				ply = py;
 				plx += fs2 * 9;
 			}
 		}
-		
+
 		if (showSprites == true)
 		{
 			if (isVertical == false)
 			{
 				py += fontSize;
 			}
-			
+
 			py += fontSize * 5.5f;
 		}
 		else
@@ -616,7 +630,7 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 			py = posY;
 			px = posX + fontSize * 29.0f;
 		}
-		
+
 		if (isVertical == false)
 		{
 			py += fontSize * 6.0f;
@@ -625,10 +639,10 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 		{
 			py += fontSize * 7.0f;
 		}
-		
+
 		py += fontSize * 0.5f;
-		
-		
+
+
 		//
 	}
 	else
@@ -645,19 +659,19 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 			"Invalid Bitmap 1",
 			"Invalid Bitmap 2"
 		};
-		
+
 		//	sprintf(buf, "Raster cycle/line: %d/%d IRQ: %d", viciiState->raster_cycle, viciiState->raster_line, viciiState->raster_irq_line);
 		//	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		if (isVertical == false)
 		{
 			sprintf(buf, "Raster line       : %04x", viciiState->raster_line);
 			fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
 		}
-		
+
 		sprintf(buf, "IRQ raster line   : %04x", viciiState->raster_irq_line);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		//	if (isVertical == false)
 		//	{
 		//		uint8 irqFlags = viciiState->irq_status;// | 0x70;
@@ -667,21 +681,21 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 		uint8 irqMask = viciiState->regs[0x1a];
 		sprintf(buf, "Enabled interrupts: "); PrintVicInterrupts(irqMask, buf);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		//	sprintf(buf, "Scroll X/Y: %d/%d, RC %d, Idle: %d, %dx%d", viciiState->regs[0x16] & 0x07, viciiState->regs[0x11] & 0x07,
 		//			viciiState->rc, viciiState->idle_state,
 		//			39 + ((viciiState->regs[0x16] >> 3) & 1), 24 + ((viciiState->regs[0x11] >> 3) & 1));
 		//	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
-		
+
+
 		sprintf(buf, "X scroll          : %d", viciiState->regs[0x16] & 0x07);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
 		sprintf(buf, "Y scroll          : %d", viciiState->regs[0x11] & 0x07);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		sprintf(buf, "Border            : %dx%d", 38 + (((viciiState->regs[0x16] >> 3) & 1) << 1), 24 + ((viciiState->regs[0x11] >> 3) & 1));
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		if (showSprites == true)
 		{
 			py += fontSize * 0.5f;
@@ -691,31 +705,31 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 			py = posY;
 			px = posX + fontSize * 29.0f;
 		}
-		
-		
+
+
 		sprintf(buf, "Display mode      : %s", mode_name[video_mode]);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
 		//	sprintf(buf, "Mode: %s (ECM/BMM/MCM=%d/%d/%d)", mode_name[video_mode], m_ecm, m_bmm, m_mcm);
 		//	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		sprintf(buf, "Sequencer state   : %s", viciiState->idle_state ? "Idle" : "Display");
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		sprintf(buf, "Row counter       : %d", viciiState->rc);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		const int FIRST_DMA_LINE = 0x30;
 		const int LAST_DMA_LINE = 0xf7;
 		uint8 yScroll = viciiState->regs[0x11] & 0x07;
 		bool isBadLine = viciiState->raster_line >= FIRST_DMA_LINE && viciiState->raster_line <= LAST_DMA_LINE && ((viciiState->raster_line & 7) == yScroll);
-		
-		
+
+
 		sprintf(buf, "Bad line state    : %s", isBadLine ? "Yes" : "No");
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		sprintf(buf, "VC %03x VCBASE %03x VMLI %2d Phi1 %02x", viciiState->vc, viciiState->vcbase, viciiState->vmli, viciiState->last_read_phi1);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
+
 		//	sprintf(buf, "Colors: Border: %x BG: %x ", viciiState->regs[0x20], viciiState->regs[0x21]);
 		//	if (m_ecm)
 		//	{
@@ -728,8 +742,8 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 		//		strcat(buf, buf2);
 		//	}
 		//	fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
-		
+
+
 		if (isVertical == false)
 		{
 			sprintf(buf, "Video base        : %04x, ", v_vram);
@@ -763,9 +777,11 @@ void CViewC64StateVIC::RenderStateVIC(vicii_cycle_state_t *viciiState,
 			}
 			fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
 		}
-		
+
 		py += fontSize * 0.5f;
-		
+
+	}
+
 	}
 	
 	if (showSprites)
@@ -1028,35 +1044,44 @@ void CViewC64StateVIC::UpdateVICSpritesImages(vicii_cycle_state_t *viciiState,
 	uint8 cD021 = viciiState->regs[0x21];
 	uint8 cD025 = viciiState->regs[0x25];
 	uint8 cD026 = viciiState->regs[0x26];
-	
+
+	// Check global color registers for changes
+	uint8 currentColorRegs[11];
+	currentColorRegs[0] = cD021;
+	currentColorRegs[1] = cD025;
+	currentColorRegs[2] = cD026;
+	for (int i = 0; i < 8; i++)
+		currentColorRegs[3 + i] = viciiState->regs[0x27 + i];
+
+	bool globalColorsChanged = !spriteDataInitialized || (memcmp(currentColorRegs, prevSpriteColorRegs, 11) != 0);
+	if (globalColorsChanged)
+		memcpy(prevSpriteColorRegs, currentColorRegs, 11);
+
 	for (int zi = 0; zi < 8; zi++)
 	{
 		CSlrImage *image = (*spritesImages)[zi];
 		CImageData *imageData = (*spritesImageData)[zi];
-		
+
 		int addr = v_bank + viciiState->sprite[zi].pointer * 64;
-		
-		//LOGD("sprite#=%d dataAddr=%04x", zi, addr);
+
 		uint8 spriteData[63];
-		
 		for (int i = 0; i < 63; i++)
 		{
-			uint8 v;
-			debugInterface->dataAdapterC64DirectRam->AdapterReadByte(addr, &v);
-			spriteData[i] = v;
-			addr++;
+			debugInterface->dataAdapterC64DirectRam->AdapterReadByte(addr + i, &spriteData[i]);
 		}
-		
-		bool isColor = false;
-		if (viciiState->regs[0x1c] & (1<<zi))
-		{
-			isColor = true;
-		}
-		if (isColor == false)
+
+		// Skip rebind if neither sprite data nor colors changed
+		if (!globalColorsChanged && memcmp(spriteData, prevSpriteData[zi], 63) == 0)
+			continue;
+
+		memcpy(prevSpriteData[zi], spriteData, 63);
+
+		bool isColor = (viciiState->regs[0x1c] & (1 << zi)) != 0;
+		if (!isColor)
 		{
 			if (renderDataWithColors)
 			{
-				uint8 spriteColor = viciiState->regs[0x27+zi];
+				uint8 spriteColor = viciiState->regs[0x27 + zi];
 				ConvertSpriteDataToImage(spriteData, imageData, cD021, spriteColor, this->debugInterface, 4);
 			}
 			else
@@ -1066,15 +1091,16 @@ void CViewC64StateVIC::UpdateVICSpritesImages(vicii_cycle_state_t *viciiState,
 		}
 		else
 		{
-			uint8 spriteColor = viciiState->regs[0x27+zi];
+			uint8 spriteColor = viciiState->regs[0x27 + zi];
 			ConvertColorSpriteDataToImage(spriteData, imageData,
 										  cD021, cD025, cD026, spriteColor,
 										  this->debugInterface, 4, 0);
 		}
-		
-		// re-bind image
+
 		image->ReBindImageData(imageData);
 	}
+
+	spriteDataInitialized = true;
 }
 
 //

@@ -67,7 +67,7 @@ static const char snap_rom_module_name[] = "C64ROM";
 #define SNAP_ROM_MAJOR 0
 #define SNAP_ROM_MINOR 0
 
-/* static log_t c64_snapshot_log = LOG_ERR; */
+/* static log_t c64_snapshot_log = LOG_DEFAULT; */
 
 static int c64_snapshot_write_rom_module(snapshot_t *s)
 {
@@ -89,14 +89,12 @@ static int c64_snapshot_write_rom_module(snapshot_t *s)
         return -1;
     }
 
-    ui_update_menus();
-
     return snapshot_module_close(m);
 }
 
 static int c64_snapshot_read_rom_module(snapshot_t *s)
 {
-    BYTE major_version, minor_version;
+    uint8_t major_version, minor_version;
     snapshot_module_t *m;
     int trapfl;
 
@@ -114,7 +112,7 @@ static int c64_snapshot_read_rom_module(snapshot_t *s)
     resources_get_int("VirtualDevices", &trapfl);
 
     /* Do not accept versions higher than current */
-    if (major_version > SNAP_ROM_MAJOR || minor_version > SNAP_ROM_MINOR) {
+    if (snapshot_version_is_bigger(major_version, minor_version, SNAP_ROM_MAJOR, SNAP_ROM_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }
@@ -156,20 +154,20 @@ fail:
 
    type  | name                | version | description
    ---------------------------------------------------
-   BYTE  | pport data          |   0.0+  | CPU port data register
-   BYTE  | pport dir           |   0.0+  | CPU port direction register
-   BYTE  | EXROM               |   0.0+  | EXROM line state
-   BYTE  | GAME                |   0.0+  | GAME line state
+   uint8_t  | pport data          |   0.0+  | CPU port data register
+   uint8_t  | pport dir           |   0.0+  | CPU port direction register
+   uint8_t  | EXROM               |   0.0+  | EXROM line state
+   uint8_t  | GAME                |   0.0+  | GAME line state
    ARRAY | RAM                 |   0.0+  | 65536 BYTES of RAM data
-   BYTE  | pport data out      |   0.0+  | CPU port data out lines state
-   BYTE  | pport data read     |   0.0+  | CPU port data in lines state
-   BYTE  | pport dir read      |   0.0+  | CPU port direction in lines state
-   DWORD | pport bit6 clock    |   0.1   | CPU port bit 6 falloff clock
-   DWORD | pport bit7 clock    |   0.1   | CPU port bit 7 falloff clock
-   BYTE  | pport bit 6         |   0.1   | CPU port bit 6 state
-   BYTE  | pport bit 7         |   0.1   | CPU port bit 7 state
-   BYTE  | pport bit 6 falloff |   0.1   | CPU port bit 6 discharge flag
-   BYTE  | pport bit 7 falloff |   0.1   | CPU port bit 7 discharge flag
+   uint8_t  | pport data out      |   0.0+  | CPU port data out lines state
+   uint8_t  | pport data read     |   0.0+  | CPU port data in lines state
+   uint8_t  | pport dir read      |   0.0+  | CPU port direction in lines state
+   uint32_t | pport bit6 clock    |   0.1   | CPU port bit 6 falloff clock
+   uint32_t | pport bit7 clock    |   0.1   | CPU port bit 7 falloff clock
+   uint8_t  | pport bit 6         |   0.1   | CPU port bit 6 state
+   uint8_t  | pport bit 7         |   0.1   | CPU port bit 7 state
+   uint8_t  | pport bit 6 falloff |   0.1   | CPU port bit 6 discharge flag
+   uint8_t  | pport bit 7 falloff |   0.1   | CPU port bit 7 discharge flag
  */
 
 static const char snap_mem_module_name[] = "C64MEM";
@@ -197,8 +195,8 @@ int c64_snapshot_write_module(snapshot_t *s, int save_roms, int save_reu_data, i
         || SMW_B(m, pport.data_out) < 0
         || SMW_B(m, pport.data_read) < 0
         || SMW_B(m, pport.dir_read) < 0
-        || SMW_DW(m, (DWORD)pport.data_set_clk_bit6) < 0
-        || SMW_DW(m, (DWORD)pport.data_set_clk_bit7) < 0
+        || SMW_DW(m, (uint32_t)pport.data_set_clk_bit6) < 0
+        || SMW_DW(m, (uint32_t)pport.data_set_clk_bit7) < 0
         || SMW_B(m, pport.data_set_bit6) < 0
         || SMW_B(m, pport.data_set_bit7) < 0
         || SMW_B(m, pport.data_falloff_bit6) < 0
@@ -215,12 +213,12 @@ int c64_snapshot_write_module(snapshot_t *s, int save_roms, int save_reu_data, i
         return -1;
     }
 
-    return cartridge_snapshot_write_modules(s, save_reu_data, save_cart_roms);
+    return cartridge_snapshot_write_modules(s);
 }
 
 int c64_snapshot_read_module(snapshot_t *s, int read_reu_data, int read_cart_roms)
 {
-    BYTE major_version, minor_version;
+    uint8_t major_version, minor_version;
     snapshot_module_t *m;
     int tmp_bit6, tmp_bit7;
 
@@ -233,7 +231,7 @@ int c64_snapshot_read_module(snapshot_t *s, int read_reu_data, int read_cart_rom
     }
 
     /* Do not accept versions higher than current */
-    if (major_version > SNAP_MAJOR || minor_version > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(major_version, minor_version, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }
@@ -251,7 +249,7 @@ int c64_snapshot_read_module(snapshot_t *s, int read_reu_data, int read_cart_rom
     }
 
     /* new since 0.1 */
-    if (SNAPVAL(major_version, minor_version, 0, 1)) {
+    if (!snapshot_version_is_smaller(major_version, minor_version, 0, 1)) {
         if (0
             || SMR_DW_INT(m, &tmp_bit6) < 0
             || SMR_DW_INT(m, &tmp_bit7) < 0
@@ -282,7 +280,7 @@ int c64_snapshot_read_module(snapshot_t *s, int read_reu_data, int read_cart_rom
         return -1;
     }
 
-    if (cartridge_snapshot_read_modules(s, read_reu_data, read_cart_roms) < 0) {
+    if (cartridge_snapshot_read_modules(s) < 0) {
         return -1;
     }
 

@@ -28,9 +28,9 @@
 #ifndef VICE_DAA_H
 #define VICE_DAA_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern const BYTE daa_reg_a[];
-extern const BYTE daa_reg_f[];
+extern const uint8_t daa_reg_a[];
+extern const uint8_t daa_reg_f[];
 
 #endif

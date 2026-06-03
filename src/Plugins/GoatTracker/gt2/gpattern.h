@@ -19,6 +19,7 @@ extern int virtualkeycode;
 #endif
 
 void patterncommands(void);
+void gt2advanceeditstep(void);
 void nextpattern(void);
 void prevpattern(void);
 void patternup(void);

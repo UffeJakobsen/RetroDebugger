@@ -31,19 +31,19 @@
 
 struct fileio_info_s;
 
-extern struct fileio_info_s *cbmfile_open(const char *file_name,
+struct fileio_info_s *cbmfile_open(const char *file_name,
                                           const char *path,
                                           unsigned int command,
                                           unsigned int type);
-extern void cbmfile_close(struct fileio_info_s *info);
-extern unsigned int cbmfile_read(struct fileio_info_s *info, BYTE *buf,
+void cbmfile_close(struct fileio_info_s *info);
+unsigned int cbmfile_read(struct fileio_info_s *info, uint8_t *buf,
                                  unsigned int len);
-extern unsigned int cbmfile_write(struct fileio_info_s *info, BYTE *buf,
+unsigned int cbmfile_write(struct fileio_info_s *info, uint8_t *buf,
                                   unsigned int len);
-extern unsigned int cbmfile_ferror(struct fileio_info_s *info);
-extern unsigned int cbmfile_rename(const char *src_name, const char *dst_name,
+unsigned int cbmfile_ferror(struct fileio_info_s *info);
+unsigned int cbmfile_rename(const char *src_name, const char *dst_name,
                                    const char *path);
-extern unsigned int cbmfile_scratch(const char *file_name, const char *path);
-extern unsigned int cbmfile_get_bytes_left(struct fileio_info_s *info);
+unsigned int cbmfile_scratch(const char *file_name, const char *path);
+unsigned int cbmfile_get_bytes_left(struct fileio_info_s *info);
 
 #endif

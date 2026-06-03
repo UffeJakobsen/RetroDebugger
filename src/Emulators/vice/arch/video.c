@@ -46,7 +46,6 @@
 #include "palette.h"
 #include "raster.h"
 #include "resources.h"
-#include "translate.h"
 #include "uimenu.h"
 #include "uistatusbar.h"
 #include "util.h"
@@ -63,7 +62,7 @@
 #define DBG(x)
 #endif
 
-static log_t sdlvideo_log = LOG_ERR;
+static log_t sdlvideo_log = LOG_DEFAULT;
 
 static int sdl_bitdepth;
 
@@ -206,7 +205,7 @@ static int set_sdl_gl_aspect_mode(int v, void *param)
     sdl_gl_aspect_mode = v;
 
     if (old_v != v) {
-        if (sdl_active_canvas && sdl_active_canvas->videoconfig->hwscale) {
+        if (sdl_active_canvas) {
             video_viewport_resize(sdl_active_canvas, 1);
         }
     }
@@ -215,7 +214,7 @@ static int set_sdl_gl_aspect_mode(int v, void *param)
 }
 
 static int set_aspect_ratio(const char *val, void *param)
-{	
+{
     double old_aspect = aspect_ratio;
     char buf[20];
 
@@ -242,7 +241,7 @@ static int set_aspect_ratio(const char *val, void *param)
     util_string_set(&aspect_ratio_s, buf);
 
     if (old_aspect != aspect_ratio) {
-        if (sdl_active_canvas && sdl_active_canvas->videoconfig->hwscale) {
+        if (sdl_active_canvas) {
             video_viewport_resize(sdl_active_canvas, 1);
         }
     }
@@ -332,36 +331,36 @@ void video_arch_resources_shutdown(void)
 /* Video-related command-line options.  */
 
 static const cmdline_option_t cmdline_options[] = {
-    { "-sdlbitdepth", SET_RESOURCE, 1, NULL, NULL, "SDLBitdepth", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdlbitdepth", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SDLBitdepth", NULL,
       "<bpp>", "Set bitdepth (0 = current, 8, 15, 16, 24, 32)" },
-    { "-sdllimitmode", SET_RESOURCE, 1, NULL, NULL, "SDLLimitMode", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdllimitmode", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SDLLimitMode", NULL,
       "<mode>", "Set resolution limiting mode (0 = off, 1 = max, 2 = fixed)" },
-    { "-sdlcustomw", SET_RESOURCE, 1, NULL, NULL, "SDLCustomWidth", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdlcustomw", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SDLCustomWidth", NULL,
       "<width>", "Set custom resolution width" },
-    { "-sdlcustomh", SET_RESOURCE, 1, NULL, NULL, "SDLCustomHeight", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdlcustomh", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SDLCustomHeight", NULL,
       "<height>", "Set custom resolution height" },
 #ifdef HAVE_HWSCALE
-    { "-sdlaspectmode", SET_RESOURCE, 1, NULL, NULL, "SDLGLAspectMode", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdlaspectmode", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "SDLGLAspectMode", NULL,
       "<mode>", "Set aspect ratio mode (0 = off, 1 = custom, 2 = true)" },
-    { "-aspect", SET_RESOURCE, 1, NULL, NULL, "AspectRatio", NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-aspect", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "AspectRatio", NULL,
       "<aspect ratio>", "Set custom aspect ratio (0.5 - 2.0)" },
-    { "-sdlflipx", SET_RESOURCE, 0, NULL, NULL, "SDLGLFlipX", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdlflipx", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SDLGLFlipX", (resource_value_t)1,
       NULL, "Enable X flip" },
-    { "+sdlflipx", SET_RESOURCE, 0, NULL, NULL, "SDLGLFlipX", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "+sdlflipx", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SDLGLFlipX", (resource_value_t)0,
       NULL, "Disable X flip" },
-    { "-sdlflipy", SET_RESOURCE, 0, NULL, NULL, "SDLGLFlipY", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "-sdlflipy", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SDLGLFlipY", (resource_value_t)1,
       NULL, "Enable Y flip" },
-    { "+sdlflipy", SET_RESOURCE, 0, NULL, NULL, "SDLGLFlipY", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_STRING, IDCLS_UNUSED, IDCLS_UNUSED,
+    { "+sdlflipy", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
+      NULL, NULL, "SDLGLFlipY", (resource_value_t)0,
       NULL, "Disable Y flip" },
 #endif
     CMDLINE_LIST_END
@@ -722,12 +721,19 @@ video_canvas_t *video_canvas_create(video_canvas_t *canvas, unsigned int *width,
 
 void video_canvas_refresh(struct video_canvas_s *canvas, unsigned int xs, unsigned int ys, unsigned int xi, unsigned int yi, unsigned int w, unsigned int h)
 {
+	// Don't do full frame refresh during debug stepping — the atomic refresh
+	// in c64d_debug_pause_check() handles screen updates at each pause.
+	if (c64d_debug_mode_get() != DEBUGGER_MODE_RUNNING)
+	{
+		return;
+	}
+
 	//LOGD("*********** video_canvas_refresh: xs=%d ys=%d xi=%d yi=%d w=%d h=%d", xs, ys, xi, yi, w, h);
-	
-	//    video_canvas_render(canvas, (BYTE *)canvas->screen->pixels, w, h, xs, ys, xi, yi, canvas->screen->pitch, canvas->screen->format->BitsPerPixel);
+
+	//    video_canvas_render(canvas, (uint8_t *)canvas->screen->pixels, w, h, xs, ys, xi, yi, canvas->screen->pitch, canvas->screen->format->BitsPerPixel);
 
 	// draw directly from c64 screen
-	
+
 	// from: canvas->draw_buffer->draw_buffer
 	c64d_refresh_screen();
 	
@@ -775,7 +781,7 @@ void video_canvas_refresh(struct video_canvas_s *canvas, unsigned int xs, unsign
 //        canvas->videoconfig->readable = !(canvas->screen->flags & SDL_HWSURFACE);
 //    }
 //
-//    video_canvas_render(canvas, (BYTE *)canvas->screen->pixels, w, h, xs, ys, xi, yi, canvas->screen->pitch, canvas->screen->format->BitsPerPixel);
+//    video_canvas_render(canvas, (uint8_t *)canvas->screen->pixels, w, h, xs, ys, xi, yi, canvas->screen->pitch, canvas->screen->format->BitsPerPixel);
 //
 //    if (SDL_MUSTLOCK(canvas->screen)) {
 //        SDL_UnlockSurface(canvas->screen);

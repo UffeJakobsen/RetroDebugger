@@ -30,6 +30,16 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#if defined(_WIN32) || defined(WINDOWS_COMPILE)
+#ifdef __cplusplus
+extern "C" {
+#endif
+FILE *fmemopen(void *buf, size_t size, const char *mode);
+#ifdef __cplusplus
+}
+#endif
+#endif
+
 enum log_level {
     LOG_MIN = -99,
     LOG_FATAL = -40,

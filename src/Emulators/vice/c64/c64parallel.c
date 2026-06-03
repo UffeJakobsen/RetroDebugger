@@ -53,8 +53,8 @@
 
 #define PC_PORT_NUM             2
 
-static BYTE parallel_cable_drive_value[DRIVE_NUM] = { 0xff, 0xff, 0xff, 0xff };
-static BYTE parallel_cable_cpu_value[PC_PORT_NUM] = { 0xff, 0xff };
+static uint8_t parallel_cable_drive_value[NUM_DISK_UNITS] = { 0xff, 0xff, 0xff, 0xff };
+static uint8_t parallel_cable_cpu_value[PC_PORT_NUM] = { 0xff, 0xff };
 
 static int portmap[DRIVE_PC_NUM] = {
     PC_PORT_STANDARD, /* DRIVE_PC_NONE */
@@ -63,17 +63,17 @@ static int portmap[DRIVE_PC_NUM] = {
     PC_PORT_FORMEL64, /* DRIVE_PC_FORMEL64 */
 };
 
-static BYTE parallel_cable_value(int type)
+static uint8_t parallel_cable_value(int type)
 {
     unsigned int dnr, port;
-    BYTE val;
+    uint8_t val;
 
     port = portmap[type];
     val = parallel_cable_cpu_value[port];
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-        if (drive_context[dnr]->drive->enable && drive_context[dnr]->drive->parallel_cable) {
-            if (portmap[drive_context[dnr]->drive->parallel_cable] == (int)port) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        if (drive_context[dnr]->enable && drive_context[dnr]->parallel_cable) {
+            if (portmap[drive_context[dnr]->parallel_cable] == (int)port) {
                 val &= parallel_cable_drive_value[dnr];
             }
         }
@@ -86,7 +86,7 @@ static BYTE parallel_cable_value(int type)
 /*
     interface for the drive (read/write)
 */
-void parallel_cable_drive_write(int type, BYTE data, int handshake, unsigned int dnr)
+void parallel_cable_drive_write(int type, uint8_t data, int handshake, unsigned int dnr)
 {
     int port;
 
@@ -105,10 +105,10 @@ void parallel_cable_drive_write(int type, BYTE data, int handshake, unsigned int
     }
 }
 
-BYTE parallel_cable_drive_read(int type, int handshake)
+uint8_t parallel_cable_drive_read(int type, int handshake)
 {
     int port;
-    BYTE rc;
+    uint8_t rc;
 
     port = portmap[type];
 
@@ -132,21 +132,19 @@ void parallel_cable_cpu_execute(int type)
 {
     unsigned int dnr;
     int port;
-    drive_t *drive;
 
     port = portmap[type];
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-        drive = drive_context[dnr]->drive;
-        if (drive->enable && drive->parallel_cable) {
-            if (portmap[drive->parallel_cable] == port) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        if (drive_context[dnr]->enable && drive_context[dnr]->parallel_cable) {
+            if (portmap[drive_context[dnr]->parallel_cable] == port) {
                 drive_cpu_execute_one(drive_context[dnr], maincpu_clk);
             }
         }
     }
 }
 
-void parallel_cable_cpu_write(int type, BYTE data)
+void parallel_cable_cpu_write(int type, uint8_t data)
 {
     int port;
 
@@ -158,9 +156,9 @@ void parallel_cable_cpu_write(int type, BYTE data)
     DBG(("PARCABLE (%d:%d) CPU W DATA %02x", type, port, data));
 }
 
-BYTE parallel_cable_cpu_read(int type, BYTE data)
+uint8_t parallel_cable_cpu_read(int type, uint8_t data)
 {
-    BYTE rc;
+    uint8_t rc;
 
     parallel_cable_cpu_execute(type);
 
@@ -179,13 +177,9 @@ void parallel_cable_cpu_pulse(int type)
 
     DBG(("PARCABLE (%d:%d) CPU Pulse", type, portmap[type]));
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-        drive_t *drive;
-
-        drive = drive_context[dnr]->drive;
-
-        if (drive->enable && drive->parallel_cable) {
-            switch (drive->parallel_cable) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        if (drive_context[dnr]->enable && drive_context[dnr]->parallel_cable) {
+            switch (drive_context[dnr]->parallel_cable) {
                 case DRIVE_PC_DD3:
                     dd3_set_signal(drive_context[dnr]);
                     break;
@@ -193,9 +187,9 @@ void parallel_cable_cpu_pulse(int type)
                     viacore_signal(drive_context[dnr]->via1d1541, VIA_SIG_CB1, VIA_SIG_FALL);
                     break;
                 default:
-                    if (drive->type == DRIVE_TYPE_1570 ||
-                        drive->type == DRIVE_TYPE_1571 ||
-                        drive->type == DRIVE_TYPE_1571CR) {
+                    if (drive_context[dnr]->type == DRIVE_TYPE_1570 ||
+                        drive_context[dnr]->type == DRIVE_TYPE_1571 ||
+                        drive_context[dnr]->type == DRIVE_TYPE_1571CR) {
                         ciacore_set_flag(drive_context[dnr]->cia1571);
                     } else {
                         viacore_signal(drive_context[dnr]->via1d1541, VIA_SIG_CB1, VIA_SIG_FALL);
@@ -206,7 +200,13 @@ void parallel_cable_cpu_pulse(int type)
     }
 }
 
-void parallel_cable_cpu_undump(int type, BYTE data)
+void parallel_cable_cpu_undump(int type, uint8_t data)
 {
     parallel_cable_cpu_value[portmap[type]] = data;
+}
+
+/* VICE 3.10: parallel cable userport device registration (stub) */
+int parallel_cable_cpu_resources_init(void)
+{
+    return 0;
 }

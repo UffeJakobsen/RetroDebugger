@@ -50,13 +50,13 @@ image_contents_t *diskcontents_read(const char *file_name, unsigned int unit)
         case SERIAL_DEVICE_REAL:
             return machine_diskcontents_bus_read(unit);
         case SERIAL_DEVICE_RAW:
-            return diskcontents_block_read(file_system_get_vdrive(unit));
+            return diskcontents_block_read(file_system_get_vdrive(unit), 0);
     }
 }
 
 image_contents_t *diskcontents_filesystem_read(const char *file_name)
 {
-    return diskcontents_block_read(vdrive_internal_open_fsimage(file_name, 1));
+    return diskcontents_block_read(vdrive_internal_open_fsimage(file_name, 1), 0);
 }
 
 image_contents_t *diskcontents_read_unit8(const char *file_name)

@@ -769,6 +769,12 @@ INTERRUPT(0xfffe); \
 		
 		//c64d_c64_instruction_cycle = 0;
 
+		// Check input tasks — only when flag is set (zero overhead when idle)
+		if (atrd_input_tasks_flag)
+		{
+			atrd_check_snapshot_restore();
+		}
+
 		if (atrd_is_debug_on_atari())
 		{
 			int shouldSkipOneInstructionStep = FALSE;

@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "gt-log.h"
+#include "gt-abort.h"
 
 
 #ifdef WIN32

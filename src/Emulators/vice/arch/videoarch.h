@@ -61,13 +61,13 @@ struct video_canvas_s {
 //    SDL_Surface* screen;
 
     struct video_render_config_s *videoconfig;
+    int crt_type;
     struct draw_buffer_s *draw_buffer;
     struct viewport_s *viewport;
     struct geometry_s *geometry;
     struct palette_s *palette;
     struct raster_s *parent_raster;
 
-    struct video_draw_buffer_callback_s *video_draw_buffer_callback;
     struct fullscreenconfig_s *fullscreenconfig;
     video_refresh_func_t video_fullscreen_refresh_func;
 //#ifdef HAVE_HWSCALE

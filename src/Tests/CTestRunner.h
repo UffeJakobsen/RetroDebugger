@@ -1,17 +1,16 @@
 #pragma once
 
 #include "ITestCallback.h"
-#include <vector>
 #include <string>
-using namespace std;
+#include <vector>
 
 class CTest;
 
 struct CTestResult
 {
-	string testName;
+	std::string testName;
 	bool success;
-	string summary;
+	std::string summary;
 };
 
 class CTestRunner : public ITestCallback
@@ -26,16 +25,13 @@ public:
 	bool IsRunning();
 	CTest *GetCurrentTest() { return currentTest; }
 
-	// Static flag to prevent interference when test is scheduled
 	static bool isTestPending;
 	static bool IsTestPending() { return isTestPending; }
 
-	// ITestCallback
 	virtual void OnTestStepCompleted(CTest *test, int stepId, bool success, const char *message) override;
 	virtual void OnTestCompleted(CTest *test, bool success, const char *summary) override;
 
-	// Results
-	vector<CTestResult> results;
+	std::vector<CTestResult> results;
 
 private:
 	CTest *currentTest;

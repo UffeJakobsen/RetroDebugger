@@ -533,8 +533,13 @@ char *gtyytext;
 #include "gt-membuf.h"
 #include "gt-parse.h"
 #include "gt-asmtab.h"
+#include "gt-abort.h"
 
-
+// GT2's bison parser declares gtyylval but the flex lexer writes to yylval.
+// Without this, the lexer writes to VICE's mon_parse yylval and the parser
+// reads zeroed gtyylval → NULL symbol pointers → crash in strcmp.
+extern YYSTYPE gtyylval;
+#define yylval gtyylval
 
 #define MAX_SRC_BUFFER_DEPTH 10
 static YY_BUFFER_STATE src_buffers[MAX_SRC_BUFFER_DEPTH];
@@ -2311,6 +2316,9 @@ void yycleanup()
 {
   if (YY_CURRENT_BUFFER)
     gtyy_delete_buffer(YY_CURRENT_BUFFER);
+  yy_current_buffer = NULL;
+  src_buffer_depth = 0;
+  yy_init = 1;
   if (yy_start_stack)
   {
   	gtyy_flex_free(yy_start_stack);

@@ -36,15 +36,15 @@ typedef enum {
     FILEREQ_MODE_CHOOSE_DIR
 } ui_menu_filereq_mode_t;
 
-extern char *sdl_ui_file_selection_dialog(const char* title, ui_menu_filereq_mode_t mode);
-extern void sdl_ui_file_selection_dialog_shutdown(void);
+char *sdl_ui_file_selection_dialog(const char* title, ui_menu_filereq_mode_t mode);
+void sdl_ui_file_selection_dialog_shutdown(void);
 
 typedef enum {
     SLOTREQ_MODE_CHOOSE_SLOT = 0,
     SLOTREQ_MODE_SAVE_SLOT,
 } ui_menu_slot_mode_t;
 
-extern char *sdl_ui_slot_selection_dialog(const char* title, ui_menu_slot_mode_t mode);
+char *sdl_ui_slot_selection_dialog(const char* title, ui_menu_slot_mode_t mode);
 
 typedef struct {
 	int used;

@@ -65,7 +65,7 @@ static log_t driverom_log;
 static int drive_rom_load_ok = 0;
 
 
-int driverom_load(const char *resource_name, BYTE *drive_rom, unsigned
+int driverom_load(const char *resource_name, uint8_t *drive_rom, unsigned
                   int *loaded, int min, int max, const char *name,
                   unsigned int type, unsigned int *size) 
 {
@@ -82,7 +82,7 @@ int driverom_load(const char *resource_name, BYTE *drive_rom, unsigned
 
     resources_get_string(resource_name, &rom_name);
 
-    filesize = sysfile_load(rom_name, drive_rom, min, max);
+    filesize = sysfile_load(rom_name, NULL, drive_rom, min, max);
 
     if (filesize < 0) {
         log_error(driverom_log, "%s ROM image not found. "
@@ -101,7 +101,7 @@ int driverom_load(const char *resource_name, BYTE *drive_rom, unsigned
         memcpy(drive_rom, &drive_rom[max - min], min);
     }
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
         drive = drive_context[dnr]->drive;
 
         if (drive->type == type) {
@@ -208,7 +208,7 @@ int driverom_snapshot_write(snapshot_t *s, const drive_t *drive)
 {
     char snap_module_name[10];
     snapshot_module_t *m;
-    const BYTE *base;
+    const uint8_t *base;
     int len;
 
     sprintf(snap_module_name, "DRIVEROM%i", drive->mynumber);
@@ -298,10 +298,10 @@ int driverom_snapshot_write(snapshot_t *s, const drive_t *drive)
 
 int driverom_snapshot_read(snapshot_t *s, drive_t *drive)
 {
-    BYTE major_version, minor_version;
+    uint8_t major_version, minor_version;
     snapshot_module_t *m;
     char snap_module_name[10];
-    BYTE *base;
+    uint8_t *base;
     int len;
 
     sprintf(snap_module_name, "DRIVEROM%i", drive->mynumber);

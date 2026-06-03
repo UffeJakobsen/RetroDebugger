@@ -27,7 +27,7 @@
 
 #include "vice.h"
 
-#ifdef HAVE_OPENCBM
+#ifdef HAVE_REALDEVICE
 
 #include <stdio.h>
 
@@ -42,14 +42,14 @@ static void *opencbm_so = NULL;
 #define GET_SYMBOL_AND_TEST(_name_)                                               \
     opencbmlib->p_##_name_ = (_name_##_t)vice_dynlib_symbol(opencbm_so, #_name_); \
     if (opencbmlib->p_##_name_ == NULL) {                                         \
-        log_debug("symbol " #_name_ " failed!");                                  \
+        log_debug(LOG_DEFAULT, "symbol " #_name_ " failed!");                                  \
     }
 
 static void opencbmlib_free_library(void)
 {
     if (opencbm_so != NULL) {
         if (vice_dynlib_close(opencbm_so) != 0) {
-            log_debug("closing dynamic library " ARCHDEP_OPENCBM_SO_NAME " failed!");
+            log_debug(LOG_DEFAULT, "closing dynamic library " ARCHDEP_OPENCBM_SO_NAME " failed!");
         }
     }
 
@@ -62,7 +62,7 @@ static int opencbmlib_load_library(opencbmlib_t *opencbmlib)
         opencbm_so = vice_dynlib_open(ARCHDEP_OPENCBM_SO_NAME);
 
         if (opencbm_so == NULL) {
-            log_verbose("opening dynamic library " ARCHDEP_OPENCBM_SO_NAME " failed!");
+            log_verbose(LOG_DEFAULT, "opening dynamic library " ARCHDEP_OPENCBM_SO_NAME " failed!");
             return -1;
         }
 
@@ -80,7 +80,7 @@ static int opencbmlib_load_library(opencbmlib_t *opencbmlib)
         GET_SYMBOL_AND_TEST(cbm_get_eoi);
         GET_SYMBOL_AND_TEST(cbm_reset);
 
-        log_verbose("sucessfully loaded " ARCHDEP_OPENCBM_SO_NAME);
+        log_verbose(LOG_DEFAULT, "sucessfully loaded " ARCHDEP_OPENCBM_SO_NAME);
     }
 
     return 0;

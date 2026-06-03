@@ -31,7 +31,6 @@
 
 #include "6510core.h"   /* using 6510core.h because the registers are the same */
 #include "alarm.h"
-#include "clkguard.h"
 #include "debug.h"
 #include "drive.h"
 #include "drivecpu65c02.h"
@@ -55,7 +54,7 @@
 
 static void drivecpu65c02_set_bank_base(void *context);
 
-static interrupt_cpu_status_t *drivecpu_int_status_ptr[DRIVE_NUM];
+static interrupt_cpu_status_t *drivecpu_int_status_ptr[NUM_DISK_UNITS];
 
 void drivecpu65c02_setup_context(struct drive_context_s *drv, int i)
 {
@@ -108,30 +107,28 @@ void drivecpu65c02_setup_context(struct drive_context_s *drv, int i)
     cpu->monspace = monitor_diskspace_mem(drv->mynumber);
 
     if (i) {
-        drv->cpu->clk_guard = clk_guard_new(drv->clk_ptr, CLOCK_MAX - CLKGUARD_SUB_MIN);
-
         drv->cpu->alarm_context = alarm_context_new(drv->cpu->identification_string);
     }
 }
 
 /* ------------------------------------------------------------------------- */
 
-#define LOAD(a)           (*drv->cpud->read_func_ptr[(a) >> 8])(drv, (WORD)(a))
-#define LOAD_ZERO(a)      (*drv->cpud->read_func_ptr[0])(drv, (WORD)(a))
+#define LOAD(a)           (*drv->cpud->read_func_ptr[(a) >> 8])(drv, (uint16_t)(a))
+#define LOAD_ZERO(a)      (*drv->cpud->read_func_ptr[0])(drv, (uint16_t)(a))
 #define LOAD_ADDR(a)      (LOAD((a)) | (LOAD((a) + 1) << 8))
 #define LOAD_ZERO_ADDR(a) (LOAD_ZERO((a)) | (LOAD_ZERO((a) + 1) << 8))
-#define STORE(a, b)       (*drv->cpud->store_func_ptr[(a) >> 8])(drv, (WORD)(a), (BYTE)(b))
-#define STORE_ZERO(a, b)  (*drv->cpud->store_func_ptr[0])(drv, (WORD)(a), (BYTE)(b))
+#define STORE(a, b)       (*drv->cpud->store_func_ptr[(a) >> 8])(drv, (uint16_t)(a), (uint8_t)(b))
+#define STORE_ZERO(a, b)  (*drv->cpud->store_func_ptr[0])(drv, (uint16_t)(a), (uint8_t)(b))
 
 #define JUMP(addr)                                                         \
     do {                                                                   \
         reg_pc = (unsigned int)(addr);                                     \
         if (reg_pc >= cpu->d_bank_limit || reg_pc < cpu->d_bank_start) {   \
-            BYTE *p = drv->cpud->read_base_tab_ptr[reg_pc >> 8];           \
+            uint8_t *p = drv->cpud->read_base_tab_ptr[reg_pc >> 8];           \
             cpu->d_bank_base = p;                                          \
                                                                            \
             if (p != NULL) {                                               \
-                DWORD limits = drv->cpud->read_limit_tab_ptr[reg_pc >> 8]; \
+                uint32_t limits = drv->cpud->read_limit_tab_ptr[reg_pc >> 8]; \
                 cpu->d_bank_limit = limits & 0xffff;                       \
                 cpu->d_bank_start = limits >> 16;                          \
             } else {                                                       \
@@ -149,12 +146,13 @@ static void cpu_reset(drive_context_t *drv)
 
     preserve_monitor = drv->cpu->int_status->global_pending_int & IK_MONITOR;
 
-    log_message(drv->drive->log, "RESET.");
+    log_message(drv->log, "RESET.");
 
     interrupt_cpu_status_reset(drv->cpu->int_status);
 
     *(drv->clk_ptr) = 6;
-    rotation_reset(drv->drive);
+    rotation_reset(drv->drives[0]);
+    rotation_reset(drv->drives[1]);
     machine_drive_reset(drv);
 
     if (preserve_monitor) {
@@ -202,10 +200,6 @@ void drivecpu65c02_shutdown(drive_context_t *drv)
     if (cpu->alarm_context != NULL) {
         alarm_context_destroy(cpu->alarm_context);
     }
-    if (cpu->clk_guard != NULL) {
-        clk_guard_destroy(cpu->clk_guard);
-    }
-
     monitor_interface_destroy(cpu->monitor_interface);
     interrupt_cpu_status_destroy(cpu->int_status);
 
@@ -231,7 +225,7 @@ void drivecpu65c02_wake_up(drive_context_t *drv)
        others.  Maybe we should put it into a user-definable resource.  */
     if (maincpu_clk - drv->cpu->last_clk > 0xffffff
         && *(drv->clk_ptr) > 934639) {
-        log_message(drv->drive->log, "Skipping cycles.");
+        log_message(drv->log, "Skipping cycles.");
         drv->cpu->last_clk = maincpu_clk;
     }
 }
@@ -241,34 +235,12 @@ void drivecpu65c02_sleep(drive_context_t *drv)
     /* Currently does nothing.  But we might need this hook some day.  */
 }
 
-/* Make sure the drive clock counters never overflow; return nonzero if
-   they have been decremented to prevent overflow.  */
-CLOCK drivecpu65c02_prevent_clk_overflow(drive_context_t *drv, CLOCK sub)
-{
-    if (sub != 0) {
-        /* First, get in sync with what the main CPU has done.  Notice that
-           `clk' has already been decremented at this point.  */
-        if (drv->drive->enable) {
-            if (drv->cpu->last_clk < sub) {
-                /* Hm, this is kludgy.  :-(  */
-                drive_cpu_execute_all(maincpu_clk + sub);
-            }
-            drv->cpu->last_clk -= sub;
-        } else {
-            drv->cpu->last_clk = maincpu_clk;
-        }
-    }
-
-    /* Then, check our own clock counters.  */
-    return clk_guard_prevent_overflow(drv->cpu->clk_guard);
-}
-
 /* Handle a ROM trap. */
-inline static DWORD drive_trap_handler(drive_context_t *drv)
+inline static uint32_t drive_trap_handler(drive_context_t *drv)
 {
-    if (R65C02_REGS_GET_PC(&(drv->cpu->cpu_R65C02_regs)) == (WORD)drv->drive->trap) {
-        R65C02_REGS_SET_PC(&(drv->cpu->cpu_R65C02_regs), drv->drive->trapcont);
-        if (drv->drive->idling_method == DRIVE_IDLE_TRAP_IDLE) {
+    if (R65C02_REGS_GET_PC(&(drv->cpu->cpu_R65C02_regs)) == (uint16_t)drv->trap) {
+        R65C02_REGS_SET_PC(&(drv->cpu->cpu_R65C02_regs), drv->trapcont);
+        if (drv->idling_method == DRIVE_IDLE_TRAP_IDLE) {
             CLOCK next_clk;
 
             next_clk = alarm_context_next_pending_clk(drv->cpu->alarm_context);
@@ -281,7 +253,7 @@ inline static DWORD drive_trap_handler(drive_context_t *drv)
         }
         return 0;
     }
-    return (DWORD)-1;
+    return (uint32_t)-1;
 }
 
 static void drive_generic_dma(void)
@@ -359,7 +331,7 @@ inline static int interrupt_check_irq_delay(interrupt_cpu_status_t *cs,
 void drivecpu65c02_execute(drive_context_t *drv, CLOCK clk_value)
 {
     CLOCK cycles;
-    int tcycles;
+    CLOCK tcycles;
     drivecpu_context_t *cpu;
     int cpu_type = CPU_R65C02;
 
@@ -371,6 +343,7 @@ void drivecpu65c02_execute(drive_context_t *drv, CLOCK clk_value)
 #define reg_p   (cpu->cpu_R65C02_regs.p)
 #define flag_z  (cpu->cpu_R65C02_regs.z)
 #define flag_n  (cpu->cpu_R65C02_regs.n)
+#define ORIGIN_MEMSPACE  (drv->mynumber + e_disk8_space)
 
     cpu = drv->cpu;
 
@@ -697,7 +670,7 @@ JUMP(GLOBAL_REGS.pc);                              \
 		/* Stack operations. */
 		
 #ifndef PUSH
-#define PUSH(val) ((PAGE_ONE)[(reg_sp--)] = ((BYTE)(val)))
+#define PUSH(val) ((PAGE_ONE)[(reg_sp--)] = ((uint8_t)(val)))
 #endif
 #ifndef PULL
 #define PULL()    ((PAGE_ONE)[(++reg_sp)])
@@ -735,7 +708,7 @@ debug_text("*** BRK"); \
 		/* FIXME: LOCAL_STATUS() should check byte ready first.  */
 #define DO_INTERRUPT(int_kind)                                                                                \
 do {                                                                                                      \
-BYTE ik = (int_kind);                                                                                 \
+uint8_t ik = (int_kind);                                                                                 \
 \
 if (ik & (IK_IRQ | IK_IRQPEND | IK_NMI)) {                                                            \
 if ((ik & IK_NMI)                                                                                 \
@@ -792,7 +765,7 @@ CLK_ADD(CLK, 2);                                                                
 if (ik & (IK_TRAP | IK_RESET)) {                                                                      \
 if (ik & IK_TRAP) {                                                                               \
 EXPORT_REGISTERS();                                                                           \
-interrupt_do_trap(CPU_INT_STATUS, (WORD)reg_pc);                                              \
+interrupt_do_trap(CPU_INT_STATUS, (uint16_t)reg_pc);                                              \
 IMPORT_REGISTERS();                                                                           \
 if (CPU_INT_STATUS->global_pending_int & IK_RESET) {                                          \
 ik |= IK_RESET;                                                                           \
@@ -815,17 +788,17 @@ if (monitor_mask[CALLER]) {                                                     
 EXPORT_REGISTERS();                                                                       \
 }                                                                                             \
 if (monitor_mask[CALLER] & (MI_STEP)) {                                                       \
-monitor_check_icount((WORD)reg_pc);                                                       \
+monitor_check_icount((uint16_t)reg_pc);                                                       \
 IMPORT_REGISTERS();                                                                       \
 }                                                                                             \
 if (monitor_mask[CALLER] & (MI_BREAK)) {                                                      \
-if (monitor_check_breakpoints(CALLER, (WORD)reg_pc)) {                                    \
+if (monitor_check_breakpoints(CALLER, (uint16_t)reg_pc)) {                                    \
 monitor_startup(CALLER);                                                              \
 IMPORT_REGISTERS();                                                                   \
 }                                                                                         \
 }                                                                                             \
 if (monitor_mask[CALLER] & (MI_WATCH)) {                                                      \
-monitor_check_watchpoints(LAST_OPCODE_ADDR, (WORD)reg_pc);                                \
+monitor_check_watchpoints(LAST_OPCODE_ADDR, (uint16_t)reg_pc);                                \
 IMPORT_REGISTERS();                                                                       \
 }                                                                                             \
 }                                                                                                 \
@@ -1006,7 +979,7 @@ INC_PC(pc_inc);                                                                 
 		
 #define AND(value, clk_inc, pc_inc)      \
 do {                                 \
-reg_a = (BYTE)(reg_a & (value)); \
+reg_a = (uint8_t)(reg_a & (value)); \
 LOCAL_SET_NZ(reg_a);             \
 CLK_ADD(CLK, (clk_inc));         \
 INC_PC(pc_inc);                  \
@@ -1038,7 +1011,7 @@ INC_PC(SIZE_1);                \
 do {                                                   \
 unsigned int tmp, tmp_addr;                        \
 unsigned int dest_addr;                            \
-BYTE value;                                        \
+uint8_t value;                                        \
 \
 if (cpu_type == CPU_65SC02) {                      \
 NOOP_IMM(SIZE_1);                              \
@@ -1072,7 +1045,7 @@ JUMP(dest_addr & 0xffff);                  \
 do {                                                   \
 unsigned int tmp, tmp_addr;                        \
 unsigned int dest_addr;                            \
-BYTE value;                                        \
+uint8_t value;                                        \
 \
 if (cpu_type == CPU_65SC02) {                      \
 NOOP_IMM(SIZE_1);                              \
@@ -1257,7 +1230,7 @@ INC_PC(SIZE_1);      \
 		
 #define EOR(value, clk_inc, pc_inc)      \
 do {                                 \
-reg_a = (BYTE)(reg_a ^ (value)); \
+reg_a = (uint8_t)(reg_a ^ (value)); \
 LOCAL_SET_NZ(reg_a);             \
 CLK_ADD(CLK, (clk_inc));         \
 INC_PC(pc_inc);                  \
@@ -1301,10 +1274,10 @@ INC_PC(SIZE_1);      \
 		
 #define NOP_02()                                                  \
 do {                                                          \
-DWORD trap_result;                                        \
+uint32_t trap_result;                                        \
 EXPORT_REGISTERS();                                       \
 if (!ROM_TRAP_ALLOWED()                                   \
-|| (trap_result = ROM_TRAP_HANDLER()) == (DWORD)-1) { \
+|| (trap_result = ROM_TRAP_HANDLER()) == (uint32_t)-1) { \
 NOOP_IMM(SIZE_2);                                     \
 } else {                                                  \
 if (trap_result) {                                    \
@@ -1325,7 +1298,7 @@ JUMP(addr); \
 		
 #define JMP_IND()                                    \
 do {                                             \
-WORD dest_addr;                              \
+uint16_t dest_addr;                              \
 dest_addr = LOAD(p2);                        \
 CLK_ADD(CLK, CYCLES_1);                      \
 LOAD(reg_pc + 2);                            \
@@ -1337,7 +1310,7 @@ JUMP(dest_addr);                             \
 		
 #define JMP_IND_X()                                          \
 do {                                                     \
-WORD dest_addr;                                      \
+uint16_t dest_addr;                                      \
 dest_addr = LOAD((p2 + reg_x) & 0xffff);             \
 CLK_ADD(CLK, CYCLES_1);                              \
 LOAD(reg_pc + 2);                                    \
@@ -1364,7 +1337,7 @@ JUMP(tmp_addr);                        \
 		
 #define LDA(value, clk_inc, pc_inc) \
 do {                            \
-reg_a = (BYTE)(value);      \
+reg_a = (uint8_t)(value);      \
 CLK_ADD(CLK, (clk_inc));    \
 LOCAL_SET_NZ(reg_a);        \
 INC_PC(pc_inc);             \
@@ -1372,7 +1345,7 @@ INC_PC(pc_inc);             \
 		
 #define LDX(value, clk_inc, pc_inc) \
 do {                            \
-reg_x = (BYTE)(value);      \
+reg_x = (uint8_t)(value);      \
 LOCAL_SET_NZ(reg_x);        \
 CLK_ADD(CLK, (clk_inc));    \
 INC_PC(pc_inc);             \
@@ -1380,7 +1353,7 @@ INC_PC(pc_inc);             \
 		
 #define LDY(value, clk_inc, pc_inc) \
 do {                            \
-reg_y = (BYTE)(value);      \
+reg_y = (uint8_t)(value);      \
 LOCAL_SET_NZ(reg_y);        \
 CLK_ADD(CLK, (clk_inc));    \
 INC_PC(pc_inc);             \
@@ -1410,7 +1383,7 @@ INC_PC(SIZE_1);                \
 		
 #define ORA(value, clk_inc, pc_inc)      \
 do {                                 \
-reg_a = (BYTE)(reg_a | (value)); \
+reg_a = (uint8_t)(reg_a | (value)); \
 LOCAL_SET_NZ(reg_a);             \
 CLK_ADD(CLK, (clk_inc));         \
 INC_PC(pc_inc);                  \
@@ -1500,7 +1473,7 @@ INC_PC(SIZE_1);         \
 		
 #define PLP()                                                 \
 do {                                                      \
-BYTE s;                                               \
+uint8_t s;                                               \
 \
 LOAD(reg_sp | 0x100);                                 \
 s = PULL();                                           \
@@ -1594,7 +1567,7 @@ store_func(tmp_addr, src);                        \
 		
 #define ROR_A()                              \
 do {                                     \
-BYTE tmp = reg_a;                    \
+uint8_t tmp = reg_a;                    \
 \
 reg_a = (reg_a >> 1) | (reg_p << 7); \
 LOCAL_SET_CARRY(tmp & 0x01);         \
@@ -1608,20 +1581,20 @@ INC_PC(SIZE_1);                      \
    soon as the opcode ends, if necessary.  */
 #define RTI()                        \
 do {                             \
-WORD tmp;                    \
+uint16_t tmp;                    \
 \
 LOAD(reg_sp | 0x100);        \
 CLK_ADD(CLK, CYCLES_4);      \
-tmp = (WORD)PULL();          \
-LOCAL_SET_STATUS((BYTE)tmp); \
-tmp = (WORD)PULL();          \
-tmp |= (WORD)PULL() << 8;    \
+tmp = (uint16_t)PULL();          \
+LOCAL_SET_STATUS((uint8_t)tmp); \
+tmp = (uint16_t)PULL();          \
+tmp |= (uint16_t)PULL() << 8;    \
 JUMP(tmp);                   \
 } while (0)
 		
 #define RTS()                      \
 do {                           \
-WORD tmp;                  \
+uint16_t tmp;                  \
 \
 LOAD(reg_sp | 0x100);      \
 CLK_ADD(CLK, CYCLES_3);    \
@@ -1635,9 +1608,9 @@ JUMP(tmp);                 \
 		
 #define SBC(value, clk_inc, pc_inc)                                               \
 do {                                                                          \
-WORD src, tmp, tmp2;                                                      \
+uint16_t src, tmp, tmp2;                                                      \
 \
-src = (WORD)(value);                                                      \
+src = (uint16_t)(value);                                                      \
 CLK_ADD(CLK, (clk_inc));                                                  \
 tmp = reg_a - src + LOCAL_CARRY() - 1;                                    \
 LOCAL_SET_OVERFLOW(((reg_a ^ tmp) & 0x80) && ((reg_a ^ src) & 0x80));     \
@@ -1654,7 +1627,7 @@ CLK_ADD(CLK, CYCLES_1);                                               \
 }                                                                         \
 LOCAL_SET_CARRY(reg_a + LOCAL_CARRY() - 1 >= src);                        \
 LOCAL_SET_NZ(tmp & 0xff);                                                 \
-reg_a = (BYTE)tmp;                                                        \
+reg_a = (uint8_t)tmp;                                                        \
 INC_PC(pc_inc);                                                           \
 } while (0)
 		
@@ -1910,7 +1883,7 @@ NOOP_IMM(SIZE_1);            \
 		/* These tables have a different meaning than for the 6502, it represents
    the amount of extra fetches to the opcode fetch.
 		 */
-		static const BYTE fetch_tab[] = {
+		static const uint8_t fetch_tab[] = {
 			/* 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
 			/* $00 */  1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 2, 2, 2, 0, /* $00 */
 			/* $10 */  1, 1, 1, 0, 1, 1, 1, 0, 1, 2, 1, 0, 2, 2, 2, 0, /* $10 */
@@ -1933,12 +1906,12 @@ NOOP_IMM(SIZE_1);            \
 #ifndef FETCH_OPCODE
 #if !defined WORDS_BIGENDIAN && defined ALLOW_UNALIGNED_ACCESS
 		
-#define opcode_t DWORD
+#define opcode_t uint32_t
 		
 #define FETCH_OPCODE(o)                                        \
 do {                                                       \
 if (((int)reg_pc) < bank_limit) {                      \
-o = (*((DWORD *)(bank_base + reg_pc)) & 0xffffff); \
+o = (*((uint32_t *)(bank_base + reg_pc)) & 0xffffff); \
 CLK_ADD(CLK, CYCLES_1);                            \
 if (fetch_tab[o & 0xff]) {                         \
 CLK_ADD(CLK, fetch_tab[o & 0xff]);             \
@@ -1965,10 +1938,10 @@ CLK_ADD(CLK, CYCLES_1);                    \
 		
 #define opcode_t         \
 struct {             \
-BYTE ins;        \
+uint8_t ins;        \
 union {          \
-BYTE op8[2]; \
-WORD op16;   \
+uint8_t op8[2]; \
+uint16_t op16;   \
 } op;            \
 }
 		
@@ -2086,9 +2059,9 @@ opcode.op.op8[0] = ((o) >> 16) & 0xff; \
 				}
 #endif
 				if (p0 == 0x20) {
-					monitor_cpuhistory_store(reg_pc, p0, p1, LOAD(reg_pc + 2), reg_a, reg_x, reg_y, reg_sp, LOCAL_STATUS());
+					monitor_cpuhistory_store(CLK, reg_pc, p0, p1, LOAD(reg_pc + 2), reg_a, reg_x, reg_y, reg_sp, LOCAL_STATUS(), CALLER);
 				} else {
-					monitor_cpuhistory_store(reg_pc, p0, p1, p2 >> 8, reg_a, reg_x, reg_y, reg_sp, LOCAL_STATUS());
+					monitor_cpuhistory_store(CLK, reg_pc, p0, p1, p2 >> 8, reg_a, reg_x, reg_y, reg_sp, LOCAL_STATUS(), CALLER);
 				}
 				memmap_state &= ~(MEMMAP_STATE_INSTR | MEMMAP_STATE_OPCODE);
 #endif
@@ -2096,11 +2069,11 @@ opcode.op.op8[0] = ((o) >> 16) & 0xff; \
 #ifdef VICE_DEBUG
 #ifdef DRIVE_CPU
 				if (TRACEFLG) {
-					BYTE op = (BYTE)(p0);
-					BYTE lo = (BYTE)(p1);
-					BYTE hi = (BYTE)(p2 >> 8);
+					uint8_t op = (uint8_t)(p0);
+					uint8_t lo = (uint8_t)(p1);
+					uint8_t hi = (uint8_t)(p2 >> 8);
 					
-					debug_drive((DWORD)(reg_pc), debug_clk,
+					debug_drive((uint32_t)(reg_pc), debug_clk,
 								mon_disassemble_to_string(e_disk8_space,
 														  reg_pc, op,
 														  lo, hi, 0, 1, "R65(SC)02"),
@@ -2108,15 +2081,15 @@ opcode.op.op8[0] = ((o) >> 16) & 0xff; \
 				}
 #else
 				if (TRACEFLG) {
-					BYTE op = (BYTE)(p0);
-					BYTE lo = (BYTE)(p1);
-					BYTE hi = (BYTE)(p2 >> 8);
+					uint8_t op = (uint8_t)(p0);
+					uint8_t lo = (uint8_t)(p1);
+					uint8_t hi = (uint8_t)(p2 >> 8);
 					
 					if (op == 0x20) {
 						hi = LOAD(reg_pc + 2);
 					}
 					
-					debug_maincpu((DWORD)(reg_pc), debug_clk,
+					debug_maincpu((uint32_t)(reg_pc), debug_clk,
 								  mon_disassemble_to_string(e_comp_space,
 															reg_pc, op,
 															lo, hi, 0, 1, "65(SC)02"),
@@ -3052,7 +3025,7 @@ static void drivecpu65c02_set_bank_base(void *context)
 /* ------------------------------------------------------------------------- */
 
 #define SNAP_MAJOR 1
-#define SNAP_MINOR 1
+#define SNAP_MINOR 3
 
 int drivecpu65c02_snapshot_write_module(drive_context_t *drv, snapshot_t *s)
 {
@@ -3062,24 +3035,25 @@ int drivecpu65c02_snapshot_write_module(drive_context_t *drv, snapshot_t *s)
     cpu = drv->cpu;
 
     m = snapshot_module_create(s, drv->cpu->snap_module_name,
-                               ((BYTE)(SNAP_MAJOR)), ((BYTE)(SNAP_MINOR)));
+                               ((uint8_t)(SNAP_MAJOR)), ((uint8_t)(SNAP_MINOR)));
     if (m == NULL) {
         return -1;
     }
 
     if (0
-        || SMW_DW(m, (DWORD) *(drv->clk_ptr)) < 0
-        || SMW_B(m, (BYTE)R65C02_REGS_GET_A(&(cpu->cpu_R65C02_regs))) < 0
-        || SMW_B(m, (BYTE)R65C02_REGS_GET_X(&(cpu->cpu_R65C02_regs))) < 0
-        || SMW_B(m, (BYTE)R65C02_REGS_GET_Y(&(cpu->cpu_R65C02_regs))) < 0
-        || SMW_B(m, (BYTE)R65C02_REGS_GET_SP(&(cpu->cpu_R65C02_regs))) < 0
-        || SMW_W(m, (WORD)R65C02_REGS_GET_PC(&(cpu->cpu_R65C02_regs))) < 0
-        || SMW_B(m, (BYTE)R65C02_REGS_GET_STATUS(&(cpu->cpu_R65C02_regs))) < 0
-        || SMW_DW(m, (DWORD)(cpu->last_opcode_info)) < 0
-        || SMW_DW(m, (DWORD)(cpu->last_clk)) < 0
-        || SMW_DW(m, (DWORD)(cpu->cycle_accum)) < 0
-        || SMW_DW(m, (DWORD)(cpu->last_exc_cycles)) < 0
-        || SMW_DW(m, (DWORD)(cpu->stop_clk)) < 0
+        || SMW_DW(m, (uint32_t) *(drv->clk_ptr)) < 0
+        || SMW_B(m, (uint8_t)R65C02_REGS_GET_A(&(cpu->cpu_R65C02_regs))) < 0
+        || SMW_B(m, (uint8_t)R65C02_REGS_GET_X(&(cpu->cpu_R65C02_regs))) < 0
+        || SMW_B(m, (uint8_t)R65C02_REGS_GET_Y(&(cpu->cpu_R65C02_regs))) < 0
+        || SMW_B(m, (uint8_t)R65C02_REGS_GET_SP(&(cpu->cpu_R65C02_regs))) < 0
+        || SMW_W(m, (uint16_t)R65C02_REGS_GET_PC(&(cpu->cpu_R65C02_regs))) < 0
+        || SMW_B(m, (uint8_t)R65C02_REGS_GET_STATUS(&(cpu->cpu_R65C02_regs))) < 0
+        || SMW_DW(m, (uint32_t)(cpu->last_opcode_info)) < 0
+        || SMW_DW(m, (uint32_t)(cpu->last_clk)) < 0
+        || SMW_DW(m, (uint32_t)(cpu->cycle_accum)) < 0
+        || SMW_DW(m, (uint32_t)(cpu->last_exc_cycles)) < 0
+        || SMW_DW(m, (uint32_t)(cpu->stop_clk)) < 0
+        || SMW_B(m, cpu->cpu_last_data) < 0
         ) {
         goto fail;
     }
@@ -3088,9 +3062,9 @@ int drivecpu65c02_snapshot_write_module(drive_context_t *drv, snapshot_t *s)
         goto fail;
     }
 
-    if (drv->drive->type == DRIVE_TYPE_2000
-        || drv->drive->type == DRIVE_TYPE_4000) {
-        if (SMW_BA(m, drv->drive->drive_ram, 0x2000) < 0) {
+    if (drv->type == DRIVE_TYPE_2000
+        || drv->type == DRIVE_TYPE_4000) {
+        if (SMW_BA(m, drv->drive_ram, 0x2000) < 0) {
             goto fail;
         }
     }
@@ -3110,10 +3084,10 @@ fail:
 
 int drivecpu65c02_snapshot_read_module(drive_context_t *drv, snapshot_t *s)
 {
-    BYTE major, minor;
+    uint8_t major, minor;
     snapshot_module_t *m;
-    BYTE a, x, y, sp, status;
-    WORD pc;
+    uint8_t a, x, y, sp, status;
+    uint16_t pc;
     drivecpu_context_t *cpu;
 
     cpu = drv->cpu;
@@ -3126,7 +3100,7 @@ int drivecpu65c02_snapshot_read_module(drive_context_t *drv, snapshot_t *s)
     /* Before we start make sure all devices are reset.  */
     drivecpu65c02_reset(drv);
 
-    /* XXX: Assumes `CLOCK' is the same size as a `DWORD'.  */
+    /* XXX: Assumes `CLOCK' is the same size as a `uint32_t'.  */
     if (0
         || SMR_DW(m, drv->clk_ptr) < 0
         || SMR_B(m, &a) < 0
@@ -3140,6 +3114,7 @@ int drivecpu65c02_snapshot_read_module(drive_context_t *drv, snapshot_t *s)
         || SMR_DW(m, &(cpu->cycle_accum)) < 0
         || SMR_DW(m, &(cpu->last_exc_cycles)) < 0
         || SMR_DW(m, &(cpu->stop_clk)) < 0
+        || SMR_B(m, &(cpu->cpu_last_data)) < 0
         ) {
         goto fail;
     }
@@ -3151,7 +3126,7 @@ int drivecpu65c02_snapshot_read_module(drive_context_t *drv, snapshot_t *s)
     R65C02_REGS_SET_PC(&(cpu->cpu_R65C02_regs), pc);
     R65C02_REGS_SET_STATUS(&(cpu->cpu_R65C02_regs), status);
 
-    log_message(drv->drive->log, "RESET (For undump).");
+    log_message(drv->log, "RESET (For undump).");
 
     interrupt_cpu_status_reset(cpu->int_status);
 
@@ -3161,9 +3136,9 @@ int drivecpu65c02_snapshot_read_module(drive_context_t *drv, snapshot_t *s)
         goto fail;
     }
 
-    if (drv->drive->type == DRIVE_TYPE_2000
-        || drv->drive->type == DRIVE_TYPE_4000) {
-        if (SMR_BA(m, drv->drive->drive_ram, 0x2000) < 0) {
+    if (drv->type == DRIVE_TYPE_2000
+        || drv->type == DRIVE_TYPE_4000) {
+        if (SMR_BA(m, drv->drive_ram, 0x2000) < 0) {
             goto fail;
         }
     }

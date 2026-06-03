@@ -67,7 +67,7 @@ struct sound_s
 
 typedef struct sound_s sound_t;
 
-static sound_t *residfp_open(BYTE *sidstate, int chipNo)
+static sound_t *residfp_open(uint8_t *sidstate, int chipNo)
 {
 //	LOGD("residfp_open: chipNo=%d", chipNo);
 	
@@ -217,12 +217,12 @@ static void residfp_close(sound_t *psid)
     delete psid;
 }
 
-static BYTE residfp_read(sound_t *psid, WORD addr)
+static uint8_t residfp_read(sound_t *psid, uint16_t addr)
 {
     return psid->sid->read(addr & 0xffu);
 }
 
-static void residfp_store(sound_t *psid, WORD addr, BYTE byte)
+static void residfp_store(sound_t *psid, uint16_t addr, uint8_t byte)
 {
     psid->sid->write(addr & 0xffu, byte);
 }
@@ -232,19 +232,15 @@ static void residfp_reset(sound_t *psid, CLOCK cpu_clk)
     psid->sid->reset();
 }
 
-static int residfp_calculate_samples(sound_t *psid, SWORD *pbuf, int nr,
+static int residfp_calculate_samples(sound_t *psid, int16_t *pbuf, int nr,
                                    int interleave, int *delta_t)
 {
     return psid->sid->clock(*delta_t, pbuf, nr, interleave);
 }
 
-static void residfp_prevent_clk_overflow(sound_t *psid, CLOCK sub)
-{
-}
-
 static char *residfp_dump_state(sound_t *psid)
 {
-    return lib_stralloc("");
+    return lib_strdup("");
 }
 
 static void residfp_state_read(sound_t *psid, sid_snapshot_state_t *sid_state)
@@ -255,21 +251,21 @@ static void residfp_state_read(sound_t *psid, sid_snapshot_state_t *sid_state)
     state = psid->sid->read_state();
 
     for (i = 0; i < 0x20; i++) {
-        sid_state->sid_register[i] = (BYTE)state.sid_register[i];
+        sid_state->sid_register[i] = (uint8_t)state.sid_register[i];
     }
 
-    sid_state->bus_value = (BYTE)state.bus_value;
-    sid_state->bus_value_ttl = (DWORD)state.bus_value_ttl;
+    sid_state->bus_value = (uint8_t)state.bus_value;
+    sid_state->bus_value_ttl = (uint32_t)state.bus_value_ttl;
     for (i = 0; i < 3; i++) {
-        sid_state->accumulator[i] = (DWORD)state.accumulator[i];
-        sid_state->shift_register[i] = (DWORD)state.shift_register[i];
-        sid_state->rate_counter[i] = (WORD)state.rate_counter[i];
-        sid_state->rate_counter_period[i] = (WORD)state.rate_counter_period[i];
-        sid_state->exponential_counter[i] = (WORD)state.exponential_counter[i];
-        sid_state->exponential_counter_period[i] = (WORD)state.exponential_counter_period[i];
-        sid_state->envelope_counter[i] = (BYTE)state.envelope_counter[i];
-        sid_state->envelope_state[i] = (BYTE)state.envelope_state[i];
-        sid_state->hold_zero[i] = (BYTE)state.hold_zero[i];
+        sid_state->accumulator[i] = (uint32_t)state.accumulator[i];
+        sid_state->shift_register[i] = (uint32_t)state.shift_register[i];
+        sid_state->rate_counter[i] = (uint16_t)state.rate_counter[i];
+        sid_state->rate_counter_period[i] = (uint16_t)state.rate_counter_period[i];
+        sid_state->exponential_counter[i] = (uint16_t)state.exponential_counter[i];
+        sid_state->exponential_counter_period[i] = (uint16_t)state.exponential_counter_period[i];
+        sid_state->envelope_counter[i] = (uint8_t)state.envelope_counter[i];
+        sid_state->envelope_state[i] = (uint8_t)state.envelope_state[i];
+        sid_state->hold_zero[i] = (uint8_t)state.hold_zero[i];
     }
 }
 
@@ -301,7 +297,7 @@ static void residfp_state_write(sound_t *psid, sid_snapshot_state_t *sid_state)
     psid->sid->write_state((const SIDFP::State)state);
 }
 
-static void residfp_set_voice_mask(sound_t *psid, BYTE voiceMask)
+static void residfp_set_voice_mask(sound_t *psid, uint8_t voiceMask)
 {
 	psid->sid->voice[0].mute((voiceMask & 0x01) == 0x00);
 	psid->sid->voice[1].mute((voiceMask & 0x02) == 0x00);
@@ -317,7 +313,6 @@ sid_engine_t residfp_hooks =
     residfp_store,
     residfp_reset,
     residfp_calculate_samples,
-    residfp_prevent_clk_overflow,
     residfp_dump_state,
     residfp_state_read,
     residfp_state_write,

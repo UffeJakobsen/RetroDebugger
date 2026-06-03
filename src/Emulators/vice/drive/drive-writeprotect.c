@@ -28,10 +28,11 @@
 
 #include "drive-writeprotect.h"
 #include "drive.h"
+#include "drivetypes.h"
 #include "vicetypes.h"
 
 /// c64d
-BYTE c64d_drive_writeprotect_sense_peek(drive_t *dptr)
+uint8_t c64d_drive_writeprotect_sense_peek(drive_t *dptr)
 {
 	if ((dptr->GCR_image_loaded == 0) && (dptr->P64_image_loaded == 0))
 	{
@@ -52,12 +53,14 @@ BYTE c64d_drive_writeprotect_sense_peek(drive_t *dptr)
 }
 ///
 
-BYTE drive_writeprotect_sense(drive_t *dptr)
+uint8_t drive_writeprotect_sense(drive_t *dptr)
 {
+    CLOCK clk = *(dptr->diskunit->clk_ptr);
+
     /* Clear the write protection bit for the time the disk is pulled out on
        detach.  */
     if (dptr->detach_clk != (CLOCK)0) {
-        if (*(dptr->clk) - dptr->detach_clk < DRIVE_DETACH_DELAY) {
+        if (clk - dptr->detach_clk < DRIVE_DETACH_DELAY) {
             return 0x0;
         }
         dptr->detach_clk = (CLOCK)0;
@@ -65,7 +68,7 @@ BYTE drive_writeprotect_sense(drive_t *dptr)
     /* Set the write protection bit for the minimum time until a new disk
        can be inserted.  */
     if (dptr->attach_detach_clk != (CLOCK)0) {
-        if (*(dptr->clk) - dptr->attach_detach_clk
+        if (clk - dptr->attach_detach_clk
             < DRIVE_ATTACH_DETACH_DELAY) {
             return 0x10;
         }
@@ -74,7 +77,7 @@ BYTE drive_writeprotect_sense(drive_t *dptr)
     /* Clear the write protection bit for the time the disk is put in on
        attach.  */
     if (dptr->attach_clk != (CLOCK)0) {
-        if (*(dptr->clk) - dptr->attach_clk < DRIVE_ATTACH_DELAY) {
+        if (clk - dptr->attach_clk < DRIVE_ATTACH_DELAY) {
             return 0x0;
         }
         dptr->attach_clk = (CLOCK)0;

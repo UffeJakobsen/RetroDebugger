@@ -25,6 +25,9 @@
 /* Enable support for BSD style joysticks. */
 /* #undef BSD_JOYSTICK */
 
+/* VICE 3.10: X64 disk image format support (conditionally compiled in 3.10) */
+#define HAVE_X64_IMAGE 1
+
 /* Enable cegcc support. */
 /* #undef CEGCC_COMPILE */
 
@@ -55,7 +58,7 @@
 /* Can we use the dos PCAP library? */
 /* #undef DOS_TFE */
 
-/* Is DWORD defined as long or int in the Windows header files? */
+/* Is uint32_t defined as long or int in the Windows header files? */
 /* #undef DWORD_IS_LONG */
 
 /* Define if NLS support is enabled. */
@@ -244,7 +247,7 @@
 #endif
 
 /* Can we use the GIF or UNGIF library? */
-#define HAVE_GIF /**/
+/* #undef HAVE_GIF */
 
 /* Is the GUID lib of DX SDK present? */
 /* #undef HAVE_GUIDLIB */
@@ -370,7 +373,9 @@
 #define HAVE_MOUSE /**/
 
 /* Use nanosleep instead of usleep */
+#ifndef _WIN32
 #define HAVE_NANOSLEEP /**/
+#endif
 
 /* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
 /* #undef HAVE_NDIR_H */
@@ -384,8 +389,8 @@
 /* Enable netplay support */
 // change me? #define HAVE_NETWORK /**/
 
-/* Support for OpenCBM (former CBM4Linux). */
-/* #undef HAVE_OPENCBM */
+/* Support for real device access (OpenCBM) */
+/* #undef HAVE_REALDEVICE */
 
 /* Enable openGL synchronization */
 /* #undef HAVE_OPENGL_SYNC */
@@ -401,6 +406,9 @@
 
 /* A libpcap version with pcap_sendpacket is available */
 /* #undef HAVE_PCAP_SENDPACKET */
+
+/* Enable raw network access (replaces old HAVE_PCAP) */
+/* #undef HAVE_RAWNET */
 
 /* Can we use the PNG library? */
 /* #undef HAVE_PNG */
@@ -513,6 +521,9 @@
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
+
+/* off_t is available (via stdio.h on POSIX, sys/types.h on Windows) */
+#define HAVE_OFF_T 1
 
 /* We are using stdlib.h */
 /* #undef HAVE_STDLIB */
@@ -842,7 +853,7 @@
 /* #undef USE_XF86_VIDMODE_EXT */
 
 /* Version number of package */
-#define VERSION "3.1"
+#define VERSION "3.10-WIP"
 
 /* Win32 Version string. */
 #define VERSION_RC "$VERSION_RC"
@@ -957,7 +968,7 @@
 
 #endif
 
-#ifdef WIN32
+#if defined(WIN32) && !defined(_MSC_VER)
 typedef signed char int8_t;
 typedef unsigned char  uint8_t;
 typedef short int16_t;
@@ -966,5 +977,16 @@ typedef int  int32_t;
 typedef unsigned uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
+#elif defined(_MSC_VER)
+#include <stdint.h>
+#endif
+
+/* MSVC compatibility types */
+#if defined(_MSC_VER)
+#include <sys/types.h>
+#ifndef _OFF_T_DEFINED
+typedef long off_t;
+#define _OFF_T_DEFINED
+#endif
 #endif
 

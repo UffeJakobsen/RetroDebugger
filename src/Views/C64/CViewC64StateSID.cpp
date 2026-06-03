@@ -121,9 +121,12 @@ CViewC64StateSID::CViewC64StateSID(const char *name, float posX, float posY, flo
 	buttonSizeY = 10.0f;
 	
 	this->SetPosition(posX, posY, posZ, sizeX, sizeY);
-	
+
 	this->SelectSid(0);
-	
+
+	cachedSidStereo = -1;
+	cachedSidStereoAddress = -1;
+	cachedSidTripleAddress = -1;
 }
 
 void CViewC64StateSID::UpdateWaveformsPosition()
@@ -309,8 +312,15 @@ bool CViewC64StateSID::ButtonSwitchChanged(CGuiButtonSwitch *button)
 
 void CViewC64StateSID::RenderImGui()
 {
-	// FIXME: call once
-	UpdateSidButtonsState();
+	if (cachedSidStereo != c64SettingsSIDStereo
+	    || cachedSidStereoAddress != (int)c64SettingsSIDStereoAddress
+	    || cachedSidTripleAddress != (int)c64SettingsSIDTripleAddress)
+	{
+		cachedSidStereo = c64SettingsSIDStereo;
+		cachedSidStereoAddress = c64SettingsSIDStereoAddress;
+		cachedSidTripleAddress = c64SettingsSIDTripleAddress;
+		UpdateSidButtonsState();
+	}
 
 	PreRenderImGui();
 	Render();
@@ -322,31 +332,26 @@ void CViewC64StateSID::Render()
 //	if (viewC64->debugInterface->GetSettingIsWarpSpeed() == true)
 //		return;
 
-	// calc trigger pos, render waveform
+	this->RenderStateSID(posX, posY + buttonSizeY, posZ, fontBytes, fontBytesSize);
+
+	// Waveform rendering
 	if (showAllSidChips == false)
 	{
-		this->RenderStateSID(selectedSidNumber, posX, posY + buttonSizeY, posZ, fontBytes, fontBytesSize);
-	
 		for (int i = 0; i < 3; i++)
 		{
 			viewChannelWaveform[selectedSidNumber][i]->Render();
 		}
-	
 		viewMixWaveform[selectedSidNumber]->Render();
 	}
 	else
 	{
-		// show all sids at once
 		int numSids = debugInterface->GetNumSids();
 		for (int sidNum = 0; sidNum < numSids; sidNum++)
 		{
-			this->RenderStateSID(sidNum, posX, posY + buttonSizeY, posZ, fontBytes, fontBytesSize);
-			
 			for (int i = 0; i < 3; i++)
 			{
 				viewChannelWaveform[sidNum][i]->Render();
 			}
-			
 			viewMixWaveform[sidNum]->Render();
 		}
 	}
@@ -354,21 +359,24 @@ void CViewC64StateSID::Render()
 	CGuiView::Render();
 }
 
-void CViewC64StateSID::RenderStateSID(int sidNum, float posX, float posY, float posZ, CSlrFont *fontBytes, float fontSize)
+void CViewC64StateSID::RenderStateSID(float posX, float posY, float posZ, CSlrFont *fontBytes, float fontSize)
 {
 	char buf[256];
 
-	for (int sidNum = 0; sidNum < debugInterface->GetNumSids(); sidNum++)
+	int startSid = 0;
+	int endSid = debugInterface->GetNumSids();
+	if (!showAllSidChips)
+	{
+		startSid = selectedSidNumber;
+		endSid = selectedSidNumber + 1;
+	}
+
+	for (int sidNum = startSid; sidNum < endSid; sidNum++)
 	{
 		float px = posX;
 		float py = posY;
 
 		px += oneSidStateSizeX * (float)sidNum;
-		
-		if (showAllSidChips == false)
-		{
-			sidNum = selectedSidNumber;
-		}
 		
 		uint16 sidBase = GetSidAddressByChipNum(sidNum);
 		
@@ -405,9 +413,6 @@ void CViewC64StateSID::RenderStateSID(int sidNum, float posX, float posY, float 
 				//				plx += fs2 * 9;
 				//			}
 			}
-			
-			if (showAllSidChips == false)
-				return;
 			
 			continue;
 		}
@@ -486,9 +491,6 @@ void CViewC64StateSID::RenderStateSID(int sidNum, float posX, float posY, float 
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
 		sprintf(buf, " Volume   : %1.1x", reg_volume & 0x0f);
 		fontBytes->BlitText(buf, px, py, posZ, fontSize); py += fontSize;
-		
-		if (showAllSidChips == false)
-			return;
 	}
 
 }

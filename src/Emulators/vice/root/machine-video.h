@@ -29,9 +29,9 @@
 
 struct video_canvas_s;
 
-extern int machine_video_resources_init(void);
+int machine_video_resources_init(void);
 
-extern void machine_video_init(void);
-extern struct video_canvas_s *machine_video_canvas_get(unsigned int window);
+void machine_video_init(void);
+struct video_canvas_s *machine_video_canvas_get(unsigned int window);
 
 #endif

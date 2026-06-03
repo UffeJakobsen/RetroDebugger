@@ -138,9 +138,21 @@ void CJukeboxPlaylist::InitFromJSON(char *json)
 						{
 							playlistEntry->resetMode = MACHINE_LOADPRG_RESET_MODE_SOFT;
 						}
-						else if (!strcmp(buf, "basic"))
+						else if (!strcmp(buf, "basicC64Pal"))
 						{
-							playlistEntry->resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC;
+							playlistEntry->resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
+						}
+						else if (!strcmp(buf, "basicC64cPal"))
+						{
+							playlistEntry->resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_PAL;
+						}
+						else if (!strcmp(buf, "basicC64Ntsc"))
+						{
+							playlistEntry->resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_NTSC;
+						}
+						else if (!strcmp(buf, "basicC64cNtsc"))
+						{
+							playlistEntry->resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64C_NTSC;
 						}
 						else if (!strcmp(buf, "none"))
 						{
@@ -406,7 +418,7 @@ CJukeboxPlaylistEntry::CJukeboxPlaylistEntry()
 	
 	autoRun = false;
 	runFileNum = 0;
-	resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_BASIC;
+	resetMode = MACHINE_LOADPRG_RESET_MODE_LOAD_SNAPSHOT_C64_PAL;
 	
 	waitTime = -1;
 	fadeInTime = -1;

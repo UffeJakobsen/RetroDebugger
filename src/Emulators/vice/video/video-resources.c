@@ -51,34 +51,8 @@
 /*-----------------------------------------------------------------------*/
 /* global resources.  */
 
-#ifdef HAVE_HWSCALE
-static int hwscale_possible;
-
-static int set_hwscale_possible(int val, void *param)
-{
-    hwscale_possible = val ? 1 : 0;
-
-    return 0;
-}
-
-static resource_int_t resources_hwscale_possible[] =
-{
-    { "HwScalePossible", 1, RES_EVENT_NO, NULL,
-      &hwscale_possible, set_hwscale_possible, NULL },
-    RESOURCE_INT_LIST_END
-};
-#endif
-
 int video_resources_init(void)
 {
-#ifdef HAVE_HWSCALE
-    if (machine_class != VICE_MACHINE_VSID) {
-        if (resources_register_int(resources_hwscale_possible) < 0) {
-            return -1;
-        }
-    }
-#endif
-
     return video_arch_resources_init();
 }
 
@@ -182,37 +156,6 @@ static resource_int_t resources_chip_scan[] =
     RESOURCE_INT_LIST_END
 };
 
-static int set_hwscale_enabled(int val, void *param)
-{
-    video_canvas_t *canvas = (video_canvas_t *)param;
-
-#ifdef HAVE_HWSCALE
-    if (val
-        && !canvas->videoconfig->hwscale
-        && !hwscale_possible)
-#endif
-    {
-        log_message(LOG_DEFAULT, "HW scale not available, forcing to disabled");
-        return 0;
-    }
-
-    canvas->videoconfig->hwscale = val ? 1 : 0;
-    canvas->videoconfig->color_tables.updated = 0;
-
-    if (canvas->initialized) {
-        video_viewport_resize(canvas, 1);
-    }
-    return 0;
-}
-
-static const char *vname_chip_hwscale[] = { "HwScale", NULL };
-
-static resource_int_t resources_chip_hwscale[] =
-{
-    { NULL, 1, RES_EVENT_NO, NULL, NULL, set_hwscale_enabled, NULL },
-    RESOURCE_INT_LIST_END
-};
-
 static int set_chip_rendermode(int val, void *param)
 {
     char *chip, *dsize;
@@ -236,7 +179,6 @@ static int set_chip_rendermode(int val, void *param)
     dsize = util_concat(chip, "DoubleSize", NULL);
 
     canvas->videoconfig->filter = val;
-    canvas->videoconfig->scale2x = 0; /* FIXME: remove this */
     canvas->videoconfig->color_tables.updated = 0;
     err = 0;
     switch (val) {
@@ -249,7 +191,6 @@ static int set_chip_rendermode(int val, void *param)
             if (resources_set_int(dsize, 1) < 0) {
                 err = 1;
             }
-            canvas->videoconfig->scale2x = 1; /* FIXME: remove this */
             break;
     }
 
@@ -274,109 +215,26 @@ static resource_int_t resources_chip_rendermode[] =
     RESOURCE_INT_LIST_END
 };
 
-static int set_fullscreen_enabled(int value, void *param)
+static int set_fullscreen_enabled(int enabled, void *param)
 {
-    int val = value ? 1 : 0;
-    int r = 0;
     video_canvas_t *canvas = (video_canvas_t *)param;
     video_chip_cap_t *video_chip_cap = canvas->videoconfig->cap;
+    int (*enable_cb)(struct video_canvas_s *, int);
 
-    canvas->videoconfig->fullscreen_enabled = val;
-
-#if !defined(USE_SDLUI) && !defined(USE_SDLUI2)
-    if (canvas->initialized)
-#endif
-    {
-        if (val) {
-            r = (video_chip_cap->fullscreen.enable)(canvas, val);
-            (void) (video_chip_cap->fullscreen.statusbar)
-                (canvas, canvas->videoconfig->fullscreen_statusbar_enabled);
-        } else {
-            /* always show statusbar when coming back to window mode */
-            (void) (video_chip_cap->fullscreen.statusbar)(canvas, 1);
-            r = (video_chip_cap->fullscreen.enable)(canvas, val);
-        }
+    canvas->videoconfig->fullscreen_enabled = enabled ? 1 : 0;
+    enable_cb = video_chip_cap->fullscreen.enable;
+    if (enable_cb != NULL) {
+        return enable_cb(canvas, enabled);
     }
-    return r;
+    return 0;
 }
 
-static int set_fullscreen_statusbar(int value, void *param)
-{
-    int val = value ? 1 : 0;
-    video_canvas_t *canvas = (video_canvas_t *)param;
-    video_chip_cap_t *video_chip_cap = canvas->videoconfig->cap;
-
-    canvas->videoconfig->fullscreen_statusbar_enabled = val;
-
-    return (video_chip_cap->fullscreen.statusbar)(canvas, val);
-}
-
-#if 0
-/* FIXME: unused ?? */
-static int set_fullscreen_double_size_enabled(int val, void *param)
-{
-    video_canvas_t *canvas = (video_canvas_t *)param;
-    video_chip_cap_t *video_chip_cap = canvas->videoconfig->cap;
-
-    canvas->videoconfig->fullscreen_double_size_enabled = val;
-
-    return (video_chip_cap->fullscreen.double_size)(canvas, val);
-}
-
-static int set_fullscreen_double_scan_enabled(int val, void *param)
-{
-    video_canvas_t *canvas = (video_canvas_t *)param;
-    video_chip_cap_t *video_chip_cap = canvas->videoconfig->cap;
-
-    canvas->videoconfig->fullscreen_double_scan_enabled = val;
-
-    return (video_chip_cap->fullscreen.double_scan)(canvas, val);
-}
-#endif
-
-static int set_fullscreen_device(const char *val, void *param)
-{
-    video_canvas_t *canvas = (video_canvas_t *)param;
-    video_chip_cap_t *video_chip_cap = canvas->videoconfig->cap;
-
-    if (canvas->videoconfig->fullscreen_enabled) {
-        log_message(LOG_DEFAULT,
-                    "Fullscreen (%s) already active - disable first.",
-                    canvas->videoconfig->fullscreen_device);
-        return 0;
-    }
-
-    if (util_string_set(&canvas->videoconfig->fullscreen_device, val)) {
-        return 0;
-    }
-
-    return (video_chip_cap->fullscreen.device)(canvas, val);
-}
-
-static const char *vname_chip_fullscreen[] = {
-    "Fullscreen", "FullscreenStatusbar", "FullscreenDevice", NULL
-};
-
-static resource_string_t resources_chip_fullscreen_string[] =
-{
-    { NULL, NULL, RES_EVENT_NO, NULL,
-      NULL, set_fullscreen_device, NULL },
-    RESOURCE_STRING_LIST_END
-};
+static const char * const vname_chip_fullscreen[] = { "Fullscreen", NULL };
 
 static resource_int_t resources_chip_fullscreen_int[] =
 {
     { NULL, 0, RES_EVENT_NO, NULL,
       NULL, set_fullscreen_enabled, NULL },
-    { NULL, 0, RES_EVENT_NO, NULL,
-      NULL, set_fullscreen_statusbar, NULL },
-#if 0
-    /* if 0'ed, because they don't seem to get initialized at all */
-    { NULL, 0, RES_EVENT_NO, NULL,
-      NULL, set_fullscreen_double_size_enabled, NULL },
-    { NULL, 0, RES_EVENT_NO, NULL,
-      NULL, set_fullscreen_double_scan_enabled, NULL },
-#endif
     RESOURCE_INT_LIST_END
 };
 
@@ -436,24 +294,6 @@ static resource_int_t resources_chip_palette_int[] =
 {
     { NULL, 0, RES_EVENT_NO, NULL,
       NULL, set_ext_palette, NULL },
-    RESOURCE_INT_LIST_END
-};
-
-static int set_double_buffer_enabled(int val, void *param)
-{
-    video_canvas_t *canvas = (video_canvas_t *)param;
-
-    canvas->videoconfig->double_buffer = val ? 1 : 0;
-
-    return 0;
-}
-
-static const char *vname_chip_double_buffer[] = { "DoubleBuffer", NULL };
-
-static resource_int_t resources_chip_double_buffer[] =
-{
-    { NULL, 0, RES_EVENT_NO, NULL,
-      NULL, set_double_buffer_enabled, NULL },
     RESOURCE_INT_LIST_END
 };
 
@@ -611,7 +451,15 @@ static int set_audioleak(int val, void *param)
     return 0;
 }
 
-static const char *vname_chip_crtemu[] = { "PALScanLineShade", "PALBlur", "PALOddLinePhase", "PALOddLineOffset", "AudioLeak", NULL };
+static int set_delaylinetype(int val, void *param)
+{
+    video_canvas_t *canvas = (video_canvas_t *)param;
+    canvas->videoconfig->video_resources.delaylinetype = val ? 1 : 0;
+    canvas->videoconfig->color_tables.updated = 0;
+    return 0;
+}
+
+static const char *vname_chip_crtemu[] = { "PALScanLineShade", "PALBlur", "PALOddLinePhase", "PALOddLineOffset", "AudioLeak", "PALDelaylineType", NULL };
 
 static resource_int_t resources_chip_crtemu[] =
 {
@@ -625,6 +473,8 @@ static resource_int_t resources_chip_crtemu[] =
       NULL, set_pal_oddlinesoffset, NULL },
     { NULL, 0, RES_EVENT_NO, NULL,
       NULL, set_audioleak, NULL },
+    { NULL, 0, RES_EVENT_NO, NULL,
+      NULL, set_delaylinetype, NULL },
     RESOURCE_INT_LIST_END
 };
 
@@ -667,7 +517,7 @@ int video_resources_chip_init(const char *chipname,
     video_render_initconfig((*canvas)->videoconfig);
     (*canvas)->videoconfig->cap = video_chip_cap;
 
-    (*canvas)->videoconfig->chip_name = lib_stralloc(chipname);
+    (*canvas)->videoconfig->chip_name = lib_strdup(chipname);
 
     /* Set single size render as default.  */
     (*canvas)->videoconfig->rendermode = video_chip_cap->single_mode.rmode;
@@ -694,23 +544,6 @@ int video_resources_chip_init(const char *chipname,
         }
     }
 
-    if (video_chip_cap->hwscale_allowed != 0) {
-        if (machine_class != VICE_MACHINE_VSID) {
-            resources_chip_hwscale[0].name
-                = util_concat(chipname, vname_chip_hwscale[0], NULL);
-            resources_chip_hwscale[0].value_ptr
-                = &((*canvas)->videoconfig->hwscale);
-            resources_chip_hwscale[0].param = (void *)*canvas;
-            if (resources_register_int(resources_chip_hwscale) < 0) {
-                return -1;
-            }
-
-            lib_free(resources_chip_hwscale[0].name);
-        } else {
-            set_hwscale_enabled(0, (void *)*canvas);
-        }
-    }
-
     /* CHIPDoubleSize */
     if (video_chip_cap->dsize_allowed != 0) {
         if (machine_class != VICE_MACHINE_VSID) {
@@ -731,71 +564,39 @@ int video_resources_chip_init(const char *chipname,
         }
     }
 
-    if (video_chip_cap->fullscreen.device_num > 0) {
+    /* fullscreen options */
+    if (machine_class != VICE_MACHINE_VSID) {
         video_resource_chip_mode_t *resource_chip_mode;
 
-        if (machine_class != VICE_MACHINE_VSID) {
-            resources_chip_fullscreen_int[0].name
-                = util_concat(chipname, vname_chip_fullscreen[0], NULL);
-            resources_chip_fullscreen_int[0].value_ptr
-                = &((*canvas)->videoconfig->fullscreen_enabled);
-            resources_chip_fullscreen_int[0].param = (void *)*canvas;
+        resources_chip_fullscreen_int[0].name
+            = util_concat(chipname, vname_chip_fullscreen[0], NULL);
+        resources_chip_fullscreen_int[0].value_ptr
+            = &((*canvas)->videoconfig->fullscreen_enabled);
+        resources_chip_fullscreen_int[0].param = (void *)*canvas;
 
-            resources_chip_fullscreen_int[1].name
-                = util_concat(chipname, vname_chip_fullscreen[1], NULL);
-            resources_chip_fullscreen_int[1].value_ptr
-                = &((*canvas)->videoconfig->fullscreen_statusbar_enabled);
-            resources_chip_fullscreen_int[1].param = (void *)*canvas;
-
-            resources_chip_fullscreen_string[0].name
-                = util_concat(chipname, vname_chip_fullscreen[2], NULL);
-            resources_chip_fullscreen_string[0].factory_value
-                = video_chip_cap->fullscreen.device_name[0];
-            resources_chip_fullscreen_string[0].value_ptr
-                = &((*canvas)->videoconfig->fullscreen_device);
-            resources_chip_fullscreen_string[0].param = (void *)*canvas;
-
-            if (resources_register_string(resources_chip_fullscreen_string) < 0) {
-                return -1;
-            }
-
-            if (resources_register_int(resources_chip_fullscreen_int) < 0) {
-                return -1;
-            }
-
-            lib_free(resources_chip_fullscreen_int[0].name);
-            lib_free(resources_chip_fullscreen_int[1].name);
-            lib_free(resources_chip_fullscreen_string[0].name);
-        } else {
-            set_fullscreen_enabled(0, (void *)*canvas);
-            set_fullscreen_statusbar(0, (void *)*canvas);
-            set_fullscreen_device(video_chip_cap->fullscreen.device_name[0], (void *)*canvas);
+        if (resources_register_int(resources_chip_fullscreen_int) < 0) {
+            return -1;
         }
+        lib_free(resources_chip_fullscreen_int[0].name);
 
-        for (i = 0; i < video_chip_cap->fullscreen.device_num; i++) {
-            resource_chip_mode = get_resource_chip_mode();
-            resource_chip_mode->resource_chip = *canvas;
-            resource_chip_mode->device = i;
+        resource_chip_mode = get_resource_chip_mode();
+        resource_chip_mode->resource_chip = *canvas;
+        resource_chip_mode->device = 0;
 
-            if (machine_class != VICE_MACHINE_VSID) {
-                resources_chip_fullscreen_mode[0].name
-                    = util_concat(chipname,
-                                  video_chip_cap->fullscreen.device_name[i],
-                                  vname_chip_fullscreen_mode[0], NULL);
-                resources_chip_fullscreen_mode[0].value_ptr
-                    = &((*canvas)->videoconfig->fullscreen_mode[i]);
-                resources_chip_fullscreen_mode[0].param
-                    = (void *)resource_chip_mode;
+        resources_chip_fullscreen_mode[0].name
+            = util_concat(chipname, "SDL",
+                          vname_chip_fullscreen_mode[0], NULL);
+        resources_chip_fullscreen_mode[0].value_ptr
+            = &((*canvas)->videoconfig->fullscreen_mode[0]);
+        resources_chip_fullscreen_mode[0].param
+            = (void *)resource_chip_mode;
 
-                if (resources_register_int(resources_chip_fullscreen_mode) < 0) {
-                    return -1;
-                }
-
-                lib_free(resources_chip_fullscreen_mode[0].name);
-            } else {
-                set_fullscreen_mode(0, (void *)resource_chip_mode);
-            }
+        if (resources_register_int(resources_chip_fullscreen_mode) < 0) {
+            return -1;
         }
+        lib_free(resources_chip_fullscreen_mode[0].name);
+    } else {
+        set_fullscreen_enabled(0, (void *)*canvas);
     }
 
     /* Palette related */
@@ -827,24 +628,6 @@ int video_resources_chip_init(const char *chipname,
     } else {
         set_palette_file_name(video_chip_cap->external_palette_name, (void *)*canvas);
         set_ext_palette(0, (void *)*canvas);
-    }
-
-    /* double buffering */
-    if (video_chip_cap->double_buffering_allowed != 0) {
-        if (machine_class != VICE_MACHINE_VSID) {
-            resources_chip_double_buffer[0].name
-                = util_concat(chipname, vname_chip_double_buffer[0], NULL);
-            resources_chip_double_buffer[0].value_ptr
-                = &((*canvas)->videoconfig->double_buffer);
-            resources_chip_double_buffer[0].param = (void *)*canvas;
-            if (resources_register_int(resources_chip_double_buffer) < 0) {
-                return -1;
-            }
-
-            lib_free(resources_chip_double_buffer[0].name);
-        } else {
-            set_double_buffer_enabled(0, (void *)*canvas);
-        }
     }
 
     /* palette generator */
@@ -906,6 +689,7 @@ int video_resources_chip_init(const char *chipname,
         resources_chip_crtemu[2].value_ptr = &((*canvas)->videoconfig->video_resources.pal_oddlines_phase);
         resources_chip_crtemu[3].value_ptr = &((*canvas)->videoconfig->video_resources.pal_oddlines_offset);
         resources_chip_crtemu[4].value_ptr = &((*canvas)->videoconfig->video_resources.audioleak);
+        resources_chip_crtemu[5].value_ptr = &((*canvas)->videoconfig->video_resources.delaylinetype);
 
         resources_chip_crtemu[2].factory_value = 1000; /* oddlines phase */
         resources_chip_crtemu[3].factory_value = 1000; /* oddlines offset */
@@ -935,6 +719,7 @@ int video_resources_chip_init(const char *chipname,
         set_pal_oddlinesphase(1000, (void *)*canvas);
         set_pal_oddlinesoffset(1000, (void *)*canvas);
         set_audioleak(0, (void *)*canvas);
+        set_delaylinetype(0, (void *)*canvas);
     }
 
     /* CHIPFilter */
@@ -960,10 +745,6 @@ void video_resources_chip_shutdown(struct video_canvas_s *canvas)
 {
     lib_free(canvas->videoconfig->external_palette_name);
     lib_free(canvas->videoconfig->chip_name);
-
-    if (canvas->videoconfig->cap->fullscreen.device_num > 0) {
-        lib_free(canvas->videoconfig->fullscreen_device);
-    }
     /* NOTE: in x128 this actually shuts down the respective resources of both
      *       videochips at once. this is not exactly clean, but shouldnt matter
      *       in practise either.

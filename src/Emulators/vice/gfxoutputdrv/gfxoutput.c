@@ -34,30 +34,21 @@
 #include "archdep.h"
 #include "bmpdrv.h"
 #include "gfxoutput.h"
-//#include "gifdrv.h"
+#include "gifdrv.h"
 #include "lib.h"
 #include "log.h"
 #include "iffdrv.h"
 #include "nativedrv.h"
 #include "pcxdrv.h"
 #include "ppmdrv.h"
-//#include "godotdrv.h"
+#include "godotdrv.h"
 
 #ifdef HAVE_PNG
 #include "pngdrv.h"
 #endif
 
-#ifdef HAVE_JPEG
-#include "jpegdrv.h"
-#endif
-
-#ifdef HAVE_FFMPEG
-#include "ffmpegdrv.h"
-#endif
-
-#ifdef HAVE_QUICKTIME
-#include "quicktimedrv.h"
-#endif
+#include "ffmpegexedrv.h"
+#include "zmbvdrv.h"
 
 struct gfxoutputdrv_list_s {
     struct gfxoutputdrv_s *drv;
@@ -67,7 +58,7 @@ typedef struct gfxoutputdrv_list_s gfxoutputdrv_list_t;
 
 static gfxoutputdrv_list_t *gfxoutputdrv_list = NULL;
 static int gfxoutputdrv_list_count = 0;
-static log_t gfxoutput_log = LOG_ERR;
+static log_t gfxoutput_log = LOG_DEFAULT;
 static gfxoutputdrv_list_t *gfxoutputdrv_list_iter = NULL;
 
 
@@ -104,28 +95,30 @@ int gfxoutput_early_init(int help)
 
     /* on early init for "-help" commandline, some initialization is skipped
        by the individual drivers */
-    gfxoutput_init_bmp(help);
-    gfxoutput_init_doodle(help);
-    gfxoutput_init_koala(help);
-//#ifdef HAVE_GIF
-//   gfxoutput_init_gif(help);
-//#endif
-    gfxoutput_init_iff(help);
-//#ifdef HAVE_JPEG
-//    gfxoutput_init_jpeg(help);
-//#endif
-    gfxoutput_init_pcx(help);
+
+    /* common image formats */
 #ifdef HAVE_PNG
     gfxoutput_init_png(help);
 #endif
+    gfxoutput_init_bmp(help);
+#ifdef HAVE_GIF
+    gfxoutput_init_gif(help);
+#endif
+    /* slightly less common image formats */
+    gfxoutput_init_iff(help);
+    gfxoutput_init_pcx(help);
     gfxoutput_init_ppm(help);
-#ifdef HAVE_FFMPEG
-    gfxoutput_init_ffmpeg(help);
-#endif
-#ifdef HAVE_QUICKTIME
-    gfxoutput_init_quicktime(help);
-#endif
+
+    /* video related */
+    gfxoutput_init_zmbv(help);
+    gfxoutput_init_ffmpegexe(help);
+
+    /* C64 formats */
     gfxoutput_init_godot(help);
+    gfxoutput_init_artstudio(help);
+    gfxoutput_init_koala(help);
+    /* VIC20 formats */
+    gfxoutput_init_minipaint(help);
     return 0;
 }
 

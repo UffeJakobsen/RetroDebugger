@@ -1,6 +1,6 @@
 #include "CDebugInterfaceVice.h"
 #include "C64SIDDump.h"
-#include <list>
+#include <deque>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -37,7 +37,7 @@ typedef struct
 // int spacing = 0;
 // int lowres = 0;
 
-void C64SIDHistoryToByteBuffer(std::list<CSidData *> *sidDataHistory, CByteBuffer *byteBuffer, u8 format,
+void C64SIDHistoryToByteBuffer(std::deque<CSidData *> *sidDataHistory, CByteBuffer *byteBuffer, u8 format,
 		int basefreq, int basenote, int spacing, int oldnotefactor, int pattspacing, int timeseconds, int lowres)
 {
 	CHANNEL chn[3];
@@ -136,7 +136,7 @@ void C64SIDHistoryToByteBuffer(std::list<CSidData *> *sidDataHistory, CByteBuffe
 	if ((lowres) && (!spacing)) lowres = 0;
 
 	
-	for (std::list<CSidData *>::reverse_iterator it = sidDataHistory->rbegin(); it != sidDataHistory->rend(); it++)
+	for (std::deque<CSidData *>::reverse_iterator it = sidDataHistory->rbegin(); it != sidDataHistory->rend(); it++)
 	{
 		// Get SID parameters from each channel and the filter
 		CSidData *sidData = *it;
@@ -536,7 +536,7 @@ static bool TryParseHex16(const std::string &s, uint16_t &outValue)
 
 
 // this loads siddump style file, note is not parsed - only frequency
-void C64SIDHistoryFromByteBuffer(std::list<CSidData *> *sidDataHistory, CByteBuffer *byteBuffer, u8 format, bool keepPreviousValueWhenZero)
+void C64SIDHistoryFromByteBuffer(std::deque<CSidData *> *sidDataHistory, CByteBuffer *byteBuffer, u8 format, bool keepPreviousValueWhenZero)
 {
 	LOGD("C64SIDHistoryFromByteBuffer");
 	if (format == SID_HISTORY_FORMAT_CSV)

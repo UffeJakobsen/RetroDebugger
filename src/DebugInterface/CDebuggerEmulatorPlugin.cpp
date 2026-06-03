@@ -8,6 +8,11 @@ void CDebuggerEmulatorPlugin::RegisterPlugin(CDebuggerEmulatorPlugin *plugin)
 	plugin->Init();
 }
 
+void CDebuggerEmulatorPlugin::UnregisterPlugin(CDebuggerEmulatorPlugin *plugin)
+{
+	plugin->GetDebugInterface()->RemovePlugin(plugin);
+}
+
 CDebuggerEmulatorPlugin::CDebuggerEmulatorPlugin()
 {
 	SetEmulatorType(EMULATOR_TYPE_UNKNOWN);
@@ -40,6 +45,20 @@ void CDebuggerEmulatorPlugin::DoFrame()
 {
 }
 
+bool CDebuggerEmulatorPlugin::HandleOpenFileShortcut()
+{
+	return false;
+}
+
+void CDebuggerEmulatorPlugin::AddOpenFileExtensions(std::list<std::string> *extensions, bool isKeyboardShortcut)
+{
+}
+
+bool CDebuggerEmulatorPlugin::OpenFile(CSlrString *path, bool isKeyboardShortcut)
+{
+	return false;
+}
+
 u32 CDebuggerEmulatorPlugin::KeyDown(u32 keyCode)
 {
 	return keyCode;
@@ -60,3 +79,11 @@ bool CDebuggerEmulatorPlugin::ScreenMouseUp(float x, float y)
 	return false;
 }
 
+const char *CDebuggerEmulatorPlugin::GetMainMenuName()
+{
+	return NULL;
+}
+
+void CDebuggerEmulatorPlugin::RenderMainMenuImGui()
+{
+}

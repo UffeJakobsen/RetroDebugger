@@ -32,8 +32,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include <winsock2.h>
 #include <windows.h>
-#include <winsock.h>
 #include <tlhelp32.h>
 #include <tchar.h>
 #include <shlobj.h>
@@ -557,7 +557,7 @@ cleanup:
     return retval;
 }
 
-/* return malloc´d version of full pathname of orig_name */
+/* return mallocï¿½d version of full pathname of orig_name */
 int archdep_expand_path(char **return_path, const char *orig_name)
 {
     /*  Win32 version   */

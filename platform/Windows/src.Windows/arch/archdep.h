@@ -28,13 +28,21 @@
 #define VICE_ARCHDEP_H
 
 #include "archapi.h"
+#include "archdep_defs.h"
 
 /* Filesystem dependant operators.  */
 #define FSDEVICE_DEFAULT_DIR "."
+#define ARCHDEP_FSDEVICE_DEFAULT_DIR "."
 #define FSDEV_DIR_SEP_STR    "\\"
 #define FSDEV_DIR_SEP_CHR    '\\'
 #define FSDEV_EXT_SEP_STR    "."
 #define FSDEV_EXT_SEP_CHR    '.'
+
+/* VICE 3.10 compat: FSDEV_DIR_SEP_* renamed to ARCHDEP_DIR_SEP_* */
+#define ARCHDEP_DIR_SEP_STR  FSDEV_DIR_SEP_STR
+#define ARCHDEP_DIR_SEP_CHR  FSDEV_DIR_SEP_CHR
+#define ARCHDEP_EXT_SEP_STR  FSDEV_EXT_SEP_STR
+#define ARCHDEP_EXT_SEP_CHR  FSDEV_EXT_SEP_CHR
 
 /* Path separator.  */
 #define ARCHDEP_FINDPATH_SEPARATOR_CHAR   ';'

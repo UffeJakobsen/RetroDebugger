@@ -56,50 +56,53 @@ static drive_store_func_t *store_tab_watch[0x101];
 /* ------------------------------------------------------------------------- */
 /* Common memory access.  */
 
-static BYTE drive_read_free(drive_context_t *drv, WORD address)
+static uint8_t drive_read_free(drive_context_t *drv, uint16_t address)
 {
 	c64d_mark_drive1541_cell_read(address);
 
-    return address >> 8;
+    return drv->cpu->cpu_last_data;
 }
 
-static void drive_store_free(drive_context_t *drv, WORD address, BYTE value)
+static void drive_store_free(drive_context_t *drv, uint16_t address, uint8_t value)
 {
 	c64d_mark_drive1541_cell_write(address, value);
-	
+
+    drv->cpu->cpu_last_data = value;
     return;
 }
 
-BYTE drive_peek_free(drive_context_t *drv, WORD address)
+uint8_t drive_peek_free(drive_context_t *drv, uint16_t address)
 {
-    return 0;
+    return drv->cpu->cpu_last_data;
 }
 
 /* ------------------------------------------------------------------------- */
 /* Watchpoint memory access.  */
 
-static BYTE drive_zero_read_watch(drive_context_t *drv, WORD addr)
+static uint8_t drive_zero_read_watch(drive_context_t *drv, uint16_t addr)
 {
     addr &= 0xff;
     monitor_watch_push_load_addr(addr, drv->cpu->monspace);
-    return drv->cpud->read_tab[0][0](drv, addr);
+    return drv->cpu->cpu_last_data = drv->cpud->read_tab[0][0](drv, addr);
 }
 
-static void drive_zero_store_watch(drive_context_t *drv, WORD addr, BYTE value)
+static void drive_zero_store_watch(drive_context_t *drv, uint16_t addr, uint8_t value)
 {
     addr &= 0xff;
+    drv->cpu->cpu_last_data = value;
     monitor_watch_push_store_addr(addr, drv->cpu->monspace);
     drv->cpud->store_tab[0][0](drv, addr, value);
 }
 
-static BYTE drive_read_watch(drive_context_t *drv, WORD address)
+static uint8_t drive_read_watch(drive_context_t *drv, uint16_t address)
 {
     monitor_watch_push_load_addr(address, drv->cpu->monspace);
-    return drv->cpud->read_tab[0][address >> 8](drv, address);
+    return drv->cpu->cpu_last_data = drv->cpud->read_tab[0][address >> 8](drv, address);
 }
 
-static void drive_store_watch(drive_context_t *drv, WORD address, BYTE value)
+static void drive_store_watch(drive_context_t *drv, uint16_t address, uint8_t value)
 {
+    drv->cpu->cpu_last_data = value;
     monitor_watch_push_store_addr(address, drv->cpu->monspace);
     drv->cpud->store_tab[0][address >> 8](drv, address, value);
 }
@@ -124,7 +127,7 @@ void drivemem_set_func(drivecpud_context_t *cpud,
                        drive_read_func_t *read_func,
                        drive_store_func_t *store_func,
                        drive_peek_func_t *peek_func,
-                       BYTE *base, DWORD limit)
+                       uint8_t *base, uint32_t limit)
 {
     unsigned int i;
 
@@ -156,21 +159,21 @@ void drivemem_set_func(drivecpud_context_t *cpud,
 /* ------------------------------------------------------------------------- */
 /* This is the external interface for banked memory access.  */
 
-BYTE drivemem_bank_read(int bank, WORD addr, void *context)
+uint8_t drivemem_bank_read(int bank, uint16_t addr, void *context)
 {
     drive_context_t *drv = (drive_context_t *)context;
 
     return drv->cpud->read_func_ptr[addr >> 8](drv, addr);
 }
 
-BYTE drivemem_bank_peek(int bank, WORD addr, void *context)
+uint8_t drivemem_bank_peek(int bank, uint16_t addr, void *context)
 {
     drive_context_t *drv = (drive_context_t *)context;
 
     return drv->cpud->peek_func_ptr[addr >> 8](drv, addr);
 }
 
-void drivemem_bank_store(int bank, WORD addr, BYTE value, void *context)
+void drivemem_bank_store(int bank, uint16_t addr, uint8_t value, void *context)
 {
     drive_context_t *drv = (drive_context_t *)context;
 
@@ -179,9 +182,40 @@ void drivemem_bank_store(int bank, WORD addr, BYTE value, void *context)
 
 /* ------------------------------------------------------------------------- */
 
+/* Sync fields migrated from drive_t to drive_context_s (VICE 3.10 transition).
+   Both structs have these fields during the transition period. Init/resource
+   code sets them on drive_t; memory access functions read from context. */
+static void drive_sync_fields_to_context(drive_context_t *drv)
+{
+    drive_t *drive = drv->drives[0];
+
+    drv->enable = drive->enable;
+    drv->type = drive->type;
+    drv->clock_frequency = drive->clock_frequency;
+    drv->idling_method = drive->idling_method;
+    drv->ds1216 = drive->ds1216;
+    drv->rtc_save = drive->rtc_save;
+    drv->drive_ram2_enabled = drive->drive_ram2_enabled;
+    drv->drive_ram4_enabled = drive->drive_ram4_enabled;
+    drv->drive_ram6_enabled = drive->drive_ram6_enabled;
+    drv->drive_ram8_enabled = drive->drive_ram8_enabled;
+    drv->drive_rama_enabled = drive->drive_rama_enabled;
+    drv->parallel_cable = drive->parallel_cable;
+    drv->profdos = drive->profdos;
+    drv->supercard = drive->supercard;
+    drv->stardos = drive->stardos;
+
+    memcpy(drv->rom, drive->rom, DRIVE_ROM_SIZE);
+    memcpy(drv->trap_rom, drive->trap_rom, DRIVE_ROM_SIZE);
+    memcpy(drv->drive_ram, drive->drive_ram, DRIVE_RAM_SIZE);
+}
+
 void drivemem_init(drive_context_t *drv, unsigned int type)
 {
     int i;
+
+    /* Sync migrated fields from drive_t before setting up memory map */
+    drive_sync_fields_to_context(drv);
 
     /* setup watchpoint tables */
     if (!read_tab_watch[0]) {
@@ -214,38 +248,38 @@ mem_ioreg_list_t *drivemem_ioreg_list_get(void *context)
     unsigned int type;
     mem_ioreg_list_t *drivemem_ioreg_list = NULL;
 
-    type = ((drive_context_t *)context)->drive->type;
+    type = ((drive_context_t *)context)->type;
 
     switch (type) {
         case DRIVE_TYPE_1540:
         case DRIVE_TYPE_1541:
         case DRIVE_TYPE_1541II:
         case DRIVE_TYPE_2031:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA1", 0x1800, 0x180f, via1d1541_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA2", 0x1c00, 0x1c0f, via2d_dump, context);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA1", 0x1800, 0x180f, via1d1541_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA2", 0x1c00, 0x1c0f, via2d_dump, context, 0);
             break;
         case DRIVE_TYPE_1551:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "TPI", 0x4000, 0x4007, tpid_dump, context);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "TPI", 0x4000, 0x4007, tpid_dump, context, 0);
             break;
         case DRIVE_TYPE_1570:
         case DRIVE_TYPE_1571:
         case DRIVE_TYPE_1571CR:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA1", 0x1800, 0x180f, via1d1541_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA2", 0x1c00, 0x1c0f, via2d_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "WD1770", 0x2000, 0x2003, NULL, context); /* FIXME: register dump function */
-            mon_ioreg_add_list(&drivemem_ioreg_list, "CIA", 0x4000, 0x400f, cia1571_dump, context);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA1", 0x1800, 0x180f, via1d1541_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA2", 0x1c00, 0x1c0f, via2d_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "WD1770", 0x2000, 0x2003, NULL, context, 0); /* FIXME: register dump function */
+            mon_ioreg_add_list(&drivemem_ioreg_list, "CIA", 0x4000, 0x400f, cia1571_dump, context, 0);
             break;
         case DRIVE_TYPE_1581:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "CIA", 0x4000, 0x400f, cia1581_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "WD1770", 0x6000, 0x6003, NULL, context); /* FIXME: register dump function */
+            mon_ioreg_add_list(&drivemem_ioreg_list, "CIA", 0x4000, 0x400f, cia1581_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "WD1770", 0x6000, 0x6003, NULL, context, 0); /* FIXME: register dump function */
             break;
         case DRIVE_TYPE_2000:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA", 0x4000, 0x400f, via4000_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "DP8473", 0x4e00, 0x4e07, NULL, context); /* FIXME: register dump function */
+            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA", 0x4000, 0x400f, via4000_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "DP8473", 0x4e00, 0x4e07, NULL, context, 0); /* FIXME: register dump function */
             break;
         case DRIVE_TYPE_4000:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA", 0x4000, 0x400f, via4000_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "PC8477", 0x4e00, 0x4e07, NULL, context); /* FIXME: register dump function */
+            mon_ioreg_add_list(&drivemem_ioreg_list, "VIA", 0x4000, 0x400f, via4000_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "PC8477", 0x4e00, 0x4e07, NULL, context, 0); /* FIXME: register dump function */
             break;
         case DRIVE_TYPE_2040:
         case DRIVE_TYPE_3040:
@@ -253,11 +287,11 @@ mem_ioreg_list_t *drivemem_ioreg_list_get(void *context)
         case DRIVE_TYPE_1001:
         case DRIVE_TYPE_8050:
         case DRIVE_TYPE_8250:
-            mon_ioreg_add_list(&drivemem_ioreg_list, "RIOT1", 0x0200, 0x021f, riot1_dump, context);
-            mon_ioreg_add_list(&drivemem_ioreg_list, "RIOT2", 0x0280, 0x029f, riot2_dump, context);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "RIOT1", 0x0200, 0x021f, riot1_dump, context, 0);
+            mon_ioreg_add_list(&drivemem_ioreg_list, "RIOT2", 0x0280, 0x029f, riot2_dump, context, 0);
             break;
         default:
-            log_error(LOG_ERR, "DRIVEMEM: Unknown drive type `%i'.", type);
+            log_error(LOG_DEFAULT, "DRIVEMEM: Unknown drive type `%i'.", type);
             break;
     }
     return drivemem_ioreg_list;

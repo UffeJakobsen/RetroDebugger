@@ -81,6 +81,21 @@ void C64SetPaletteOriginalColorCodes()
 	c64d_set_palette(c64d_palette_c64_color_codes);
 }
 
+bool C64GetPaletteRGB(uint16 paletteNum, uint8 outRgb[16][3])
+{
+	if (paletteNum >= c64AvailablePalettes.size())
+		return false;
+
+	uint8 *palette = c64AvailablePalettes[paletteNum]->palette;
+	for (int i = 0; i < 16; i++)
+	{
+		outRgb[i][0] = palette[i * 4 + 0];  // R
+		outRgb[i][1] = palette[i * 4 + 1];  // G
+		outRgb[i][2] = palette[i * 4 + 2];  // B
+	}
+	return true;
+}
+
 C64PaletteData::C64PaletteData(const char *paletteName, uint8 *palette)
 {
 	this->paletteName = paletteName;

@@ -32,6 +32,6 @@
 struct drive_context_s;
 struct mem_ioreg_list_s;
 
-extern void memiec_init(struct drive_context_s *drv, unsigned int type);
+void memiec_init(struct drive_context_s *drv, unsigned int type);
 
 #endif

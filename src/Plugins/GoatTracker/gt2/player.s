@@ -607,6 +607,12 @@ mt_resetloop:
                 ldx #$07
               .ENDIF
 mt_initchn:
+              .IF (NOARPCHANNELS == 0)
+                lda #$00                        ;Clear arp pointer + pos for
+                sta mt_chnarplo,x               ;this channel (X=0/7/14)
+                sta mt_chnarphi,x
+                sta mt_chnarppos,x
+              .ENDIF
               .IF (NUMSONGS > 1)
                 tya
                 iny
@@ -904,11 +910,16 @@ mt_skipfilt:
 mt_tick0jump1:                                  ;newnote init
                 jsr mt_tick0_0
               .ENDIF
-              .IF (BUFFEREDWRITES == 0)
-                jmp mt_loadregswaveonly
-              .ELSE
-                jmp mt_loadregs
-              .ENDIF
+                jmp mt_loadregs                 ;Phase 2b C-parity:
+                                                ;route through mt_loadregs
+                                                ;(was mt_loadregswaveonly
+                                                ;for BUFFEREDWRITES=0) so
+                                                ;mt_freq_catchup writes the
+                                                ;new note's freq into SID
+                                                ;on TICK0. The waveonly
+                                                ;target only touched wave/
+                                                ;gate, leaving freq from
+                                                ;the previous note.
 
               .IF (NOWAVECMD == 0)
 mt_wavecmd:
@@ -1267,7 +1278,12 @@ mt_fx:
                 lda (mt_temp1),y
                 sta mt_chnnewparam,x
 mt_fx_noparam:
-                bcs mt_rest
+                bcc mt_fx_getnote               ;Reverse the original
+                jmp mt_rest                     ;`bcs mt_rest` into bcc+jmp
+                                                ;so mt_rest is reachable
+                                                ;regardless of the
+                                                ;per-song code expansion
+                                                ;(legato + arp + etc).
 mt_fx_getnote:
                 iny
                 lda (mt_temp1),y
@@ -1294,6 +1310,17 @@ mt_normalnote:
                 adc mt_chntrans,x
               .ENDIF
                 sta mt_chnnewnote,x
+              .IF (NOARPCHANNELS == 0)
+                lda mt_chnarphi,x           ;Arp active? Skip hard restart so
+                ora mt_chnarplo,x           ;the new base note slides in
+                beq mt_normalnote_nosuppress  ;without ADSR reset.
+                lda #$fe                    ;Mirror mt_skiphr's gate write
+                sta mt_chngate,x            ;so mt_newnoteinit's `inc` lands
+                                            ;on $fe→$ff (NOFIRSTWAVECMD=1
+                                            ;path) instead of $ff→$00 wrap.
+                jmp mt_rest                 ;Skip HR/skiphr blocks below.
+mt_normalnote_nosuppress:
+              .ENDIF
               .IF (NOTONEPORTA == 0)
                 lda mt_chnnewfx,x           ;If toneportamento, no gateoff
                 cmp #TONEPORTA
@@ -1303,7 +1330,12 @@ mt_normalnote:
                 lda mt_chninstr,x
                 cmp #FIRSTNOHRINSTR         ;Instrument order:
               .IF (NUMLEGATOINSTR > 0)
-                bcs mt_nohr_legato          ;With HR - no HR - legato
+                bcc mt_hr_take                  ;Reverse the original
+                jmp mt_nohr_legato              ;`bcs mt_nohr_legato`. Target
+                                                ;is ~160 source lines away
+                                                ;and overflows ±127 on
+                                                ;coman07-class songs.
+mt_hr_take:
               .ELSE
                 bcs mt_skiphr
               .ENDIF
@@ -1339,6 +1371,29 @@ mt_setgate:
         ;Check for end of pattern
 
 mt_rest:
+              .IF (NOARPCHANNELS == 0)
+                iny
+                lda (mt_temp1),y                ;Inline arp byte after row data
+                beq mt_restnoarp                ;$00 = no change
+                cmp #$ff
+                bne mt_restsetarp
+                                                ;$ff = clear arp pointer
+                lda #$00
+                sta mt_chnarphi,x
+                sta mt_chnarplo,x
+                beq mt_restnoarp                ;(always taken, A=0)
+
+mt_restsetarp:
+                jsr mt_arp_setpool              ;Entire arp install lives
+                                                ;in the subroutine, Y
+                                                ;save/restore included —
+                                                ;this path adds just 3
+                                                ;bytes of code between
+                                                ;mt_rest and the branches
+                                                ;that follow.
+
+mt_restnoarp:
+              .ENDIF
                 iny
                 lda (mt_temp1),y
                 beq mt_endpatt
@@ -1349,6 +1404,60 @@ mt_endpatt:
         ;Load voice registers
 
 mt_loadregs:
+              .IF (NOARPCHANNELS == 0)
+                lda mt_chnarphi,x               ;Skip if no arp pointer set
+                ora mt_chnarplo,x
+                beq mt_arpskip
+
+                lda mt_chnarplo,x               ;Set up (mt_temp1) -> arp buf
+                sta <mt_temp1
+                lda mt_chnarphi,x
+                sta <mt_temp2
+
+                lda mt_chnarppos,x              ;Y = current arp position.
+                tay                             ;(See mt_rest note: Magnus
+                                                ;Lind asm rejects ldy abs,X.)
+                lda (mt_temp1),y                ;Read note (or $ff loop marker)
+                cmp #$ff
+                bne mt_arpplaynote
+                                                ;Loop: take jump target
+                iny
+                lda (mt_temp1),y
+                sta mt_chnarppos,x              ;Reset position to target
+                tay
+                lda (mt_temp1),y                ;Read note at target
+
+mt_arpplaynote:
+                inc mt_chnarppos,x              ;Advance for next tick
+                tay                             ;(A still holds the note)
+                lda mt_freqtbllo-FIRSTNOTE,y    ;Override channel freq
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqlo,x
+              .ELSE
+                sta <ghostfreqlo,x
+              .ENDIF
+                lda mt_freqtblhi-FIRSTNOTE,y
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqhi,x
+              .ELSE
+                sta <ghostfreqhi,x
+              .ENDIF
+
+mt_arpskip:
+              .ENDIF
+                jsr mt_freq_catchup             ;Phase 2b C-parity:
+                                                ;write freq from
+                                                ;mt_chnnote when arp pool
+                                                ;is not cycling, so a
+                                                ;new note's freq lands on
+                                                ;TICK0 instead of waiting
+                                                ;for the wavetable's
+                                                ;first "play current
+                                                ;note" instruction
+                                                ;(audible glitch at note
+                                                ;attack otherwise — see
+                                                ;gplay.c arpcount==1
+                                                ;override).
               .IF (BUFFEREDWRITES == 0)
                 lda mt_chnfreqlo,x
                 sta SIDBASE+$00,x
@@ -1398,8 +1507,18 @@ mt_loadregswaveonly:
               .IF (NUMLEGATOINSTR > 0)
 mt_nohr_legato:
                 cmp #FIRSTLEGATOINSTR
-                bcc mt_skiphr
-                bcs mt_rest
+                bcs mt_legato_take              ;Reverse `bcc mt_skiphr`
+                jmp mt_skiphr                   ;into bcs+jmp — mt_skiphr
+                                                ;is ~140 source lines back
+                                                ;and overflows ±127 with
+                                                ;the multi-arp code.
+mt_legato_take:
+                jmp mt_rest                     ;Unconditional (carry is
+                                                ;guaranteed set after the
+                                                ;bcs above). jmp instead
+                                                ;of bcs so the target
+                                                ;reaches even with the
+                                                ;multi-arp code expansion.
               .ENDIF
 
         ;Sound FX code
@@ -1827,6 +1946,167 @@ ghostfiltcutoff = ghostregs+22
 ghostfiltctrl   = ghostregs+23
 ghostfilttype   = ghostregs+24
               .ENDIF
+
+        ;Arp channel state (multi-arp tracks). Stride-7 per channel,
+        ;matching the existing channel block layout so X=0/7/14 indexes
+        ;channels 0/1/2 directly.
+        ;mt_chnarphi = mt_chnarplo+1, mt_chnarppos = mt_chnarplo+2.
+
+              .IF (NOARPCHANNELS == 0)
+
+        ;Trigger-on-silent hook — called from mt_restsetarp via JSR
+        ;so the conditional logic doesn't bloat mt_restsetarp's
+        ;inline footprint (which would push existing branches like
+        ;`beq mt_rest` at line ~1251 out of ±127 range). Mirrors
+        ;gplay.c:1011-1026 narrowly: load instrument's AD/SR +
+        ;waveptr so the freshly-installed arp can sound on a
+        ;previously-silent channel (KEYOFF-with-sustaining-arp or
+        ;arp-on-silent-channel).
+        ;
+        ;Skip when mt_chnnewnote != 0: the mt_skiphr → mt_newnoteinit
+        ;path will set gate/ADSR/wave on the next tick-0. Without
+        ;this guard the hook clobbers wave-init timing (was the
+        ;scenario-2 regression in an earlier inline attempt).
+        ;
+        ;Skip when gate is already $ff: channel already sounding.
+        ;
+        ;mt_chnwave is intentionally NOT touched — wavetable
+        ;execution sets it on the next tick.
+        ;
+        ;X holds the channel offset (0/7/14). Y gets clobbered.
+mt_arp_trigger_silent:
+                lda mt_chnnewnote,x
+                bne mt_arp_trigger_done
+                lda mt_chngate,x
+                cmp #$ff
+                beq mt_arp_trigger_done
+                lda #$ff
+                sta mt_chngate,x
+                lda mt_chninstr,x
+                tay                             ;Workaround for Magnus
+                                                ;Lind asm rejecting
+                                                ;ldy abs,X.
+              .IF (BUFFEREDWRITES == 0)
+                lda mt_insad-1,y
+                sta SIDBASE+$05,x
+                lda mt_inssr-1,y
+                sta SIDBASE+$06,x
+              .ELSE
+              .IF (GHOSTREGS == 0)
+                lda mt_insad-1,y
+                sta mt_chnad,x
+                lda mt_inssr-1,y
+                sta mt_chnsr,x
+              .ELSE
+                lda mt_insad-1,y
+                sta <ghostad,x
+                lda mt_inssr-1,y
+                sta <ghostsr,x
+              .ENDIF
+              .ENDIF
+                lda mt_inswaveptr-1,y
+                sta mt_chnwaveptr,x
+mt_arp_trigger_done:
+                rts
+
+        ;mt_arp_setpool — full hybrid arp pool install for the channel.
+        ;
+        ;On entry:
+        ;  A = local pool index 1..127 from the inline arp byte
+        ;  X = channel offset (0/7/14)
+        ;
+        ;Effect: writes mt_chnarp{lo,hi,pos} for X to point at the pool
+        ;entry that pattern mt_chnpattnum,x's arp list slot (A-1) refers
+        ;to, then calls mt_arp_trigger_silent.
+        ;
+        ;Self-modifies the two LDA absolute,Y instructions below so no
+        ;zero-page scratch is needed (zpbase is at the $e5 ceiling in
+        ;ZPGHOSTREGS mode). Per-pattern cap is 127 because index*2 (for
+        ;the interleaved [lo,hi] pairs) must fit in 8-bit Y.
+        ;
+        ;Lives at end-of-file so the inline footprint at mt_restsetarp
+        ;stays tiny — otherwise the ~35B body would push neighbours like
+        ;`bcs mt_repeat` and `bne mt_loadregs` past 6502 ±127.
+mt_arp_setpool:
+                sty mt_arptmpy                  ;Save pattern offset (Y)
+                pha                             ;Save local pool index
+                lda mt_chnpattnum,x             ;Magnus Lind asm rejects
+                tay                             ;ldy abs,X — workaround.
+                lda mt_arppool_patt_lo,y
+                sta mt_arpsmc1+1
+                sta mt_arpsmc2+1
+                lda mt_arppool_patt_hi,y
+                sta mt_arpsmc1+2
+                sta mt_arpsmc2+2
+                pla
+                asl                             ;A = local_idx * 2
+                tay
+                dey
+                dey                             ;Y = (local_idx-1) * 2
+mt_arpsmc1:     lda $0000,y                     ;pool entry lo (patched)
+                sta mt_chnarplo,x
+                iny
+mt_arpsmc2:     lda $0000,y                     ;pool entry hi (patched)
+                sta mt_chnarphi,x
+                lda #$00
+                sta mt_chnarppos,x              ;Restart arp cycle
+                jsr mt_arp_trigger_silent       ;Re-trigger if silent.
+                ldy mt_arptmpy                  ;Restore pattern offset (Y)
+                rts
+
+mt_chnarpdata:
+mt_chnarplo:    .BYTE (0)
+mt_chnarphi:    .BYTE (0)
+mt_chnarppos:   .BYTE (0)
+                .BYTE (0,0,0,0)
+              .IF (NUMCHANNELS > 1)
+                .BYTE (0,0,0,0,0,0,0)
+              .ENDIF
+              .IF (NUMCHANNELS > 2)
+                .BYTE (0,0,0,0,0,0,0)
+              .ENDIF
+mt_arptmpy:     .BYTE (0)
+              .ENDIF
+
+        ;mt_freq_catchup — write the channel's freq from mt_chnnote when
+        ;arp pool isn't cycling. Matches the gplay.c arpcount==1 override
+        ;so SID gets the correct freq on a new note's TICK0 instead of
+        ;lagging one frame waiting for the wavetable.
+        ;
+        ;Skip when an arp pool is active (mt_chnarp{lo,hi} != 0): the
+        ;cycling code above mt_arpskip just wrote freq, don't clobber it.
+        ;Skip when mt_chnnote == 0: channel hasn't played a note yet.
+        ;X holds the channel offset (0/7/14). Y is clobbered.
+        ;
+        ;Lives OUTSIDE the .IF (NOARPCHANNELS == 0) block: non-arp songs
+        ;still need the freq fix. The inner .IF guards the arp pool check
+        ;because mt_chnarp{lo,hi} are only emitted for arp songs.
+mt_freq_catchup:
+              .IF (NOARPCHANNELS == 0)
+                lda mt_chnarphi,x
+                ora mt_chnarplo,x
+                bne mt_freq_catchup_done
+              .ENDIF
+                lda mt_chnnote,x
+                beq mt_freq_catchup_done
+                tay
+                ;mt_freqtbllo is offset by FIRSTNOTE (lowest note used
+                ;in song); mt_chnnote is the 0-based note (note - $60).
+                ;Match the arp-cycling code's expression.
+                lda mt_freqtbllo-FIRSTNOTE,y
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqlo,x
+              .ELSE
+                sta <ghostfreqlo,x
+              .ENDIF
+                lda mt_freqtblhi-FIRSTNOTE,y
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqhi,x
+              .ELSE
+                sta <ghostfreqhi,x
+              .ENDIF
+mt_freq_catchup_done:
+                rts
 
         ;Songdata & frequencytable will be inserted by the relocator here
 

@@ -21,10 +21,6 @@
 #define RESID_FILTER_H
 
 #include "resid-config.h"
-extern "C" {
-	#include "log.h"
-	#include "ViceWrapper.h"
-}
 
 namespace reSID
 {
@@ -64,7 +60,7 @@ namespace reSID
 // Tommi Lempinen has done an impressive work on re-vectorizing and annotating
 // the die photographs, substantially simplifying further analysis of the
 // filter circuit.
-// 
+//
 // The filter schematics below are reverse engineered from these re-vectorized
 // and annotated die photographs. While the filter first depicted in reSID 0.9
 // is a correct model of the basic filter, the schematics are now completed
@@ -76,7 +72,7 @@ namespace reSID
 //
 // SID filter / mixer / output
 // ---------------------------
-// 
+//
 //                ---------------------------------------------------
 //               |                                                   |
 //               |                         --1R1-- \--  D7           |
@@ -88,7 +84,7 @@ namespace reSID
 //               |   |                     --8R1-- \--| D4           | (7.0R1)
 //               |   |                                |              |
 // $17           |   |                    (CAP2B)     |  (CAP1B)     |
-// 0=to mixer    |    --R8--    ---R8--        ---C---|       ---C---| 
+// 0=to mixer    |    --R8--    ---R8--        ---C---|       ---C---|
 // 1=to filter   |          |  |       |      |       |      |       |
 //                ------R8--|-----[A>--|--Rw-----[A>--|--Rw-----[A>--|
 //     ve (EXT IN)          |          |              |              |
@@ -151,8 +147,8 @@ namespace reSID
 // of 12V, the NMOS FET will enter saturation mode (a.k.a. active mode), and
 // the NMOS FET will not operate anywhere like a resistor.
 //
-// 
-// 
+//
+//
 // NMOS FET voltage controlled resistor (VCR)
 // ------------------------------------------
 //
@@ -175,7 +171,7 @@ namespace reSID
 // vo  - output
 // Rn  - "resistors", implemented with custom NMOS FETs
 // Vw  - voltage from 11-bit DAC (frequency cutoff control)
-// 
+//
 // Notes:
 //
 // An approximate value for R24 can be found by using the formula for the
@@ -202,9 +198,9 @@ namespace reSID
 // Note that these are only approximate values for one particular SID chip,
 // due to process variations the values can be substantially different in
 // other chips.
-// 
-// 
-// 
+//
+//
+//
 // Filter frequency cutoff DAC
 // ---------------------------
 //
@@ -225,12 +221,12 @@ namespace reSID
 // which varies with the input signals to the VCRs. This can be seen from the
 // VCR figure above.
 //
-// 
-// 
+//
+//
 // "Op-amp" (self-biased NMOS inverter)
 // ------------------------------------
-//                  
-//                  
+//
+//
 //                        12V
 //
 //                         |
@@ -333,7 +329,7 @@ struct mixer_offset
 {
   enum { value = mixer_offset<i - 1>::value + ((i - 1) << 16) };
 };
-	      
+
 template<>
 struct mixer_offset<1>
 {
@@ -355,7 +351,6 @@ public:
   void enable_filter(bool enable);
   void adjust_filter_bias(double dac_bias);
   void set_chip_model(chip_model model);
-  void set_chip_number(int chipNo);
   void set_voice_mask(reg4 mask);
 
   void clock(int voice1, int voice2, int voice3);
@@ -373,10 +368,7 @@ public:
 
   // SID audio output (16 bits).
   short output();
-  
-  // TODO: callback that receives SID waveforms for UI display
-  void *c64d_waveform_callback;
-	
+
 protected:
   void set_sum_mix();
   void set_w0();
@@ -429,7 +421,11 @@ protected:
   int _1024_div_Q;
 
   chip_model sid_model;
-  int chipNo;
+
+   typedef struct {
+    unsigned short vx;
+    short dvx;
+  } opamp_t;
 
   typedef struct {
     int vo_N16;  // Fixed point scaling for 16 bit op-amp output.
@@ -452,7 +448,7 @@ protected:
     unsigned short f0_dac[1 << 11];
   } model_filter_t;
 
-  int solve_gain(int* opamp, int n, int vi_t, int& x, model_filter_t& mf);
+  int solve_gain(opamp_t* opamp, int n, int vi_t, int& x, model_filter_t& mf);
   int solve_integrate_6581(int dt, int vi_t, int& x, int& vc, model_filter_t& mf);
 
   // VCR - 6581 only.
@@ -471,7 +467,7 @@ friend class SID;
 // time a sample is calculated.
 // ----------------------------------------------------------------------------
 
-//#if RESID_INLINING || defined(RESID_FILTER_CC)
+#if RESID_INLINING || defined(RESID_FILTER_CC)
 
 // ----------------------------------------------------------------------------
 // SID clocking - 1 cycle.
@@ -676,7 +672,7 @@ void Filter::clock(cycle_count delta_t, int voice1, int voice2, int voice3)
     // MOS 6581.
     while (delta_t) {
       if (unlikely(delta_t < delta_t_flt)) {
-	delta_t_flt = delta_t;
+        delta_t_flt = delta_t;
       }
 
       // Calculate filter outputs.
@@ -691,7 +687,7 @@ void Filter::clock(cycle_count delta_t, int voice1, int voice2, int voice3)
     // MOS 8580. FIXME: Not yet using op-amp model.
     while (delta_t) {
       if (delta_t < delta_t_flt) {
-	delta_t_flt = delta_t;
+        delta_t_flt = delta_t;
       }
 
       // delta_t is converted to seconds given a 1MHz clock by dividing
@@ -743,15 +739,15 @@ short Filter::output()
 
   // Writing the switch below manually would be tedious and error-prone;
   // it is rather generated by the following Perl program:
-	
+
   /*
 my @i = qw(v1 v2 v3 ve Vlp Vbp Vhp);
 for my $mix (0..2**@i-1) {
     print sprintf("  case 0x%02x:\n", $mix);
     my @sum;
     for (@i) {
-	unshift(@sum, $_) if $mix & 0x01;
-	$mix >>= 1;
+        unshift(@sum, $_) if $mix & 0x01;
+        $mix >>= 1;
     }
     my $sum = join(" + ", @sum) || "0";
     print "    Vi = $sum;\n";
@@ -1280,53 +1276,17 @@ for my $mix (0..2**@i-1) {
   }
 
   // Sum the inputs in the mixer and run the mixer output through the gain.
-	signed short returnValue;
-	
-	
-//	 TODO: aaaaaaaaa output sid clash with goattracker
-	 
-  if (sid_model == 0)
-  {
-	  returnValue = (short)(f.gain[vol][f.mixer[offset + Vi]] - (1 << 15));
-	  
-	  // TODO: send SID waveforms data via callback
-	  if (c64d_waveform_callback != NULL && c64d_is_receive_channels_data[chipNo])
-	  {
-		  // 6581 correction factors for waveform display
-		  // ohh thats purely empirical
-		  const int d = 29000; //27295;
-		  const int s = 2;
-		  int vn1 = (v1 - d) << s;
-		  int vn2 = (v2 - d) << s;
-		  int vn3 = (v3 - d) << s;
-
-		  c64d_sid_channels_data(chipNo, vn1, vn2, vn3, returnValue);
-	  }
-
+  if (sid_model == 0) {
+    return (short)(f.gain[vol][f.mixer[offset + Vi]] - (1 << 15));
   }
-  else
-  {
-	  // FIXME: Temporary code for MOS 8580, should use code above.
-
-	  // TODO (c64d): why this overdrives ...?
-	  // returnValue = ((Vi*vol) >> 4);
-	  
-	  returnValue = (((Vi>>1)*vol) >> 4);
-	  
-	  // TODO: send SID waveforms data via callback
-	  if (c64d_waveform_callback != NULL && c64d_is_receive_channels_data[chipNo])
-	  {
-		  const int s = 2;
-		  int vn1 = v1 << s;
-		  int vn2 = v2 << s;
-		  int vn3 = v3 << s;
-
-		  c64d_sid_channels_data(chipNo, vn1, vn2, vn3, returnValue);
-	  }
-  }
-	 
-	
-	return returnValue;
+  else {
+    // FIXME: Temporary code for MOS 8580, should use code above.
+    /* do hard clipping here, else some tunes manage to overflow this
+       (eg /MUSICIANS/L/Linus/64_Forever.sid, starting at 0:44) */
+    int tmp = Vi*(int)vol >> 4;
+    if (tmp < -32768) tmp = -32768;
+    if (tmp > 32767) tmp = 32767;
+    return (short)tmp;  }
 }
 
 
@@ -1369,7 +1329,7 @@ the equations for the root function and its derivative can be written as:
   df = 2*((b - (vx + x))*(dvx + 1) - a*(b - vx)*dvx)
 */
 RESID_INLINE
-int Filter::solve_gain(int* opamp, int n, int vi, int& x, model_filter_t& mf)
+int Filter::solve_gain(opamp_t* opamp, int n, int vi, int& x, model_filter_t& mf)
 {
   // Note that all variables are translated and scaled in order to fit
   // in 16 bits. It is not necessary to explicitly translate the variables here,
@@ -1390,9 +1350,8 @@ int Filter::solve_gain(int* opamp, int n, int vi, int& x, model_filter_t& mf)
     int xk = x;
 
     // Calculate f and df.
-    int vx_dvx = opamp[x];
-    int vx = vx_dvx & 0xffff;  // Scaled by m*2^16
-    int dvx = vx_dvx >> 16;    // Scaled by 2^11
+    int vx = opamp[x].vx;      // Scaled by m*2^16
+    int dvx = opamp[x].dvx;    // Scaled by 2^11
 
     // f = a*(b - vx)^2 - c - (b - vo)^2
     // df = 2*((b - vo)*(dvx + 1) - a*(b - vx)*dvx)
@@ -1411,11 +1370,14 @@ int Filter::solve_gain(int* opamp, int n, int vi, int& x, model_filter_t& mf)
     // The dividend is scaled by m^2*2^27.
     int f = a*int(unsigned(b_vx)*unsigned(b_vx) >> 12) - c - int(unsigned(b_vo)*unsigned(b_vo) >> 5);
     // The divisor is scaled by m*2^11.
-    int df = (b_vo*(dvx + (1 << 11)) - a*(b_vx*dvx >> 7)) >> 15;
+    int df = ((b_vo*(dvx + (1 << 11)) >> 1) - (a*(b_vx*dvx >> 8))) >> 14;
     // The resulting quotient is thus scaled by m*2^16.
 
     // Newton-Raphson step: xk1 = xk - f(xk)/f'(xk)
-    x -= f/df;
+    // If f(xk) or f'(xk) are zero then we can't improve further.
+    if (df) {
+        x -= f/df;
+    }
     if (unlikely(x == xk)) {
       // No further root improvement possible.
       return vo;
@@ -1435,8 +1397,8 @@ int Filter::solve_gain(int* opamp, int n, int vi, int& x, model_filter_t& mf)
       // Bisection step (ala Dekker's method).
       x = (ak + bk) >> 1;
       if (unlikely(x == ak)) {
-	// No further bisection possible.
-	return vo;
+        // No further bisection possible.
+        return vo;
       }
     }
   }
@@ -1478,7 +1440,7 @@ both subthreshold, triode, and saturation modes.
 The Shichman-Hodges transistor model routinely used in textbooks may
 be written as follows:
 
-  Ids = 0                          , Vgst < 0               (subthreshold mode) 
+  Ids = 0                          , Vgst < 0               (subthreshold mode)
   Ids = K/2*W/L*(2*Vgst - Vds)*Vds , Vgst >= 0, Vds < Vgst  (triode mode)
   Ids = K/2*W/L*Vgst^2             , Vgst >= 0, Vds >= Vgst (saturation mode)
 
@@ -1507,7 +1469,7 @@ currents without any change of parameters (since the terms for drain
 and source are identical except for the sign).
 
 FIXME: Subthreshold as function of Vgs, Vgd.
-  Ids = I0*e^(Vgst/(n*VT))       , Vgst < 0               (subthreshold mode) 
+  Ids = I0*e^(Vgst/(n*VT))       , Vgst < 0               (subthreshold mode)
 
 The remaining problem with the textbook model is that the transition
 from subthreshold the triode/saturation is not continuous.
@@ -1537,10 +1499,10 @@ Rw in the circuit diagram above is a VCR (voltage controlled resistor),
 as shown in the circuit diagram below.
 
                    Vw
-                   
+
                    |
            Vdd     |
-              |---|  
+              |---|
              _|_   |
            --    --| Vg
           |      __|__
@@ -1563,8 +1525,7 @@ Vg = Vddt - sqrt(((Vddt - vi)^2 + (Vddt - Vw)^2)/2)
 
 */
 RESID_INLINE
-int Filter::solve_integrate_6581(int dt, int vi, int& vx, int& vc,
-				 model_filter_t& mf)
+int Filter::solve_integrate_6581(int dt, int vi, int& vx, int& vc, model_filter_t& mf)
 {
   // Note that all variables are translated and scaled in order to fit
   // in 16 bits. It is not necessary to explicitly translate the variables here,
@@ -1592,7 +1553,7 @@ int Filter::solve_integrate_6581(int dt, int vi, int& vx, int& vc,
   if (Vgd < 0) Vgd = 0;
 
   // VCR current, scaled by m*2^15*2^15 = m*2^30
-  int n_I_vcr = (vcr_n_Ids_term[Vgs] - vcr_n_Ids_term[Vgd]) << 15;
+  int n_I_vcr = int(unsigned(vcr_n_Ids_term[Vgs] - vcr_n_Ids_term[Vgd]) << 15);
 
   // Change in capacitor charge.
   vc -= (n_I_snake + n_I_vcr)*dt;
@@ -1614,7 +1575,7 @@ int Filter::solve_integrate_6581(int dt, int vi, int& vx, int& vc,
   return vx + (vc >> 14);
 }
 
-//#endif // RESID_INLINING || defined(RESID_FILTER_CC)
+#endif // RESID_INLINING || defined(RESID_FILTER_CC)
 
 } // namespace reSID
 

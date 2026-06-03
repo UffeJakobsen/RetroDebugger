@@ -11,6 +11,8 @@
 #include "CDebugEventsHistory.h"
 #include "CDebuggerServerApi.h"
 
+#include <chrono>
+
 CDebugInterface::CDebugInterface(CViewC64 *viewC64)
 {
 	this->viewC64 = viewC64;
@@ -21,6 +23,7 @@ CDebugInterface::CDebugInterface(CViewC64 *viewC64)
 	debuggerServerApi = NULL;
 
 	isDebugOn = true;
+	hasPendingCpuDebugInterruptTasks = false;
 	
 	isRunning = false;
 	isSelected = false;
@@ -31,13 +34,27 @@ CDebugInterface::CDebugInterface(CViewC64 *viewC64)
 	tasksMutex = new CSlrMutex("CDebugInterface::tasksMutex");
 
 	screenSupersampleFactor = c64SettingsScreenSupersampleFactor;
-	
+
+	screenImageData = NULL;
+	for (int i = 0; i < 3; i++)
+		screenImageDataBuf[i] = NULL;
+	screenProducerIndex = 0;
+	screenReadyIndex.store(1, std::memory_order_relaxed);
+	screenConsumerIndex = 2;
+	isSteppingMode.store(false, std::memory_order_relaxed);
+	screenNewFramePublished.store(false, std::memory_order_relaxed);
+
 	emulationFrameCounter = 0;
 	
 	viewScreen = NULL;
 	viewDisassembly = NULL;
 	
 	this->debugMode = DEBUGGER_MODE_RUNNING;
+	frameStepRequestGeneration = 0;
+	frameStepCompletedGeneration = 0;
+	frameStepTargetFrameNumber = 0;
+	frameStepPending = false;
+	frameStepTargetVSyncReached = false;
 
 	mainCpuStack.Clear();
 }
@@ -80,7 +97,7 @@ int CDebugInterface::GetEmulatorType()
 
 CSlrString *CDebugInterface::GetEmulatorVersionString()
 {
-	return NULL;
+	return new CSlrString("Unknown emulator");
 }
 
 const char *CDebugInterface::GetPlatformNameString()
@@ -123,6 +140,14 @@ void CDebugInterface::InitPlugins()
 void CDebugInterface::DoVSync()
 {
 	emulationFrameCounter++;
+
+	{
+		std::lock_guard<std::mutex> lock(frameStepMutex);
+		if (frameStepPending && emulationFrameCounter >= frameStepTargetFrameNumber)
+		{
+			frameStepTargetVSyncReached = true;
+		}
+	}
 	
 //	LOGD("DoVSync: frame=%d", emulationFrameCounter);
 	viewC64->EmulationStartFrameCallback(this);
@@ -135,6 +160,25 @@ void CDebugInterface::DoFrame()
 	{
 		CDebuggerEmulatorPlugin *plugin = *it;
 		plugin->DoFrame();
+	}
+
+	bool shouldPauseAfterFrame = false;
+	{
+		std::lock_guard<std::mutex> lock(frameStepMutex);
+		if (frameStepPending && frameStepTargetVSyncReached)
+		{
+			frameStepPending = false;
+			frameStepTargetVSyncReached = false;
+			frameStepCompletedGeneration = frameStepRequestGeneration;
+			shouldPauseAfterFrame = true;
+		}
+	}
+
+	if (shouldPauseAfterFrame)
+	{
+		// Pause only after the frame was published and all per-frame callbacks ran.
+		SetDebugMode(DEBUGGER_MODE_PAUSED);
+		frameStepCV.notify_all();
 	}
 }
 
@@ -181,8 +225,21 @@ unsigned int CDebugInterface::GetEmulationFrameNumber()
 
 void CDebugInterface::CreateScreenData()
 {
-	screenImageData = new CImageData(512 * this->screenSupersampleFactor, 512 * this->screenSupersampleFactor, IMG_TYPE_RGBA);
-	screenImageData->AllocImage(false, true);
+	int w = 512 * this->screenSupersampleFactor;
+	int h = 512 * this->screenSupersampleFactor;
+
+	for (int i = 0; i < 3; i++)
+	{
+		screenImageDataBuf[i] = new CImageData(w, h, IMG_TYPE_RGBA);
+		screenImageDataBuf[i]->AllocImage(false, true);
+	}
+
+	screenProducerIndex = 0;
+	screenReadyIndex.store(1, std::memory_order_relaxed);
+	screenConsumerIndex = 2;
+	screenImageData = screenImageDataBuf[screenProducerIndex];
+	isSteppingMode.store(false, std::memory_order_relaxed);
+	screenNewFramePublished.store(false, std::memory_order_relaxed);
 }
 
 void CDebugInterface::RefreshScreenNoCallback()
@@ -195,12 +252,16 @@ void CDebugInterface::SetSupersampleFactor(int factor)
 {
 	LOGM("CDebugInterface::SetSupersampleFactor: %d", factor);
 	this->LockRenderScreenMutex();
-	
+
 	this->screenSupersampleFactor = factor;
-	
-	delete screenImageData;
+
+	for (int i = 0; i < 3; i++)
+	{
+		delete screenImageDataBuf[i];
+		screenImageDataBuf[i] = NULL;
+	}
 	CreateScreenData();
-	
+
 	this->UnlockRenderScreenMutex();
 }
 
@@ -208,6 +269,33 @@ CImageData *CDebugInterface::GetScreenImageData()
 {
 //	LOGD("CDebugInterface::GetScreenImageData");
 	return this->screenImageData;
+}
+
+CImageData *CDebugInterface::AcquireScreenImageForRendering()
+{
+	// Always use triple-buffer path: the emulator thread writes to the producer
+	// buffer and publishes when done. The render thread picks up the latest
+	// published buffer here. No mutex needed — buffers are distinct.
+	if (screenNewFramePublished.exchange(false, std::memory_order_acq_rel))
+	{
+		int ready = screenReadyIndex.exchange(screenConsumerIndex, std::memory_order_acq_rel);
+		screenConsumerIndex = ready;
+	}
+	return screenImageDataBuf[screenConsumerIndex];
+}
+
+void CDebugInterface::ReleaseScreenImageAfterRendering()
+{
+	// Nothing to release - triple-buffer consumer stays valid until next Acquire
+}
+
+void CDebugInterface::PublishScreenImage()
+{
+	// Publish current producer as ready, get old ready as new producer
+	int oldReady = screenReadyIndex.exchange(screenProducerIndex, std::memory_order_acq_rel);
+	screenProducerIndex = oldReady;
+	screenImageData = screenImageDataBuf[screenProducerIndex];
+	screenNewFramePublished.store(true, std::memory_order_release);
 }
 
 CDebugDataAdapter *CDebugInterface::GetDataAdapter()
@@ -367,14 +455,16 @@ void CDebugInterface::ReplayInputEventsFromSnapshotsManager(CByteBuffer *inputEv
 	LOGTODO("CDebugInterface::ReplayInputEventsFromSnapshotsManager");
 }
 
-// this is called by CSnapshotManager to replay events at current cycle
-void ReplayInputEventsFromSnapshotsManager(CByteBuffer *byteBuffer);
-
 // state
 int CDebugInterface::GetCpuPC()
 {
 	LOGTODO("CDebugInterface::GetCpuPC");
 	return -1;
+}
+
+void CDebugInterface::GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S)
+{
+	LOGTODO("CDebugInterface::GetCpuRegs");
 }
 
 void CDebugInterface::GetWholeMemoryMap(uint8 *buffer)
@@ -390,7 +480,25 @@ void CDebugInterface::GetWholeMemoryMapFromRam(uint8 *buffer)
 //
 void CDebugInterface::SetDebugMode(uint8 debugMode)
 {
-	this->debugMode = debugMode;
+	bool wasStepping = isSteppingMode.load(std::memory_order_acquire);
+	bool stepping = (debugMode != DEBUGGER_MODE_RUNNING);
+
+	// On unpause: publish the current screen (producer) as ready so the
+	// consumer picks it up on the first running-mode Acquire instead of
+	// showing a stale buffer from before the pause.
+	if (wasStepping && !stepping)
+	{
+		PublishScreenImage();
+	}
+
+	isSteppingMode.store(stepping, std::memory_order_release);
+	this->debugMode.store(debugMode, std::memory_order_release);
+	NotifyPauseChanged();
+}
+
+void CDebugInterface::NotifyPauseChanged()
+{
+	pauseCV.notify_all();
 }
 
 uint8 CDebugInterface::SetDebugModeBlockedWait(uint8 debugMode)
@@ -435,7 +543,7 @@ void CDebugInterface::PauseEmulationBlockedWait()
 
 uint8 CDebugInterface::GetDebugMode()
 {
-	return this->debugMode;
+	return this->debugMode.load(std::memory_order_acquire);
 }
 
 void CDebugInterface::ResetSoft()
@@ -484,10 +592,7 @@ void CDebugInterface::MakeJmpAndReset(uint16 addr)
 
 void CDebugInterface::ClearTemporaryBreakpoint()
 {
-	if (this->GetDebugMode() == DEBUGGER_MODE_RUNNING)
-	{
-		symbols->ClearTemporaryBreakpoint();
-	}
+	symbols->ClearTemporaryBreakpoint();
 }
 
 void CDebugInterface::StepOverInstruction()
@@ -510,6 +615,83 @@ void CDebugInterface::StepOverSubroutine()
 	{
 		viewDisassembly->StepOverJsr();
 	}
+}
+
+bool CDebugInterface::RunEmulationForOneFrame()
+{
+	if (!isRunning)
+		return false;
+
+	if (symbols)
+	{
+		ClearTemporaryBreakpoint();
+	}
+
+	if (snapshotsManager)
+	{
+		snapshotsManager->CancelRestore();
+	}
+
+	uint64_t requestGeneration;
+	{
+		std::lock_guard<std::mutex> lock(frameStepMutex);
+		if (frameStepPending)
+		{
+			return false;
+		}
+
+		frameStepRequestGeneration++;
+		requestGeneration = frameStepRequestGeneration;
+		frameStepTargetFrameNumber = GetEmulationFrameNumber() + 1;
+		frameStepPending = true;
+		frameStepTargetVSyncReached = false;
+	}
+
+	SetDebugMode(DEBUGGER_MODE_RUNNING);
+
+	bool frameCompleted = false;
+	for (int tries = 0; tries < 100; tries++)
+	{
+		std::unique_lock<std::mutex> lock(frameStepMutex);
+		frameCompleted = frameStepCV.wait_for(lock, std::chrono::milliseconds(50), [this, requestGeneration]() {
+			return frameStepCompletedGeneration >= requestGeneration;
+		});
+		lock.unlock();
+
+		if (frameCompleted)
+		{
+			break;
+		}
+
+		if (GetDebugMode() == DEBUGGER_MODE_PAUSED)
+		{
+			std::lock_guard<std::mutex> cleanupLock(frameStepMutex);
+			frameStepPending = false;
+			frameStepTargetVSyncReached = false;
+			return false;
+		}
+	}
+
+	if (!frameCompleted)
+	{
+		std::lock_guard<std::mutex> cleanupLock(frameStepMutex);
+		frameStepPending = false;
+		frameStepTargetVSyncReached = false;
+		frameStepCompletedGeneration = requestGeneration;
+		SetDebugMode(DEBUGGER_MODE_PAUSED);
+		return false;
+	}
+
+	for (int tries = 0; tries < 250; tries++)
+	{
+		if (GetDebugMode() == DEBUGGER_MODE_PAUSED)
+		{
+			return true;
+		}
+		SYS_Sleep(20);
+	}
+
+	return GetDebugMode() == DEBUGGER_MODE_PAUSED;
 }
 
 void CDebugInterface::RunContinueEmulation()
@@ -555,6 +737,7 @@ void CDebugInterface::AddCpuDebugInterruptTask(CDebugInterfaceTask *task)
 {
 	this->LockTasksMutex();
 	cpuDebugInterruptTasks.push_back(task);
+	hasPendingCpuDebugInterruptTasks.store(true, std::memory_order_release);
 	this->UnlockTasksMutex();
 }
 
@@ -573,6 +756,7 @@ void CDebugInterface::ExecuteDebugInterruptTasks()
 		task->ExecuteTask();
 		delete task;
 	}
+	hasPendingCpuDebugInterruptTasks.store(false, std::memory_order_release);
 	this->UnlockTasksMutex();
 }
 
@@ -585,6 +769,38 @@ void CDebugInterface::RegisterPlugin(CDebuggerEmulatorPlugin *plugin)
 void CDebugInterface::RemovePlugin(CDebuggerEmulatorPlugin *plugin)
 {
 	this->plugins.remove(plugin);
+}
+
+bool CDebugInterface::HandleOpenFileShortcut()
+{
+	for (std::list<CDebuggerEmulatorPlugin *>::iterator it = this->plugins.begin(); it != this->plugins.end(); it++)
+	{
+		CDebuggerEmulatorPlugin *plugin = *it;
+		if (plugin != NULL && plugin->HandleOpenFileShortcut())
+			return true;
+	}
+	return false;
+}
+
+void CDebugInterface::AddOpenFileExtensions(std::list<std::string> *extensions, bool isKeyboardShortcut)
+{
+	for (std::list<CDebuggerEmulatorPlugin *>::iterator it = this->plugins.begin(); it != this->plugins.end(); it++)
+	{
+		CDebuggerEmulatorPlugin *plugin = *it;
+		if (plugin != NULL)
+			plugin->AddOpenFileExtensions(extensions, isKeyboardShortcut);
+	}
+}
+
+bool CDebugInterface::OpenFile(CSlrString *path, bool isKeyboardShortcut)
+{
+	for (std::list<CDebuggerEmulatorPlugin *>::iterator it = this->plugins.begin(); it != this->plugins.end(); it++)
+	{
+		CDebuggerEmulatorPlugin *plugin = *it;
+		if (plugin != NULL && plugin->OpenFile(path, isKeyboardShortcut))
+			return true;
+	}
+	return false;
 }
 
 //
@@ -730,3 +946,7 @@ void CDebugInterface::ShowMessageBox(const char *title, const char *message)
 	guiMain->ShowMessageBox(title, message);
 }
 
+uint32 CDebugInterface::GetJoystickState(int port)
+{
+	return JOYPAD_IDLE;
+}

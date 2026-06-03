@@ -63,7 +63,6 @@
 #include "resources.h"
 #include "sysfile.h"
 #ifdef HAS_TRANSLATION
-#include "translate.h"
 #endif
 #include "vicetypes.h"
 #include "uiapi.h"
@@ -86,6 +85,8 @@ const
 #endif
 int console_mode = 0;
 int video_disabled_mode = 0;
+bool help_requested = false;
+bool default_settings_requested = false;
 static int init_done = 0;
 
 
@@ -139,7 +140,7 @@ int vice_main_program(int argc, const char **argv, int c64model)
 #endif
         if ((!strcmp(argv[i], "-config")) || (!strcmp(argv[i], "--config"))) {
             if ((i + 1) < argc) {
-                vice_config_file = lib_stralloc(argv[++i]);
+                vice_config_file = lib_strdup(argv[++i]);
             }
         } else if ((!strcmp(argv[i], "-help")) ||
                    (!strcmp(argv[i], "--help")) ||
@@ -192,11 +193,6 @@ int vice_main_program(int argc, const char **argv, int c64model)
         archdep_startup_log_error("Cannot initialize the UI.\n");
         return -1;
     }
-
-#ifdef HAS_TRANSLATION
-    /* set the default arch language */
-    translate_arch_language_init();
-#endif
 
     if (!ishelp) {
         /* Load the user's default configuration file.  */

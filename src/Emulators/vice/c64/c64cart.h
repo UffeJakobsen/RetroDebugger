@@ -29,8 +29,8 @@
 
 #include "vicetypes.h"
 
-/* Cartridge ROM limit = 1MB (EasyFlash) */
-#define C64CART_ROM_LIMIT (1024 * 1024)
+/* Cartridge ROM limit = 2MB (Magic Desk 2 - 16K config) */
+#define C64CART_ROM_LIMIT (2 * 1024 * 1024)
 /* Cartridge RAM limit = 32kB (IDE64, ...) */
 #define C64CART_RAM_LIMIT (32 * 1024)
 /* maximum size of a full "all inclusive" cartridge image (16MB for REU) */
@@ -64,10 +64,10 @@
 */
 
 typedef struct {
-    BYTE exrom; /* exrom signal, 0 - active */
-    BYTE game;  /* game signal, 0 - active */
-    BYTE ultimax_phi1; /* flag for vic-ii, ultimax mode in phi1 phase */
-    BYTE ultimax_phi2; /* flag for vic-ii, ultimax mode in phi2 phase */
+    uint8_t exrom; /* exrom signal, 0 - active */
+    uint8_t game;  /* game signal, 0 - active */
+    uint8_t ultimax_phi1; /* flag for vic-ii, ultimax mode in phi1 phase */
+    uint8_t ultimax_phi2; /* flag for vic-ii, ultimax mode in phi2 phase */
 } export_t;
 
 extern export_t export;
@@ -75,5 +75,37 @@ extern export_t export;
 #define CARTRIDGE_INCLUDE_PUBLIC_API
 #include "expert.h"
 #undef CARTRIDGE_INCLUDE_PUBLIC_API
+
+/* VICE 3.10: C128 cartridge interface (c128cartridge is NULL for C64-only builds) */
+#include <stdio.h>
+#include "cartridge.h"
+struct snapshot_s;
+struct c128cartridge_interface_s {
+    int (*attach_crt)(int type, FILE *fd, const char *filename, uint8_t *rawcart);
+    int (*bin_attach)(int type, const char *filename, uint8_t *rawcart);
+    int (*bin_save)(int type, const char *filename);
+    int (*save_secondary_image)(int type, const char *filename);
+    int (*crt_save)(int type, const char *filename);
+    int (*flush_image)(int type);
+    int (*flush_secondary_image)(int type);
+    void (*config_init)(int type);
+    void (*config_setup)(int type, uint8_t *rawcart);
+    void (*detach_image)(int type);
+    void (*reset)(void);
+    int (*freeze_allowed)(void);
+    void (*freeze)(void);
+    void (*powerup)(void);
+    cartridge_info_t* (*get_info_list)(void);
+    int (*can_flush_image)(int type);
+    int (*can_flush_secondary_image)(int type);
+    int (*can_save_image)(int type);
+    int (*can_save_secondary_image)(int type);
+    int (*snapshot_read)(int type, struct snapshot_s *s);
+    int (*snapshot_write)(int type, struct snapshot_s *s);
+};
+typedef struct c128cartridge_interface_s c128cartridge_interface_t;
+
+extern c128cartridge_interface_t *c128cartridge;
+void c128cartridge_setup_interface(void);
 
 #endif

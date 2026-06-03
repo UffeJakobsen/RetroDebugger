@@ -24,6 +24,8 @@
  *
  */
 
+/* #define DEBUG_IECBUS */
+
 #include "vice.h"
 
 #include <stdio.h>
@@ -38,37 +40,45 @@
 #include "via.h"
 #include "vicetypes.h"
 #include "serial.h"
+#include "drive/iec/cmdhd.h"
 
 #include "SYS_Types.h"
+
+#ifdef DEBUG_IECBUS
+#include "log.h"
+#define DBG(x) log_printf  x
+#else
+#define DBG(x)
+#endif
 
 #define IECBUS_DEVICE_NONE      0
 #define IECBUS_DEVICE_TRUEDRIVE 1
 #define IECBUS_DEVICE_IECDEVICE 2
 
 
-BYTE (*iecbus_callback_read)(CLOCK) = NULL;
-void (*iecbus_callback_write)(BYTE, CLOCK) = NULL;
+uint8_t (*iecbus_callback_read)(CLOCK) = NULL;
+void (*iecbus_callback_write)(uint8_t, CLOCK) = NULL;
 void (*iecbus_update_ports)(void) = NULL;
 
 iecbus_t iecbus;
 
 static unsigned int iecbus_device[IECBUS_NUM];
 
-static BYTE iec_old_atn = 0x10;
+static uint8_t iec_old_atn = 0x10;
 
 
 #include "debug.h"
 
-#ifdef VICE_DEBUG
+#ifdef DEBUG
 
 #include "log.h"
 
 static void debug_iec_cpu_write(unsigned int data)
 {
     if (debug.iec) {
-        BYTE value = ~data;
+        uint8_t value = ~data;
 
-        log_debug("$DD00 store: %s %s %s",
+        log_debug(LOG_DEFAULT, "$DD00 store: %s %s %s",
                   value & 0x20 ? "DATA OUT" : "        ",
                   value & 0x10 ? "CLK OUT" : "       ",
                   value & 0x08 ? "ATN OUT" : "       "
@@ -80,9 +90,9 @@ static void debug_iec_cpu_write(unsigned int data)
 static void debug_iec_cpu_read(unsigned int data)
 {
     if (debug.iec) {
-        BYTE value = data;
+        uint8_t value = data;
 
-        log_debug("$DD00 read:  %s %s %s %s %s",
+        log_debug(LOG_DEFAULT, "$DD00 read:  %s %s %s %s %s",
                   value & 0x20 ? "DATA OUT" : "        ",
                   value & 0x10 ? "CLK OUT" : "       ",
                   value & 0x08 ? "ATN OUT" : "       ",
@@ -96,13 +106,13 @@ static void debug_iec_cpu_read(unsigned int data)
 void debug_iec_drv_write(unsigned int data)
 {
     if (debug.iec) {
-        BYTE value = data;
-        static BYTE oldvalue = 0;
+        uint8_t value = data;
+        static uint8_t oldvalue = 0;
 
         if (value != oldvalue) {
             oldvalue = value;
 
-            log_debug("$1800 store: %s %s %s",
+            log_debug(LOG_DEFAULT, "$1800 store: %s %s %s",
                       value & 0x02 ? "DATA OUT" : "        ",
                       value & 0x08 ? "CLK OUT" : "       ",
                       value & 0x10 ? "ATNA   " : "       "
@@ -114,24 +124,24 @@ void debug_iec_drv_write(unsigned int data)
 void debug_iec_drv_read(unsigned int data)
 {
     if (debug.iec) {
-        BYTE value = data;
-        static BYTE oldvalue = { 0 };
+        uint8_t value = data;
+        static uint8_t oldvalue = { 0 };
         const char * data_correct = "";
 
         if (value != oldvalue) {
             unsigned int atn = value & 0x80 ? 1 : 0;
             unsigned int atna = value & 0x10 ? 1 : 0;
-            unsigned int data = value & 0x01 ? 1 : 0;
+            unsigned int ddata = value & 0x01 ? 1 : 0;
 
             oldvalue = value;
 
             if (atn ^ atna) {
-                if (!data) {
+                if (!ddata) {
                     data_correct = " ***** ERROR: ATN, ATNA & DATA! *****";
                 }
             }
 
-            log_debug("$1800 read:  %s %s %s %s %s %s%s",
+            log_debug(LOG_DEFAULT, "$1800 read:  %s %s %s %s %s %s%s",
                       value & 0x02 ? "DATA OUT" : "        ",
                       value & 0x08 ? "CLK OUT" : "       ",
                       value & 0x10 ? "ATNA   " : "       ",
@@ -149,9 +159,9 @@ void debug_iec_bus_write(unsigned int data)
 {
 #if 0
     if (debug.iec) {
-        BYTE value = data;
+        uint8_t value = data;
 
-        log_debug("  BUS store: %s %s %s",
+        log_debug(LOG_DEFAULT, "  BUS store: %s %s %s",
                   value & 0x02 ? "DATA OUT" : "        ",
                   value & 0x08 ? "CLK OUT" : "       ",
                   value & 0x10 ? "ATNA   " : "       "
@@ -164,9 +174,9 @@ void debug_iec_bus_read(unsigned int data)
 {
 #if 0
     if (debug.iec) {
-        BYTE value = data;
+        uint8_t value = data;
 
-        log_debug("  BUS read:  %s %s %s %s %s %s",
+        log_debug(LOG_DEFAULT, "  BUS read:  %s %s %s %s %s %s",
                   value & 0x02 ? "DATA OUT" : "        ",
                   value & 0x08 ? "CLK OUT" : "       ",
                   value & 0x10 ? "ATNA   " : "       ",
@@ -194,29 +204,29 @@ void iecbus_init(void)
                       | IECBUS_DEVICE_READ_ATN;
 }
 
-void iecbus_cpu_undump(BYTE data)
+void iecbus_cpu_undump(uint8_t data)
 {
     iec_update_cpu_bus(data);
     iec_old_atn = iecbus.cpu_bus & 0x10;
 }
 
 /* No drive is enabled.  */
-static BYTE iecbus_cpu_read_conf0(CLOCK clock)
+static uint8_t iecbus_cpu_read_conf0(CLOCK clock)
 {
     DEBUG_IEC_CPU_READ((iecbus.iec_fast_1541 & 0x30u) << 2);
 
     return (iecbus.iec_fast_1541 & 0x30u) << 2;
 }
 
-static void iecbus_cpu_write_conf0(BYTE data, CLOCK clock)
+static void iecbus_cpu_write_conf0(uint8_t data, CLOCK clock)
 {
     DEBUG_IEC_CPU_WRITE(data);
 
     iecbus.iec_fast_1541 = data;
 }
 
-/* Only the first drive is enabled.  */
-static BYTE iecbus_cpu_read_conf1(CLOCK clock)
+/* Only the first disk unit (drive 8) is enabled.  */
+static uint8_t iecbus_cpu_read_conf1(CLOCK clock)
 {
     drive_cpu_execute_all(clock);
 
@@ -225,15 +235,15 @@ static BYTE iecbus_cpu_read_conf1(CLOCK clock)
     return iecbus.cpu_port;
 }
 
-BYTE c64d_iecbus_cpu_peek_conf1()
+uint8_t c64d_iecbus_cpu_peek_conf1()
 {
 	return iecbus.cpu_port;
 }
 
 void c64d_get_drivecpu_regs_internal(drive_context_t *drv, uint8 *a, uint8 *x, uint8 *y, uint8 *p, uint8 *sp, uint16 *pc);
 uint8 c64d_peek_mem_drive_internal(drive_context_t *drv, uint16 addr);
-void c64d_peek_memory_drive_internal(drive_context_t *drv, BYTE *memoryBuffer, int addrStart, int addrEnd);
-void c64d_copy_ram_memory_drive_internal(drive_context_t *drv, BYTE *memoryBuffer, int addrStart, int addrEnd);
+void c64d_peek_memory_drive_internal(drive_context_t *drv, uint8_t *memoryBuffer, int addrStart, int addrEnd);
+void c64d_copy_ram_memory_drive_internal(drive_context_t *drv, uint8_t *memoryBuffer, int addrStart, int addrEnd);
 void c64d_peek_whole_map_drive_internal(drive_context_t *drv, uint8 *memoryBuffer);
 uint8 c64d_mem_ram_read_drive_internal(drive_context_t *drv, uint16 addr);
 void c64d_mem_ram_write_drive_internal(drive_context_t *drv, uint16 addr, uint8 value);
@@ -291,10 +301,10 @@ void c64d_mem_ram_write_drive(int driveNum, uint16 addr, uint8 value)
 void c64d_drive_poke(int driveNum, uint16 addr, uint8 value)
 {
 	drive_context_t *drv = drive_context[driveNum];
-	drv->cpud->store_func_ptr[(addr) >> 8](drv, (WORD)(addr), (BYTE)(value));
+	drv->cpud->store_func_ptr[(addr) >> 8](drv, (uint16_t)(addr), (uint8_t)(value));
 }
 
-static void iecbus_cpu_write_conf1(BYTE data, CLOCK clock)
+static void iecbus_cpu_write_conf1(uint8_t data, CLOCK clock)
 {
     drive_t *drive;
 
@@ -336,14 +346,14 @@ static void iecbus_cpu_write_conf1(BYTE data, CLOCK clock)
         default:
             iecbus.drv_bus[8] = (((iecbus.drv_data[8] << 3) & 0x40)
                                  | ((iecbus.drv_data[8] << 6)
-                                    & ((~iecbus.drv_data[8] ^ iecbus.cpu_bus) << 3)
+                                    & ((unsigned int)(~iecbus.drv_data[8] ^ iecbus.cpu_bus) << 3)
                                     & 0x80));
     }
     iec_update_ports();
 }
 
 /* Only the second drive is enabled.  */
-static BYTE iecbus_cpu_read_conf2(CLOCK clock)
+static uint8_t iecbus_cpu_read_conf2(CLOCK clock)
 {
     drive_cpu_execute_all(clock);
 
@@ -352,7 +362,7 @@ static BYTE iecbus_cpu_read_conf2(CLOCK clock)
     return iecbus.cpu_port;
 }
 
-static void iecbus_cpu_write_conf2(BYTE data, CLOCK clock)
+static void iecbus_cpu_write_conf2(uint8_t data, CLOCK clock)
 {
     drive_t *drive;
 
@@ -401,7 +411,7 @@ static void iecbus_cpu_write_conf2(BYTE data, CLOCK clock)
     iec_update_ports();
 }
 
-static BYTE iecbus_cpu_read_conf3(CLOCK clock)
+static uint8_t iecbus_cpu_read_conf3(CLOCK clock)
 {
     drive_cpu_execute_all(clock);
     serial_iec_device_exec(clock);
@@ -411,7 +421,7 @@ static BYTE iecbus_cpu_read_conf3(CLOCK clock)
     return iecbus.cpu_port;
 }
 
-static void iecbus_cpu_write_conf3(BYTE data, CLOCK clock)
+static void iecbus_cpu_write_conf3(uint8_t data, CLOCK clock)
 {
     unsigned int dnr;
 
@@ -425,9 +435,9 @@ static void iecbus_cpu_write_conf3(BYTE data, CLOCK clock)
     if (iec_old_atn != (iecbus.cpu_bus & 0x10)) {
         iec_old_atn = iecbus.cpu_bus & 0x10;
 
-        for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
+        for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
             if (iecbus_device[8 + dnr] == IECBUS_DEVICE_TRUEDRIVE) {
-                switch (drive_context[dnr]->drive->type) {
+                switch (drive_context[dnr]->type) {
                     case DRIVE_TYPE_1581:
                         if (!iec_old_atn) {
                             ciacore_set_flag(drive_context[dnr]->cia1581);
@@ -446,11 +456,11 @@ static void iecbus_cpu_write_conf3(BYTE data, CLOCK clock)
         }
     }
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
         if (iecbus_device[8 + dnr] == IECBUS_DEVICE_TRUEDRIVE) {
             unsigned int unit;
             unit = dnr + 8;
-            switch (drive_context[dnr]->drive->type) {
+            switch (drive_context[dnr]->type) {
                 case DRIVE_TYPE_1581:
                 case DRIVE_TYPE_2000:
                 case DRIVE_TYPE_4000:
@@ -508,29 +518,29 @@ static void calculate_callback_index(void)
 
 iecbus_status_set() sets IEC bus devices according to the following table:
 
-TDE DE ID VD                                       iecbus_device
- 0  0  0  0  nothing enabled                       IECBUS_DEVICE_NONE
- 0  0  0  1  trap device enabled                   IECBUS_DEVICE_NONE
- 0  0  1  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
- 0  0  1  1  IEC device enabled+trap dev. enabled  IECBUS_DEVICE_IECDEVICE
- 0  1  0  0  nothing enabled                       IECBUS_DEVICE_NONE
- 0  1  0  1  trap device enabled                   IECBUS_DEVICE_NONE
- 0  1  1  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
- 0  1  1  1  IEC device enabled+trap dev. enabled  IECBUS_DEVICE_IECDEVICE
---------------------------------------------------------------------------
- 1  0  0  0  nothing enabled                       IECBUS_DEVICE_NONE
- 1  0  0  1  nothing enabled                       IECBUS_DEVICE_NONE
- 1  0  1  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
- 1  0  1  1  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
- 1  1  0  0  TDE drive enabled                     IECBUS_DEVICE_TRUEDRIVE
- 1  1  0  1  TDE drive enabled                     IECBUS_DEVICE_TRUEDRIVE
- 1  1  1  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
- 1  1  1  1  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
+     TDE ID VD DE                                      iecbus_device
+none 0  0  0  0  nothing enabled                       IECBUS_DEVICE_NONE
+     0  0  0  1  nothing enabled                       IECBUS_DEVICE_NONE
+VD   0  0  1  0  trap device enabled                   IECBUS_DEVICE_NONE
+VD   0  0  1  1  trap device enabled                   IECBUS_DEVICE_NONE
+IEC  0  1  0  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
+IEC  0  1  0  1  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
+     0  1  1  0  IEC device enabled+trap dev. enabled  IECBUS_DEVICE_IECDEVICE
+     0  1  1  1  IEC device enabled+trap dev. enabled  IECBUS_DEVICE_IECDEVICE
+     --------------------------------------------------------------------------
+     1  0  0  0  nothing enabled                       IECBUS_DEVICE_NONE
+TDE  1  0  0  1  TDE drive enabled                     IECBUS_DEVICE_TRUEDRIVE
+     1  0  1  0  nothing enabled                       IECBUS_DEVICE_NONE
+     1  0  1  1  TDE drive enabled                     IECBUS_DEVICE_TRUEDRIVE
+     1  1  0  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
+     1  1  0  1  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
+     1  1  1  0  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
+     1  1  1  1  IEC device enabled                    IECBUS_DEVICE_IECDEVICE
 
-TDE = true drive emulation (global switch)
-DE = device enable (device switch)
-ID = IEC devices (device switch)
-VD = virtual devices (global switch)
+TDE = true drive emulation
+ID = IEC devices
+VD = virtual devices
+DE = device enable
 
 */
 
@@ -553,16 +563,17 @@ static const unsigned int iecbus_device_index[16] = {
     IECBUS_DEVICE_IECDEVICE
 };
 
-void iecbus_status_set(unsigned int type, unsigned int unit,
-                       unsigned int enable)
+void iecbus_status_set(unsigned int type, unsigned int unit, unsigned int enable)
 {
-    static unsigned int truedrive, drivetype[IECBUS_NUM], iecdevice[IECBUS_NUM],
-                        virtualdevices;
+    static unsigned int truedrive[IECBUS_NUM], drivetype[IECBUS_NUM], iecdevice[IECBUS_NUM],
+                        virtualdevices[IECBUS_NUM];
     unsigned int dev;
+
+    DBG(("iecbus_status_set unit: %u type: %u enabled: %u", unit, type, enable));
 
     switch (type) {
         case IECBUS_STATUS_TRUEDRIVE:
-            truedrive = enable ? (1 << 3) : 0;
+            truedrive[unit] = enable ? (1 << 3) : 0;
             break;
         case IECBUS_STATUS_DRIVETYPE:
             drivetype[unit] = enable ? (1 << 2) : 0;
@@ -570,15 +581,15 @@ void iecbus_status_set(unsigned int type, unsigned int unit,
         case IECBUS_STATUS_IECDEVICE:
             iecdevice[unit] = enable ? (1 << 1) : 0;
             break;
-        case IECBUS_STATUS_VIRTUALDEVICES:
-            virtualdevices = enable ? (1 << 0) : 0;
+        case IECBUS_STATUS_TRAPDEVICE:
+            virtualdevices[unit] = enable ? (1 << 0) : 0;
             break;
     }
 
     for (dev = 0; dev < IECBUS_NUM; dev++) {
         unsigned int index;
 
-        index = truedrive | drivetype[dev] | iecdevice[dev] | virtualdevices;
+        index = truedrive[dev] | drivetype[dev] | iecdevice[dev] | virtualdevices[dev];
         iecbus_device[dev] = iecbus_device_index[index];
     }
 
@@ -586,13 +597,13 @@ void iecbus_status_set(unsigned int type, unsigned int unit,
 }
 
 
-BYTE iecbus_device_read(void)
+uint8_t iecbus_device_read(void)
 {
     return iecbus.drv_port;
 }
 
 
-int iecbus_device_write(unsigned int unit, BYTE data)
+int iecbus_device_write(unsigned int unit, uint8_t data)
 {
     if (unit < IECBUS_NUM) {
         iecbus.drv_bus[unit] = data;

@@ -29,6 +29,7 @@ public:
 	virtual CSlrString *GetEmulatorVersionString();
 	virtual const char *GetPlatformNameString();
 	virtual const char *GetPlatformNameEndpointString();
+	virtual CDebuggerServerApi *GetDebuggerServerApi();
 
 	virtual bool IsPal();
 	virtual double GetCpuClockFrequency();
@@ -60,6 +61,7 @@ public:
 	
 	virtual void JoystickDown(int port, uint32 axis);
 	virtual void JoystickUp(int port, uint32 axis);
+	virtual uint32 GetJoystickState(int port);
 	virtual void ProcessJoystickEventSynced(int port, u32 axis, u8 buttonState);
 	
 	// this is called by CSnapshotManager to replay events at current cycle
@@ -108,6 +110,7 @@ public:
 	virtual void GetWholeMemoryMapFromRam(uint8 *buffer);
 
 	//
+	virtual void GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S);
 	void GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S, u8 *IRQ);
 	void GetPpuClocks(u32 *hClock, u32 *vClock, u32 *cycle);
 	

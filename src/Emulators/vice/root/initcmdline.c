@@ -46,7 +46,6 @@
 #include "maincpu.h"
 #include "resources.h"
 #include "tape.h"
-#include "translate.h"
 #include "util.h"
 #include "vicefeatures.h"
 
@@ -64,6 +63,11 @@ static unsigned int autostart_mode = AUTOSTART_MODE_NONE;
 int cmdline_get_autostart_mode(void)
 {
     return autostart_mode;
+}
+
+void cmdline_set_autostart_mode(int mode)
+{
+    autostart_mode = mode;
 }
 
 static void cmdline_free_autostart_string(void)
@@ -98,7 +102,7 @@ static int cmdline_help(const char *param, void *extra_param)
 
 static int cmdline_features(const char *param, void *extra_param)
 {
-    feature_list_t *list = vice_get_feature_list();
+    const feature_list_t *list = vice_get_feature_list();
 
     printf("Compile time options:\n");
     while (list->symbol) {
@@ -142,7 +146,7 @@ static int cmdline_limitcycles(const char *param, void *extra_param)
 static int cmdline_autostart(const char *param, void *extra_param)
 {
     cmdline_free_autostart_string();
-    autostart_string = lib_stralloc(param);
+    autostart_string = lib_strdup(param);
     autostart_mode = AUTOSTART_MODE_RUN;
     return 0;
 }
@@ -150,7 +154,7 @@ static int cmdline_autostart(const char *param, void *extra_param)
 static int cmdline_autoload(const char *param, void *extra_param)
 {
     cmdline_free_autostart_string();
-    autostart_string = lib_stralloc(param);
+    autostart_string = lib_strdup(param);
     autostart_mode = AUTOSTART_MODE_LOAD;
     return 0;
 }
@@ -172,14 +176,14 @@ static int cmdline_attach(const char *param, void *extra_param)
     switch (unit) {
         case 1:
             lib_free(startup_tape_image);
-            startup_tape_image = lib_stralloc(param);
+            startup_tape_image = lib_strdup(param);
             break;
         case 8:
         case 9:
         case 10:
         case 11:
             lib_free(startup_disk_images[unit - 8]);
-            startup_disk_images[unit - 8] = lib_stralloc(param);
+            startup_disk_images[unit - 8] = lib_strdup(param);
             break;
         default:
             archdep_startup_log_error("cmdline_attach(): unexpected unit number %d?!\n", unit);
@@ -189,78 +193,50 @@ static int cmdline_attach(const char *param, void *extra_param)
 }
 
 static const cmdline_option_t common_cmdline_options[] = {
-    { "-help", CALL_FUNCTION, 0,
+    { "-help", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       cmdline_help, NULL, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_SHOW_COMMAND_LINE_OPTIONS,
-      NULL, NULL },
-    { "-?", CALL_FUNCTION, 0,
+      NULL, "Show a list of the available options and exit normally" },
+    { "-?", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       cmdline_help, NULL, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_SHOW_COMMAND_LINE_OPTIONS,
-      NULL, NULL },
-    { "-h", CALL_FUNCTION, 0,
+      NULL, "Show a list of the available options and exit normally" },
+    { "-h", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       cmdline_help, NULL, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_SHOW_COMMAND_LINE_OPTIONS,
-      NULL, NULL },
-    { "-features", CALL_FUNCTION, 0,
+      NULL, "Show a list of the available options and exit normally" },
+    { "-features", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       cmdline_features, NULL, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_SHOW_COMPILETIME_FEATURES,
-      NULL, NULL },
-    { "-default", CALL_FUNCTION, 0,
+      NULL, "Show a list of the available compile-time options and their configuration." },
+    { "-default", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       cmdline_default, NULL, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_RESTORE_DEFAULT_SETTINGS,
-      NULL, NULL },
-    { "-config", CALL_FUNCTION, 1,
+      NULL, "Restore default settings" },
+    { "-config", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_config, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_FILE, IDCLS_SPECIFY_CONFIG_FILE,
-      NULL, NULL },
-    { "-dumpconfig", CALL_FUNCTION, 1,
+      "<filename>", "Specify config file" },
+    { "-dumpconfig", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_dumpconfig, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_FILE, IDCLS_SPECIFY_DUMPCONFIG_FILE,
-      NULL, NULL },
-    { "-chdir", CALL_FUNCTION, 1,
+      "<filename>", "Dump all resources to specified config file" },
+    { "-chdir", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_chdir, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDGS_P_DIRECTORY, IDGS_MON_CD_DESCRIPTION,
-      NULL, NULL },
-    { "-limitcycles", CALL_FUNCTION, 1,
+      "<Directory>", "Change current working directory." },
+    { "-limitcycles", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_limitcycles, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_VALUE, IDCLS_LIMIT_CYCLES,
-      NULL, NULL },
+      "<value>", "Specify number of cycles to run before quitting with an error." },
 #if (!defined  __OS2__ && !defined __BEOS__)
-    { "-console", CALL_FUNCTION, 0,
+    { "-console", CALL_FUNCTION, CMDLINE_ATTRIB_NONE,
       cmdline_console, NULL, NULL, NULL,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_CONSOLE_MODE,
-      NULL, NULL },
-    { "-core", SET_RESOURCE, 0,
+      NULL, "Console mode (for music playback)" },
+    { "-core", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "DoCoreDump", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_ALLOW_CORE_DUMPS,
-      NULL, NULL },
-    { "+core", SET_RESOURCE, 0,
+      NULL, "Allow production of core dumps" },
+    { "+core", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "DoCoreDump", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DONT_ALLOW_CORE_DUMPS,
-      NULL, NULL },
+      NULL, "Do not produce core dumps" },
 #else
-    { "-debug", SET_RESOURCE, 0,
+    { "-debug", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "DoCoreDump", (resource_value_t)1,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_DONT_CALL_EXCEPTION_HANDLER,
-      NULL, NULL },
-    { "+debug", SET_RESOURCE, 0,
+      NULL, "Don't call exception handler" },
+    { "+debug", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
       NULL, NULL, "DoCoreDump", (resource_value_t)0,
-      USE_PARAM_STRING, USE_DESCRIPTION_ID,
-      IDCLS_UNUSED, IDCLS_CALL_EXCEPTION_HANDLER,
-      NULL, NULL },
+      NULL, "Call exception handler (default)" },
 #endif
     CMDLINE_LIST_END
 };
@@ -268,41 +244,27 @@ static const cmdline_option_t common_cmdline_options[] = {
 /* These are the command-line options for the initialization sequence.  */
 
 static const cmdline_option_t cmdline_options[] = {
-    { "-autostart", CALL_FUNCTION, 1,
+    { "-autostart", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_autostart, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AND_AUTOSTART,
-      NULL, NULL },
-    { "-autoload", CALL_FUNCTION, 1,
+      "<Name>", "Attach and autostart tape/disk image <name>" },
+    { "-autoload", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_autoload, NULL, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AND_AUTOLOAD,
-      NULL, NULL },
-    { "-1", CALL_FUNCTION, 1,
+      "<Name>", "Attach and autoload tape/disk image <name>" },
+    { "-1", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_attach, (void *)1, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AS_TAPE,
-      NULL, NULL },
-    { "-8", CALL_FUNCTION, 1,
+      "<Name>", "Attach <name> as a tape image" },
+    { "-8", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_attach, (void *)8, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AS_DISK_8,
-      NULL, NULL },
-    { "-9", CALL_FUNCTION, 1,
+      "<Name>", "Attach <name> as a disk image in drive #8" },
+    { "-9", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_attach, (void *)9, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AS_DISK_9,
-      NULL, NULL },
-    { "-10", CALL_FUNCTION, 1,
+      "<Name>", "Attach <name> as a disk image in drive #9" },
+    { "-10", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_attach, (void *)10, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AS_DISK_10,
-      NULL, NULL },
-    { "-11", CALL_FUNCTION, 1,
+      "<Name>", "Attach <name> as a disk image in drive #10" },
+    { "-11", CALL_FUNCTION, CMDLINE_ATTRIB_NEED_ARGS,
       cmdline_attach, (void *)11, NULL, NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_NAME, IDCLS_ATTACH_AS_DISK_11,
-      NULL, NULL },
+      "<Name>", "Attach <name> as a disk image in drive #11" },
     CMDLINE_LIST_END
 };
 
@@ -351,7 +313,7 @@ int initcmdline_check_args(int argc, char **argv)
 
     /* The last orphan option is the same as `-autostart'.  */
     if ((argc > 1) && (autostart_string == NULL)) {
-        autostart_string = lib_stralloc(argv[1]);
+        autostart_string = lib_strdup(argv[1]);
         autostart_mode = AUTOSTART_MODE_RUN;
         argc--, argv++;
     }
@@ -396,7 +358,7 @@ void initcmdline_check_attach(void)
 
             for (i = 0; i < 4; i++) {
                 if (startup_disk_images[i] != NULL
-                    && file_system_attach_disk(i + 8, startup_disk_images[i])
+                    && file_system_attach_disk(i + 8, 0, startup_disk_images[i])
                     < 0) {
                     log_error(LOG_DEFAULT,
                               "Cannot attach disk image `%s' to unit %d.",
@@ -412,5 +374,11 @@ void initcmdline_check_attach(void)
         }
     }
 
+    cmdline_free_autostart_string();
+}
+
+void initcmdline_shutdown(void)
+{
+    cmdline_free_startup_images();
     cmdline_free_autostart_string();
 }

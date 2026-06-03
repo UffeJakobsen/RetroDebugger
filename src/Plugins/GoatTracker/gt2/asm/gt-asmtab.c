@@ -250,6 +250,12 @@ static int yyerror(char *s);
 #include "gt-log.h"
 #include <stdio.h>
 
+// GT2's bison parser uses gtyy* prefixed symbols but the flex lexer uses
+// unprefixed yylex. Without this, the linker resolves yylex to VICE's
+// mon_lex.c which returns EOF immediately.
+#define yylex gtyylex
+extern int gtyylex(void);
+
 #define YYERROR_VERBOSE
 
 static struct vec asm_atoms[1];
@@ -2870,7 +2876,10 @@ yyreturn:
 int
 yyerror (char *s)
 {
+    extern FILE *gt2_asm_error_stream;
     fprintf (stderr, "line %d, %s\n", num_lines, s);
+    if (gt2_asm_error_stream)
+        fprintf(gt2_asm_error_stream, "line %d, %s\n", num_lines, s);
     return 0;
 }
 
@@ -2881,6 +2890,26 @@ int assemble(struct membuf *source, struct membuf *dest)
     int val;
 
     LOG_INIT_CONSOLE(LOG_NORMAL);
+
+    // Capture LOG_ERROR/yyerror messages into a host-visible buffer so
+    // the relocator's error-return path can surface the actual diagnostic
+    // (otherwise the longjmp from exit() drops the buffered stderr write
+    // and the host only sees "Assembly failed").
+    extern char gt2_asm_error_buf[2048];
+    extern FILE *gt2_asm_error_stream;
+    gt2_asm_error_buf[0] = 0;
+    if (gt2_asm_error_stream)
+    {
+        fclose(gt2_asm_error_stream);
+        gt2_asm_error_stream = NULL;
+    }
+    gt2_asm_error_stream = fmemopen(gt2_asm_error_buf,
+                                    sizeof gt2_asm_error_buf,
+                                    "w");
+    if (gt2_asm_error_stream)
+        log_add_output_stream(G_log_ctx, LOG_MIN, LOG_WARNING - 1, NULL,
+                              gt2_asm_error_stream);
+
     parse_init();
     gtyydebug = 0;
     asm_src_buffer_push(source);
@@ -2889,6 +2918,7 @@ int assemble(struct membuf *source, struct membuf *dest)
     if(val == 0)
     {
         output_atoms(dest, asm_atoms);
+        if (gt2_post_output_hook) gt2_post_output_hook();
     }
     parse_free();
     vec_free(asm_atoms, NULL);

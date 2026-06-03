@@ -2,6 +2,7 @@
 #define _CDebugInterfaceC64_H_
 
 #include "CDebugInterface.h"
+#include "CC64BackendCapabilities.h"
 #include "CDataAdapter.h"
 #include "CByteBuffer.h"
 #include "DebuggerDefs.h"
@@ -38,6 +39,7 @@ public:
 	virtual CSlrString *GetEmulatorVersionString();
 	virtual const char *GetPlatformNameString();
 	virtual const char *GetPlatformNameEndpointString();
+	virtual CC64BackendCapabilities GetC64BackendCapabilities();
 
 	virtual float GetEmulationFPS();
 
@@ -372,4 +374,3 @@ public:
 };
 
 #endif
-

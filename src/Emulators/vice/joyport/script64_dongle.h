@@ -27,8 +27,8 @@
 #ifndef VICE_SCRIPT64_DONGLE_H
 #define VICE_SCRIPT64_DONGLE_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int joyport_script64_dongle_resources_init(void);
+int joyport_script64_dongle_resources_init(void);
 
 #endif

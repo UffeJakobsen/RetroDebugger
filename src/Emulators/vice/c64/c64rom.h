@@ -27,15 +27,48 @@
 #ifndef VICE_C64ROM_H
 #define VICE_C64ROM_H
 
-extern int c64rom_load_kernal(const char *rom_name, BYTE *new_kernal);
-extern int c64rom_load_basic(const char *rom_name);
-extern int c64rom_load_chargen(const char *rom_name);
+/* VICE 3.10: kernal revision IDs (moved from c64-resources.h) */
+#define C64_KERNAL_UNKNOWN -1
 
-extern int c64rom_get_kernal_checksum(void);
-extern int c64rom_get_kernal_chksum_id(WORD *sumout, int *idout);
-extern int c64rom_get_basic_checksum(void);
+#define C64_KERNAL_JAP      0       /* 906145-02 */
+#define C64_KERNAL_REV1     1       /* 901227-01 */
+#define C64_KERNAL_REV2     2       /* 901227-02 */
+#define C64_KERNAL_REV3     3       /* 901227-03 */
+#define C64_KERNAL_GS64     39      /* 390852-01 */
+#define C64_KERNAL_SX64     67      /* 251104-04 */
+#define C64_KERNAL_4064     100     /* 901246-01 */
+#define C64_KERNAL_REV3SWE  13      /* FIXME */
+#define C64_KERNAL_NONE     -2      /* MAX machine, no kernal */
+#define C64_KERNAL_MAX      C64_KERNAL_NONE
 
-extern int c64rom_isloaded(void);
+/* VICE 3.10: kernal checksum constants */
+#define C64_BASIC_CHECKSUM         15702
+#define C64_KERNAL_CHECKSUM_JAP    53635
+#define C64_KERNAL_CHECKSUM_R01    54525
+#define C64_KERNAL_CHECKSUM_R02    50955
+#define C64_KERNAL_CHECKSUM_R03    50954
+#define C64_KERNAL_CHECKSUM_GS64   46538
+#define C64_KERNAL_CHECKSUM_R43    50955
+#define C64_KERNAL_CHECKSUM_R64    49680
+
+/* VICE 3.10: kernal ID values at $FF80 */
+#define C64_KERNAL_ID_JAP    0x00
+#define C64_KERNAL_ID_R01    0xaa
+#define C64_KERNAL_ID_R02    0x00
+#define C64_KERNAL_ID_R03    0x03
+#define C64_KERNAL_ID_GS64   0x03
+#define C64_KERNAL_ID_R43    0x43
+#define C64_KERNAL_ID_R64    0x64
+
+int c64rom_load_kernal(const char *rom_name, uint8_t *new_kernal);
+int c64rom_load_basic(const char *rom_name);
+int c64rom_load_chargen(const char *rom_name);
+
+int c64rom_get_kernal_checksum(void);
+int c64rom_get_kernal_chksum_id(uint16_t *sumout, int *idout);
+int c64rom_get_basic_checksum(void);
+
+int c64rom_isloaded(void);
 
 extern int c64rom_cartkernal_active;
 

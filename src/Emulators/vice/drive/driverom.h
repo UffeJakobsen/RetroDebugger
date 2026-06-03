@@ -51,13 +51,13 @@ struct snapshot_s;
 #define DRIVE_ROM3040_SIZE            0x3000
 #define DRIVE_ROM4040_SIZE            0x3000
 
-extern void driverom_init(void);
-extern void driverom_initialize_traps(struct drive_s *drive);
-extern int driverom_load(const char *resource_name, BYTE *drive_rom, unsigned
+void driverom_init(void);
+void driverom_initialize_traps(struct drive_s *drive);
+int driverom_load(const char *resource_name, uint8_t *drive_rom, unsigned
                          int *loaded, int min, int max, const char *name,
                          unsigned int type, unsigned int *size);
-extern int driverom_load_images(void);
-extern int driverom_snapshot_write(struct snapshot_s *s, const struct drive_s *drive);
-extern int driverom_snapshot_read(struct snapshot_s *s, struct drive_s *drive);
+int driverom_load_images(void);
+int driverom_snapshot_write(struct snapshot_s *s, const struct drive_s *drive);
+int driverom_snapshot_read(struct snapshot_s *s, struct drive_s *drive);
 
 #endif

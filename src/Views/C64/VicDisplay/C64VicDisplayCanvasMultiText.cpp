@@ -29,70 +29,60 @@ void C64VicDisplayCanvasMultiText::RefreshScreen(vicii_cycle_state_t *viciiState
 	
 	vicDisplay->GetViciiPointers(this->viciiState, &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, colors);
 	
-	u8 bitmap;
-	
-	u8 color0R, color0G, color0B;
-	u8 color1R, color1G, color1B;
-	u8 color2R, color2G, color2B;
-	
-	debugInterface->GetCBMColor(colors[1], &color0R, &color0G, &color0B);
-	debugInterface->GetCBMColor(colors[2], &color1R, &color1G, &color1B);
-	debugInterface->GetCBMColor(colors[3], &color2R, &color2G, &color2B);
-	
-	u8 color3;
-	u8 color3R, color3G, color3B;
-	
+	// Precompute 16-entry RGBA lookup tables
+	uint32_t colorLutFg[16], colorLutBg[16], colorLut255[16];
+	for (int c = 0; c < 16; c++)
+	{
+		u8 r, g, b;
+		debugInterface->GetCBMColor(c, &r, &g, &b);
+		colorLutFg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)foregroundColorAlpha << 24);
+		colorLutBg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)backgroundColorAlpha << 24);
+		colorLut255[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | 0xFF000000;
+	}
+
+	u8 *imageData = (u8 *)imageDataScreen->resultData;
+	int imgWidth = imageDataScreen->width;
+
+	uint32_t rgba0Bg = colorLutBg[colors[1] & 0xf];
+	uint32_t rgba1Fg = colorLutFg[colors[2] & 0xf];
+	uint32_t rgba2Fg = colorLutFg[colors[3] & 0xf];
+	uint32_t rgba0_255 = colorLut255[colors[1] & 0xf];
+
 	for (int i = 0; i < 25; i++)
 	{
 		for (int j = 0; j < 40; j++)
 		{
-			color3 = color_ram_ptr[(i * 40) + j] & 0x0F;
+			u8 color3 = color_ram_ptr[(i * 40) + j] & 0x0F;
+			int charIdx = screen_ptr[(i * 40) + j];
 			for (int k = 0; k < 8; k++)
 			{
-				bitmap = chargen_ptr[(screen_ptr[(i * 40) + j] * 8) + k];
+				u8 bitmap = chargen_ptr[(charIdx * 8) + k];
+				uint32_t *row = (uint32_t *)(imageData + ((i*8 + k) * imgWidth + j*8) * 4);
+
 				if (color3 & 8)
 				{
-					debugInterface->GetCBMColor((color3 & 7), &color3R, &color3G, &color3B);
-					
+					uint32_t rgba3 = colorLutFg[color3 & 7];
+
 					for (int l = 0; l < 4; l++)
 					{
-						switch ((bitmap & (3 << ((3 - l) * 2))) >> ((3 - l) * 2))
+						uint32_t rgba;
+						switch ((bitmap >> ((3 - l) * 2)) & 3)
 						{
-							case 0:
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color0R, color0G, color0B, backgroundColorAlpha);
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color0R, color0G, color0B, backgroundColorAlpha);
-								break;
-							case 1:
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color1R, color1G, color1B, foregroundColorAlpha);
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color1R, color1G, color1B, foregroundColorAlpha);
-								break;
-							case 2:
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color2R, color2G, color2B, foregroundColorAlpha);
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color2R, color2G, color2B, foregroundColorAlpha);
-								break;
-							case 3:
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2, i*8 + k, color3R, color3G, color3B, foregroundColorAlpha);
-								imageDataScreen->SetPixelResultRGBA(j*8 + l*2 + 1, i*8 + k, color3R, color3G, color3B, foregroundColorAlpha);
-								break;
+							case 0: rgba = rgba0Bg; break;
+							case 1: rgba = rgba1Fg; break;
+							case 2: rgba = rgba2Fg; break;
+							case 3: rgba = rgba3;   break;
 						}
+						row[l*2]     = rgba;
+						row[l*2 + 1] = rgba;
 					}
 				}
 				else
 				{
-					debugInterface->GetCBMColor(color3, &color3R, &color3G, &color3B);
-					
+					uint32_t rgba3 = colorLut255[color3];
 					for (int l = 0; l < 8; l++)
 					{
-						if (bitmap & (1 << (7 - l)))
-						{
-							//							data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + l] = color3;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, color3R, color3G, color3B, 255);
-						}
-						else
-						{
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + l] = color0;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, color0R, color0G, color0B, 255);
-						}
+						row[l] = (bitmap & (1 << (7 - l))) ? rgba3 : rgba0_255;
 					}
 				}
 			}

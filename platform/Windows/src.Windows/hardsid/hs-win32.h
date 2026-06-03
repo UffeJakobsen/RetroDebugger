@@ -27,6 +27,7 @@
 #ifndef VICE_HS_WIN32_H
 #define VICE_HS_WIN32_H
 
+#include <windows.h>
 #include "sid-snapshot.h"
 #include "vicetypes.h"
 

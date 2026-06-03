@@ -68,6 +68,7 @@ public:
 	std::list<CGuiEvent *> events;
 	void AddEvent(CGuiEvent *event);
 	void ForwardEvents();
+	static u32 GetForwardedAsciiKeyForEvent(u32 mtKey);
 };
 
 

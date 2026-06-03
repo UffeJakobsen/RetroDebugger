@@ -41,7 +41,7 @@
 #include "sysfile.h"
 #include "vicetypes.h"
 
-static log_t c64rom_log = LOG_ERR;
+static log_t c64rom_log = LOG_DEFAULT;
 
 /* Flag: nonzero if the Kernal and BASIC ROMs have been loaded.  */
 static int rom_loaded = 0;
@@ -51,10 +51,10 @@ int c64rom_isloaded(void)
     return rom_loaded;
 }
 
-int c64rom_get_kernal_chksum_id(WORD *sumout, int *idout)
+int c64rom_get_kernal_chksum_id(uint16_t *sumout, int *idout)
 {
     int i;
-    WORD sum;                   /* ROM checksum */
+    uint16_t sum;                   /* ROM checksum */
     int id;                     /* ROM identification number */
 
     /* Check Kernal ROM.  */
@@ -87,7 +87,7 @@ int c64rom_get_kernal_chksum_id(WORD *sumout, int *idout)
           unknown kernals, like the respective vic-20 functions */
 int c64rom_get_kernal_checksum(void)
 {
-    WORD sum;                   /* ROM checksum */
+    uint16_t sum;                   /* ROM checksum */
     int id;                     /* ROM identification number */
 
     if (c64rom_get_kernal_chksum_id(&sum, &id) < 0) {
@@ -105,10 +105,10 @@ int c64rom_cartkernal_active = 0;
 /* the extra parameter cartkernal is used to replace the kernal
    with a cartridge kernal rom image, if it is NULL normal kernal
    is used */
-int c64rom_load_kernal(const char *rom_name, BYTE *cartkernal)
+int c64rom_load_kernal(const char *rom_name, uint8_t *cartkernal)
 {
     int trapfl, rev;
-    WORD sum;                   /* ROM checksum */
+    uint16_t sum;                   /* ROM checksum */
     int id;                     /* ROM identification number */
 
     if (!rom_loaded) {
@@ -130,7 +130,7 @@ int c64rom_load_kernal(const char *rom_name, BYTE *cartkernal)
             return -1;
         }
 
-        if (sysfile_load(rom_name, c64memrom_kernal64_rom, C64_KERNAL_ROM_SIZE, C64_KERNAL_ROM_SIZE) < 0) {
+        if (sysfile_load(rom_name, NULL, c64memrom_kernal64_rom, C64_KERNAL_ROM_SIZE, C64_KERNAL_ROM_SIZE) < 0) {
             log_error(c64rom_log, "Couldn't load kernal ROM `%s'.", rom_name);
             if (machine_class != VICE_MACHINE_VSID) {
                 resources_set_int("VirtualDevices", trapfl);
@@ -146,10 +146,10 @@ int c64rom_load_kernal(const char *rom_name, BYTE *cartkernal)
         resources_get_int("KernalRev", &rev);
     }
     if (c64rom_get_kernal_chksum_id(&sum, &id) < 0) {
-        log_verbose("loaded unknown kernal revision:%d chksum: %d", id, sum);
+        log_verbose(LOG_DEFAULT, "loaded unknown kernal revision:%d chksum: %d", id, sum);
         rev =  C64_KERNAL_UNKNOWN;
     } else {
-        log_verbose("loaded known kernal revision:%d chksum: %d", id, sum);
+        log_verbose(LOG_DEFAULT, "loaded known kernal revision:%d chksum: %d", id, sum);
         rev = id;
     }
     if (machine_class != VICE_MACHINE_C64DTV) {
@@ -167,7 +167,7 @@ int c64rom_load_kernal(const char *rom_name, BYTE *cartkernal)
 int c64rom_get_basic_checksum(void)
 {
     int i;
-    WORD sum;
+    uint16_t sum;
 
     /* Check Basic ROM.  */
 
@@ -189,7 +189,7 @@ int c64rom_load_basic(const char *rom_name)
     }
 
     /* Load Basic ROM.  */
-    if (sysfile_load(rom_name, c64memrom_basic64_rom, C64_BASIC_ROM_SIZE, C64_BASIC_ROM_SIZE) < 0) {
+    if (sysfile_load(rom_name, NULL, c64memrom_basic64_rom, C64_BASIC_ROM_SIZE, C64_BASIC_ROM_SIZE) < 0) {
         log_error(c64rom_log, "Couldn't load basic ROM `%s'.", rom_name);
         return -1;
     }
@@ -204,7 +204,7 @@ int c64rom_load_chargen(const char *rom_name)
 
     /* Load chargen ROM.  */
 
-    if (sysfile_load(rom_name, mem_chargen_rom, C64_CHARGEN_ROM_SIZE, C64_CHARGEN_ROM_SIZE) < 0) {
+    if (sysfile_load(rom_name, NULL, mem_chargen_rom, C64_CHARGEN_ROM_SIZE, C64_CHARGEN_ROM_SIZE) < 0) {
         log_error(c64rom_log, "Couldn't load character ROM `%s'.", rom_name);
         return -1;
     }
@@ -216,7 +216,7 @@ int mem_load(void)
 {
     const char *rom_name = NULL;
 
-    if (c64rom_log == LOG_ERR) {
+    if (c64rom_log == LOG_DEFAULT) {
         c64rom_log = log_open("C64MEM");
     }
 

@@ -1,5 +1,6 @@
 #include "CDebugBreakpointAddr.h"
 #include "CDebugBreakpointsAddr.h"
+#include "CDebugBreakpoint.h"
 #include "CViewDisassembly.h"
 #include "CDebugInterface.h"
 #include "CDebugSymbols.h"
@@ -321,79 +322,152 @@ void CDebugBreakpointsAddr::RenderImGui()
 
 	
 	///
-	
-	// shold we evaluate Enter press as adding the breakpoint or closing the combo?
-	bool skipClosePopupByEnterPressInThisFrame = false;
 
 	if (ImGui::Button("+") || (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)))
 	{
 		ImGui::OpenPopup("addAddrBreakpointPopup");
-		
+
 		addBreakpointPopupAddr = 0;
 		addBreakpointPopupSymbol[0] = '\0';
 		comboFilterTextBuf[0] = 0;
-		
+		comboFilterState.activeIdx = 0;
+
 		imGuiOpenPopupFrame = 0;
-		skipClosePopupByEnterPressInThisFrame = true;
 	}
-	
+
 	if (ImGui::BeginPopup("addAddrBreakpointPopup"))
 	{
 		ImGui::Text(addBreakpointPopupHeadlineStr);
-//		ImGui::SameLine();
-//		ImGui::Text("Address: %04x", )
 		ImGui::Separator();
-		
+
+		const bool isRasterPopup = (breakpointsType == BREAKPOINT_TYPE_RASTER_LINE);
+
+		sprintf(buf, "##addAddrBreakpointPopupAddress_%s", symbols->dataAdapter->adapterID);
+
 		if (imGuiOpenPopupFrame < 2)
 		{
 			ImGui::SetKeyboardFocusHere();
 			imGuiOpenPopupFrame++;
 		}
 
-		sprintf(buf, "##addPCBreakpointPopupAddress_%s", symbols->dataAdapter->adapterID);
-
-		bool buttonAddClicked = false;
-		if (symbols->currentSegment)
+		// Raster has no labels, so input is hex-only. PC accepts label text (free-form).
+		ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
+		if (isRasterPopup)
 		{
-			const char **hints = symbols->currentSegment->codeLabelsArray;
-			int numHints = symbols->currentSegment->numCodeLabelsInArray;
-			
-			// https://github.com/ocornut/imgui/issues/1658   | IM_ARRAYSIZE(hints)
-			if( ComboFilter(buf, comboFilterTextBuf, IM_ARRAYSIZE(comboFilterTextBuf), hints, numHints, comboFilterState, this) )
+			inputFlags |= ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase;
+		}
+
+		ImGui::SetNextItemWidth(220.0f);
+		bool inputActivated = ImGui::InputText(buf, comboFilterTextBuf, IM_ARRAYSIZE(comboFilterTextBuf), inputFlags);
+
+		ImGui::SameLine();
+		bool buttonAddClicked = ImGui::Button("Add");
+
+		// Hint list: PC-style popups only (raster has no labels).
+		const char **hints = NULL;
+		int numHints = 0;
+		if (!isRasterPopup && symbols->currentSegment)
+		{
+			hints = symbols->currentSegment->codeLabelsArray;
+			numHints = symbols->currentSegment->numCodeLabelsInArray;
+		}
+
+		const bool filterIsHex = (comboFilterTextBuf[0] != 0) && FUN_IsHexNumber(comboFilterTextBuf);
+		char needleLower[MAX_LABEL_TEXT_BUFFER_SIZE];
+		int nlen = 0;
+		for (int i = 0; comboFilterTextBuf[i] != 0 && i < (int)sizeof(needleLower) - 1; i++)
+		{
+			char c = comboFilterTextBuf[i];
+			needleLower[nlen++] = (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+		}
+		needleLower[nlen] = 0;
+
+		const int kMaxMatches = 512;
+		int matchIdx[kMaxMatches];
+		int matchCount = 0;
+		if (hints != NULL && numHints > 0 && !filterIsHex)
+		{
+			for (int n = 0; n < numHints && matchCount < kMaxMatches; n++)
 			{
-				LOGD("SELECTED %d comboTextBuf='%s'", comboFilterState.activeIdx, comboFilterTextBuf);
-				skipClosePopupByEnterPressInThisFrame = false; //true;
-				
-				// if that is not address then replace by selected symbol
-				if (FUN_IsHexNumber(comboFilterTextBuf))
+				const char *hay = hints[n];
+				if (hay == NULL) continue;
+
+				bool match = true;
+				if (nlen > 0)
 				{
-					FUN_ToUpperCaseStr(comboFilterTextBuf);
-					addBreakpointPopupAddr = FUN_HexStrToValue(comboFilterTextBuf);
+					match = false;
+					for (const char *p = hay; *p && !match; p++)
+					{
+						const char *h = p;
+						const char *q = needleLower;
+						while (*h && *q)
+						{
+							char hc = *h;
+							if (hc >= 'A' && hc <= 'Z') hc += 32;
+							if (hc != *q) break;
+							h++; q++;
+						}
+						if (*q == 0) match = true;
+					}
 				}
-				else if (hints != NULL && numHints > 0 && comboFilterState.activeIdx < numHints)
-				{
-					strcpy(comboFilterTextBuf, hints[comboFilterState.activeIdx]);
-				}
-			}
-			
-			ImGui::SameLine();
-			if (ImGui::Button("Add"))
-			{
-				buttonAddClicked = true;
+				if (match) matchIdx[matchCount++] = n;
 			}
 		}
-		
-		bool finalizeAddingBreakpoint = buttonAddClicked
-			|| (!skipClosePopupByEnterPressInThisFrame && ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter));
-		
-//		if (ImGui::Button("Create PC Breakpoint"))
-//		{
-//			finalizeAddingBreakpoint = true;
-//		}
-		
+
+		if (comboFilterState.activeIdx >= matchCount) comboFilterState.activeIdx = matchCount > 0 ? matchCount - 1 : 0;
+		if (comboFilterState.activeIdx < 0) comboFilterState.activeIdx = 0;
+
+		bool arrowScrolled = false;
+		if (matchCount > 0)
+		{
+			if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+			{
+				if (comboFilterState.activeIdx < matchCount - 1) comboFilterState.activeIdx++;
+				arrowScrolled = true;
+			}
+			if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+			{
+				if (comboFilterState.activeIdx > 0) comboFilterState.activeIdx--;
+				arrowScrolled = true;
+			}
+		}
+
+		if (hints != NULL && numHints > 0)
+		{
+			ImGui::BeginChild("##addrBpHints", ImVec2(280.0f, 160.0f), true);
+			for (int i = 0; i < matchCount; i++)
+			{
+				int n = matchIdx[i];
+				const char *hay = hints[n];
+				const bool is_selected = (i == comboFilterState.activeIdx);
+				ImGui::PushID(n);
+				if (ImGui::Selectable(hay, is_selected))
+				{
+					strcpy(comboFilterTextBuf, hay);
+					comboFilterState.activeIdx = i;
+					inputActivated = true;
+				}
+				if (is_selected && arrowScrolled)
+				{
+					ImGui::SetScrollHereY();
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndChild();
+		}
+
+		// Enter on a highlighted match commits that label.
+		if (inputActivated && matchCount > 0 && !filterIsHex
+			&& comboFilterState.activeIdx >= 0 && comboFilterState.activeIdx < matchCount)
+		{
+			strcpy(comboFilterTextBuf, hints[matchIdx[comboFilterState.activeIdx]]);
+		}
+
+		bool finalizeAddingBreakpoint = buttonAddClicked || inputActivated;
+
 		if (finalizeAddingBreakpoint)
 		{
-			CDebugSymbolsCodeLabel *label = symbols->currentSegment->FindLabelByText(comboFilterTextBuf);
+			CDebugSymbolsCodeLabel *label = symbols->currentSegment ? symbols->currentSegment->FindLabelByText(comboFilterTextBuf) : NULL;
 			if (label)
 			{
 				addBreakpointPopupAddr = label->address;
@@ -405,10 +479,10 @@ void CDebugBreakpointsAddr::RenderImGui()
 			}
 			else
 			{
-				char *buf = SYS_GetCharBuf();
-				sprintf(buf, "Invalid address or symbol:\n%s", comboFilterTextBuf);
-				guiMain->ShowMessageBox("Can't add breakpoint", buf);
-				SYS_ReleaseCharBuf(buf);
+				char *errBuf = SYS_GetCharBuf();
+				sprintf(errBuf, "Invalid address or symbol:\n%s", comboFilterTextBuf);
+				guiMain->ShowMessageBox("Can't add breakpoint", errBuf);
+				SYS_ReleaseCharBuf(errBuf);
 				addBreakpointPopupAddr = -1;
 			}
 
@@ -424,9 +498,7 @@ void CDebugBreakpointsAddr::RenderImGui()
 				ImGui::CloseCurrentPopup();
 			}
 		}
-						
-		////
-		
+
 		ImGui::EndPopup();
 	}
 

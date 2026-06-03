@@ -130,7 +130,7 @@ int drive_image_attach(disk_image_t *image, unsigned int unit)
     unsigned int dnr;
     drive_t *drive;
 
-    if (unit < 8 || unit >= 8 + DRIVE_NUM) {
+    if (unit < 8 || unit >= 8 + NUM_DISK_UNITS) {
         return -1;
     }
 
@@ -156,7 +156,7 @@ int drive_image_attach(disk_image_t *image, unsigned int unit)
         case DISK_IMAGE_TYPE_G71:
         case DISK_IMAGE_TYPE_X64:
         case DISK_IMAGE_TYPE_P64:
-            disk_image_attach_log(image, driveimage_log, unit);
+            disk_image_attach_log(image, driveimage_log, unit, 0);
             break;
         default:
             return -1;
@@ -200,7 +200,7 @@ int drive_image_detach(disk_image_t *image, unsigned int unit)
     unsigned int dnr, i;
     drive_t *drive;
 
-    if (unit < 8 || unit >= 8 + DRIVE_NUM) {
+    if (unit < 8 || unit >= 8 + NUM_DISK_UNITS) {
         return -1;
     }
 
@@ -216,7 +216,7 @@ int drive_image_detach(disk_image_t *image, unsigned int unit)
             case DISK_IMAGE_TYPE_G71:
             case DISK_IMAGE_TYPE_P64:
             case DISK_IMAGE_TYPE_X64:
-                disk_image_detach_log(image, driveimage_log, unit);
+                disk_image_detach_log(image, driveimage_log, unit, 0);
                 break;
             default:
                 return -1;

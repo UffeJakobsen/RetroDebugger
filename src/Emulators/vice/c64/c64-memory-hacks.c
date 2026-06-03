@@ -38,7 +38,6 @@
 #include "plus60k.h"
 #include "resources.h"
 #include "snapshot.h"
-#include "translate.h"
 #include "vicetypes.h"
 
 static int memory_hack = 0;
@@ -111,11 +110,9 @@ int memory_hacks_resources_init(void)
 
 static const cmdline_option_t cmdline_options[] =
 {
-    { "-memoryexphack", SET_RESOURCE, 1,
+    { "-memoryexphack", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "MemoryHack", NULL,
-      USE_PARAM_ID, USE_DESCRIPTION_ID,
-      IDCLS_P_DEVICE, IDCLS_SET_C64_MEMORY_HACK,
-      NULL, NULL },
+      "<device>", "Set the 'memory expansion hack' device (0: None, 1: C64 256K, 2: +60K, 3: +256K)" },
     CMDLINE_LIST_END
 };
 
@@ -130,10 +127,10 @@ int memory_hacks_cmdline_options_init(void)
 
    type | name  | description
    --------------------------
-   BYTE | hacks | which memory hack is active
+   uint8_t | hacks | which memory hack is active
  */
 
-static char snap_module_name[] = "C64MEMHACKS";
+static const char snap_module_name[] = "C64MEMHACKS";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   0
 
@@ -147,7 +144,7 @@ int memhacks_snapshot_write_modules(struct snapshot_s *s)
         return -1;
     }
 
-    if (SMW_B(m, (BYTE)memory_hack) < 0) {
+    if (SMW_B(m, (uint8_t)memory_hack) < 0) {
         snapshot_module_close(m);
         return -1;
     }
@@ -179,7 +176,7 @@ int memhacks_snapshot_write_modules(struct snapshot_s *s)
 int memhacks_snapshot_read_modules(struct snapshot_s *s)
 {
     snapshot_module_t *m;
-    BYTE vmajor, vminor;
+    uint8_t vmajor, vminor;
 
     m = snapshot_module_open(s, snap_module_name, &vmajor, &vminor);
 
@@ -188,7 +185,7 @@ int memhacks_snapshot_read_modules(struct snapshot_s *s)
     }
 
     /* do not accept higher versions than current */
-    if (vmajor > SNAP_MAJOR || vminor > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }

@@ -84,8 +84,8 @@ void CViewDrive1541StateVIA::Render()
 }
 
 extern "C" {
-	BYTE c64d_via1d1541_peek(drive_context_t *ctxptr, WORD addr);
-	BYTE c64d_via2d_peek(drive_context_t *ctxptr, WORD addr);
+	uint8_t c64d_via1d1541_peek(drive_context_t *ctxptr, uint16_t addr);
+	uint8_t c64d_via2d_peek(drive_context_t *ctxptr, uint16_t addr);
 };
 
 #define VIA_PRB         0  /* Port B */

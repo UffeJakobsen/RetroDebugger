@@ -31,7 +31,6 @@
 
 #include "alarm.h"
 #include "attach.h"
-#include "clkguard.h"
 #include "diskimage.h"
 #include "drive-check.h"
 #include "drive.h"
@@ -52,16 +51,16 @@
 
 /************************************************************************/
 
-#define NUM_FDC DRIVE_NUM
+#define NUM_FDC NUM_DISK_UNITS
 
-static log_t fdc_log = LOG_ERR;
+static log_t fdc_log = LOG_DEFAULT;
 
 typedef struct fdc_t {
     int          fdc_state;
     alarm_t      *fdc_alarm;
     CLOCK        alarm_clk;
-    BYTE         *buffer;
-    BYTE         *iprom;
+    uint8_t         *buffer;
+    uint8_t         *iprom;
     unsigned int drive_type;
     unsigned int num_drives;
     unsigned int last_track;
@@ -131,15 +130,15 @@ void fdc_reset(unsigned int fnum, unsigned int drive_type)
  * Format a disk in DOS1 format
  */
 
-static BYTE fdc_do_format_D20(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
+static uint8_t fdc_do_format_D20(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
                               unsigned int track, unsigned int sector,
-                              int buf, BYTE *header)
+                              int buf, uint8_t *header)
 {
     int i;
     int ret;
-    BYTE rc = 0;
+    uint8_t rc = 0;
     disk_addr_t dadr;
-    BYTE sector_data[256];
+    uint8_t sector_data[256];
 
     if (!memcmp(fdc[fnum].iprom + 0x2040, &fdc[fnum].buffer[0x100], 0x200)) {
         static const unsigned int sectorchangeat[4] = { 0, 17, 24, 30 };
@@ -187,7 +186,7 @@ static BYTE fdc_do_format_D20(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
             }
         }
 
-        file_system_bam_set_disk_id(dnr + 8, header);
+        file_system_bam_set_disk_id(dnr + 8, 0, header);
     }
     if (!rc) {
         rc = FDC_ERR_OK;
@@ -200,15 +199,15 @@ static BYTE fdc_do_format_D20(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
  * Format a disk in DOS2 format
  */
 
-static BYTE fdc_do_format_D40(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
+static uint8_t fdc_do_format_D40(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
                               unsigned int track, unsigned int sector,
-                              int buf, BYTE *header)
+                              int buf, uint8_t *header)
 {
     int i;
     int ret;
-    BYTE rc = 0;
+    uint8_t rc = 0;
     disk_addr_t dadr;
-    BYTE sector_data[256];
+    uint8_t sector_data[256];
 
     if (!memcmp(fdc[fnum].iprom + 0x1000, &fdc[fnum].buffer[0x100], 0x200)) {
         static const unsigned int sectorchangeat[4] = { 0, 17, 24, 30 };
@@ -255,7 +254,7 @@ static BYTE fdc_do_format_D40(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
             }
         }
 
-        file_system_bam_set_disk_id(dnr + 8, header);
+        file_system_bam_set_disk_id(dnr + 8, 0, header);
     }
     if (!rc) {
         rc = FDC_ERR_OK;
@@ -268,15 +267,15 @@ static BYTE fdc_do_format_D40(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
  * Format a disk in DOS2/80 track format
  */
 
-static BYTE fdc_do_format_D80(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
+static uint8_t fdc_do_format_D80(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
                               unsigned int track, unsigned int sector,
-                              int buf, BYTE *header)
+                              int buf, uint8_t *header)
 {
     int i;
     int ret;
-    BYTE rc = 0;
+    uint8_t rc = 0;
     disk_addr_t dadr;
-    BYTE sector_data[256];
+    uint8_t sector_data[256];
 
     if (!memcmp(fdc[fnum].iprom, &fdc[fnum].buffer[0x100], 0x300)) {
         unsigned int ntracks, nsectors = 0;
@@ -339,7 +338,7 @@ static BYTE fdc_do_format_D80(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
             }
         }
 
-        file_system_bam_set_disk_id(dnr + 8, header);
+        file_system_bam_set_disk_id(dnr + 8, 0, header);
     }
     if (!rc) {
         rc = FDC_ERR_OK;
@@ -352,15 +351,15 @@ static BYTE fdc_do_format_D80(fdc_t *fdc, unsigned int fnum, unsigned int dnr,
  * execute an FDC job sent by the main CPU
  */
 #ifdef FDC_DEBUG
-static BYTE fdc_do_job_(unsigned int fnum, int buf,
-                        unsigned int drv, BYTE job, BYTE *header);
+static uint8_t fdc_do_job_(unsigned int fnum, int buf,
+                        unsigned int drv, uint8_t job, uint8_t *header);
 #endif
 
-static BYTE fdc_do_job(unsigned int fnum, int buf,
-                       unsigned int drv, BYTE job, BYTE *header)
+static uint8_t fdc_do_job(unsigned int fnum, int buf,
+                       unsigned int drv, uint8_t job, uint8_t *header)
 {
 #ifdef FDC_DEBUG
-    BYTE retval = fdc_do_job_(fnum, buf, drv, job, header);
+    uint8_t retval = fdc_do_job_(fnum, buf, drv, job, header);
     const char *jobs[] =
         { "Read", "Write", "Verify", "Seek", "Bump", "Jump",
           "ExecWhenRdy", "--" };
@@ -376,18 +375,18 @@ static BYTE fdc_do_job(unsigned int fnum, int buf,
     return retval;
 }
 
-static BYTE fdc_do_job_(unsigned int fnum, int buf,
-                        unsigned int drv, BYTE job, BYTE *header)
+static uint8_t fdc_do_job_(unsigned int fnum, int buf,
+                        unsigned int drv, uint8_t job, uint8_t *header)
 {
 #endif
     unsigned int dnr;
-    BYTE rc;
+    uint8_t rc;
     int ret;
     int i;
     disk_addr_t dadr;
-    BYTE *base;
-    BYTE sector_data[256];
-    BYTE disk_id[2];
+    uint8_t *base;
+    uint8_t sector_data[256];
+    uint8_t disk_id[2];
     drive_t *drive;
 
     dadr.track = header[2];
@@ -419,7 +418,7 @@ static BYTE fdc_do_job_(unsigned int fnum, int buf,
         return FDC_ERR_SYNC;
     }
 
-    file_system_bam_get_disk_id(dnr + 8, disk_id);
+    file_system_bam_get_disk_id(dnr + 8, 0, disk_id);
 
     switch (job) {
         case 0x80:        /* read */
@@ -515,7 +514,7 @@ static BYTE fdc_do_job_(unsigned int fnum, int buf,
                 }
             }
             if (DOS_IS_80(fdc[fnum].drive_type)) {
-                static const BYTE jumpseq[] = {
+                static const uint8_t jumpseq[] = {
                     0x78, 0x6c, 0xfc, 0xff
                 };
                 if (!memcmp(jumpseq, &fdc[fnum].buffer[0x100], 4)) {
@@ -692,7 +691,7 @@ static void int_fdc(CLOCK offset, void *data)
                                    i,                           /* buffer# */
                                    (unsigned int)fdc[fnum].buffer[i + 3] & 1,
                                    /* drive */
-                                   (BYTE)(fdc[fnum].buffer[i + 3] & 0xfe),
+                                   (uint8_t)(fdc[fnum].buffer[i + 3] & 0xfe),
                                    /* job code */
                                    &(fdc[fnum].buffer[j])       /* header */
                                    );
@@ -715,35 +714,20 @@ static void int_fdc(CLOCK offset, void *data)
     }
 }
 
-static void clk_overflow_callback(CLOCK sub, void *data)
-{
-    unsigned int fnum;
-
-    fnum = vice_ptr_to_uint(data);
-
-    if (fdc[fnum].fdc_state != FDC_UNUSED) {
-        if (fdc[fnum].alarm_clk > sub) {
-            fdc[fnum].alarm_clk -= sub;
-        } else {
-            fdc[fnum].alarm_clk = 0;
-        }
-    }
-}
-
 /* FIXME: hack, because 0x4000 is only ok for 1001/8050/8250.
    fdc.c:fdc_do_job() adds an offset for 2040/3040/4040 by itself :-(
    Why donlly get a table for that...! */
 void fdc_init(drive_context_t *drv)
 {
     unsigned int fnum = drv->mynumber;
-    BYTE *buffermem = drv->drive->drive_ram + 0x100;
-    BYTE *ipromp = &(drv->drive->rom[0x4000]);
+    uint8_t *buffermem = drv->drive_ram + 0x100;
+    uint8_t *ipromp = &(drv->rom[0x4000]);
     char *buffer;
 
     fdc[fnum].buffer = buffermem;
     fdc[fnum].iprom = ipromp;
 
-    if (fdc_log == LOG_ERR) {
+    if (fdc_log == LOG_DEFAULT) {
         fdc_log = log_open("fdc");
     }
 
@@ -756,8 +740,6 @@ void fdc_init(drive_context_t *drv)
                                     drv);
     lib_free(buffer);
 
-    clk_guard_add_callback(drv->cpu->clk_guard, clk_overflow_callback,
-                           uint_to_void_ptr(drv->mynumber));
 }
 
 /************************************************************************/
@@ -771,7 +753,7 @@ int fdc_attach_image(disk_image_t *image, unsigned int unit)
                 image, unit);
 #endif
 
-    if (unit < 8 || unit >= 8 + DRIVE_NUM) {
+    if (unit < 8 || unit >= 8 + NUM_DISK_UNITS) {
         return -1;
     }
 
@@ -802,7 +784,7 @@ int fdc_attach_image(disk_image_t *image, unsigned int unit)
         switch (image->type) {
             case DISK_IMAGE_TYPE_D80:
             case DISK_IMAGE_TYPE_D82:
-                disk_image_attach_log(image, fdc_log, unit);
+                disk_image_attach_log(image, fdc_log, unit, 0);
                 break;
             default:
 #ifdef FDC_DEBUG
@@ -819,7 +801,7 @@ int fdc_attach_image(disk_image_t *image, unsigned int unit)
             case DISK_IMAGE_TYPE_G71:
             case DISK_IMAGE_TYPE_P64:
             case DISK_IMAGE_TYPE_X64:
-                disk_image_attach_log(image, fdc_log, unit);
+                disk_image_attach_log(image, fdc_log, unit, 0);
                 break;
             default:
 #ifdef FDC_DEBUG
@@ -844,7 +826,7 @@ int fdc_detach_image(disk_image_t *image, unsigned int unit)
                 image, unit);
 #endif
 
-    if (image == NULL || unit < 8 || unit >= (8 + DRIVE_NUM)) {
+    if (image == NULL || unit < 8 || unit >= (8 + NUM_DISK_UNITS)) {
         return -1;
     }
 
@@ -868,7 +850,7 @@ int fdc_detach_image(disk_image_t *image, unsigned int unit)
         switch (image->type) {
             case DISK_IMAGE_TYPE_D80:
             case DISK_IMAGE_TYPE_D82:
-                disk_image_detach_log(image, fdc_log, unit);
+                disk_image_detach_log(image, fdc_log, unit, 0);
                 break;
             default:
                 return -1;
@@ -881,7 +863,7 @@ int fdc_detach_image(disk_image_t *image, unsigned int unit)
             case DISK_IMAGE_TYPE_G71:
             case DISK_IMAGE_TYPE_P64:
             case DISK_IMAGE_TYPE_X64:
-                disk_image_detach_log(image, fdc_log, unit);
+                disk_image_detach_log(image, fdc_log, unit, 0);
                 break;
             default:
                 return -1;
@@ -899,13 +881,13 @@ int fdc_detach_image(disk_image_t *image, unsigned int unit)
 
    type  | name     | description
    ------------------------------
-   BYTE  | STATE    | FDC state
-   DWORD | CLK      | clk ticks till next fdc invocation
-   BYTE  | NDRV     | number of drives (1 or 2)
-   BYTE  | LTRACK0  | last track
-   BYTE  | LSECTOR0 | last sector
-   BYTE  | LTRACK1  | last track (if ndrv == 2)
-   BYTE  | LSECTOR1 | last sector (if ndrv == 2)
+   uint8_t  | STATE    | FDC state
+   uint32_t | CLK      | clk ticks till next fdc invocation
+   uint8_t  | NDRV     | number of drives (1 or 2)
+   uint8_t  | LTRACK0  | last track
+   uint8_t  | LSECTOR0 | last sector
+   uint8_t  | LTRACK1  | last track (if ndrv == 2)
+   uint8_t  | LSECTOR1 | last sector (if ndrv == 2)
  */
 
 #define SNAP_MAJOR      0
@@ -931,14 +913,14 @@ int fdc_snapshot_write_module(snapshot_t *p, int fnum)
     }
 
     if (0
-        || SMW_B(m, (BYTE)(fdc[fnum].fdc_state)) < 0
+        || SMW_B(m, (uint8_t)(fdc[fnum].fdc_state)) < 0
         /* clk till next invocation */
-        || SMW_DW(m, (DWORD)(fdc[fnum].alarm_clk - drive_clk[fnum])) < 0
+        || SMW_DW(m, (uint32_t)(fdc[fnum].alarm_clk - drive_clk[fnum])) < 0
         /* number of drives - so far 1 only */
         || SMW_B(m, 1) < 0
         /* last accessed track/sector */
-        || SMW_B(m, ((BYTE)(fdc[fnum].last_track))) < 0
-        || SMW_B(m, ((BYTE)(fdc[fnum].last_sector))) < 0) {
+        || SMW_B(m, ((uint8_t)(fdc[fnum].last_track))) < 0
+        || SMW_B(m, ((uint8_t)(fdc[fnum].last_sector))) < 0) {
         snapshot_module_close(m);
         return -1;
     }
@@ -948,12 +930,12 @@ int fdc_snapshot_write_module(snapshot_t *p, int fnum)
 
 int fdc_snapshot_read_module(snapshot_t *p, int fnum)
 {
-    BYTE vmajor, vminor;
-    BYTE byte, ndrv;
-    DWORD dword;
+    uint8_t vmajor, vminor;
+    uint8_t byte, ndrv;
+    uint32_t dword;
     snapshot_module_t *m;
     char *name;
-    BYTE ltrack, lsector;
+    uint8_t ltrack, lsector;
 
     name = lib_msprintf("FDC%d", fnum);
 

@@ -23,6 +23,13 @@ CViewC64AllGraphicsCharsets::CViewC64AllGraphicsCharsets(const char *name, float
 					 32*8, 8*8)
 {
 	this->debugInterface = debugInterface;
+	this->graphicsDataAdapter = NULL;
+	this->useExternalRenderParameters = false;
+	this->renderDataWithColors = false;
+	this->renderColorD021 = 0;
+	this->renderColorD022 = 0;
+	this->renderColorD023 = 0;
+	this->renderColorD800 = 0;
 	
 	imGuiNoWindowPadding = true;
 	imGuiNoScrollbar = true;
@@ -51,15 +58,25 @@ CViewC64AllGraphicsCharsets::CViewC64AllGraphicsCharsets(const char *name, float
 	fontHeight = font->GetCharHeight('@', fontScale) + 2;
 	fontSize = fontHeight;
 
-	// charsets sheet, init images for charsets
+	charsetsImagesAllocated = false;
+
+	minZoom = 0.25f;
+	maxZoom = 60.0f;
+}
+
+void CViewC64AllGraphicsCharsets::EnsureCharsetsImagesAllocated()
+{
+	if (charsetsImagesAllocated)
+		return;
+	charsetsImagesAllocated = true;
+
 	for (int i = 0; i < (0x10000/0x800); i++)
 	{
-		// alloc image that will store charset pixels
 		CImageData *imageData = new CImageData(256, 64, IMG_TYPE_RGBA);
 		imageData->AllocImage(false, true);
-		
+
 		charsetsImageData.push_back(imageData);
-		
+
 		CSlrImage *imageCharset = new CSlrImage(true, false);
 		imageCharset->LoadImageForRebinding(imageData, RESOURCE_PRIORITY_STATIC);
 		imageCharset->resourceType = RESOURCE_TYPE_IMAGE_DYNAMIC;
@@ -68,9 +85,6 @@ CViewC64AllGraphicsCharsets::CViewC64AllGraphicsCharsets(const char *name, float
 
 		charsetsImages.push_back(imageCharset);
 	}
-	
-	minZoom = 0.25f;
-	maxZoom = 60.0f;
 }
 
 CViewC64AllGraphicsCharsets::~CViewC64AllGraphicsCharsets()
@@ -91,19 +105,38 @@ void CViewC64AllGraphicsCharsets::RenderImGui()
 
 void CViewC64AllGraphicsCharsets::Render()
 {
+	EnsureCharsetsImagesAllocated();
+
 	charsetScale = currentZoom;
 	this->charsetSizeX = 256.0f * charsetScale;
 	this->charsetSizeY = 64.0f * charsetScale;
 
 	{
-		// get VIC colors
-		u8 cD021 = viewC64->colorsToShow[1];
-		u8 cD022 = viewC64->colorsToShow[2];
-		u8 cD023 = viewC64->colorsToShow[3];
-		u8 cD800 = viewC64->colorToShowD800;
+		u8 cD021;
+		u8 cD022;
+		u8 cD023;
+		u8 cD800;
+		bool useColors;
+
+		if (useExternalRenderParameters)
+		{
+			useColors = renderDataWithColors;
+			cD021 = renderColorD021;
+			cD022 = renderColorD022;
+			cD023 = renderColorD023;
+			cD800 = renderColorD800;
+		}
+		else
+		{
+			useColors = viewC64->viewC64MemoryDataDump->renderDataWithColors;
+			cD021 = viewC64->colorsToShow[1];
+			cD022 = viewC64->colorsToShow[2];
+			cD023 = viewC64->colorsToShow[3];
+			cD800 = viewC64->colorToShowD800;
+		}
 		
 		// render charsets
-		UpdateCharsets(viewC64->viewC64MemoryDataDump->renderDataWithColors, cD021, cD022, cD023, cD800);
+		UpdateCharsets(useColors, cD021, cD022, cD023, cD800);
 		
 		float startX = renderMapPosX;
 		float startY = renderMapPosY;
@@ -201,7 +234,7 @@ void CViewC64AllGraphicsCharsets::UpdateCharsets(bool useColors, u8 colorD021, u
 	std::vector<CImageData *>::iterator itImageData = charsetsImageData.begin();
 	
 	int addr = 0x0000;
-	CDataAdapter *dataAdapter = viewC64->debugInterfaceC64->dataAdapterC64DirectRam;
+	CDataAdapter *dataAdapter = GetGraphicsDataAdapter();
 	
 	//	int zi = 0;
 	while(itImage != charsetsImages.end())
@@ -211,25 +244,9 @@ void CViewC64AllGraphicsCharsets::UpdateCharsets(bool useColors, u8 colorD021, u
 		CSlrImage *image = *itImage;
 		CImageData *imageData = *itImageData;
 		
-		u8 charsetData[0x800];
-		
-		for (int i = 0; i < 0x800; i++)
-		{
-			u8 v;
-			dataAdapter->AdapterReadByte(addr, &v);
-			charsetData[i] = v;
-			addr++;
-		}
-		
-		if (useColors == false)
-		{
-			CopyHiresCharsetToImage(charsetData, imageData, 32, 0, 1, viewC64->debugInterfaceC64);
-		}
-		else
-		{
-			CopyMultiCharsetToImage(charsetData, imageData, 32, colorD021, colorD022, colorD023,
-									colorD800, viewC64->debugInterfaceC64);
-		}
+		CopyCharsetFromAdapterToImage(dataAdapter, addr, imageData, useColors,
+						 colorD021, colorD022, colorD023, colorD800, debugInterface);
+		addr += 0x800;
 		
 		// re-bind image
 		image->ReBindImageData(imageData);
@@ -237,6 +254,34 @@ void CViewC64AllGraphicsCharsets::UpdateCharsets(bool useColors, u8 colorD021, u
 		itImage++;
 		itImageData++;
 	}
+}
+
+CDataAdapter *CViewC64AllGraphicsCharsets::GetGraphicsDataAdapter()
+{
+	if (graphicsDataAdapter != NULL)
+		return graphicsDataAdapter;
+
+	return debugInterface->dataAdapterC64DirectRam;
+}
+
+void CViewC64AllGraphicsCharsets::SetGraphicsDataAdapter(CDataAdapter *dataAdapter)
+{
+	graphicsDataAdapter = dataAdapter;
+}
+
+void CViewC64AllGraphicsCharsets::SetRenderParameters(bool useColors, u8 colorD021, u8 colorD022, u8 colorD023, u8 colorD800)
+{
+	useExternalRenderParameters = true;
+	renderDataWithColors = useColors;
+	renderColorD021 = colorD021;
+	renderColorD022 = colorD022;
+	renderColorD023 = colorD023;
+	renderColorD800 = colorD800;
+}
+
+void CViewC64AllGraphicsCharsets::ResetRenderParameters()
+{
+	useExternalRenderParameters = false;
 }
 
 //void CViewC64AllGraphicsCharsets::UpdateShowIOButton()
@@ -536,4 +581,3 @@ void CViewC64AllGraphicsCharsets::DeactivateView()
 {
 	LOGG("CViewC64AllGraphicsCharsets::DeactivateView()");
 }
-

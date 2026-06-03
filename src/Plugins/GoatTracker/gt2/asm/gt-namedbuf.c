@@ -31,6 +31,7 @@
 #include "gt-membufio.h"
 
 #include <stdlib.h>
+#include "gt-abort.h"
 
 
 struct sbe

@@ -43,7 +43,15 @@
 #include "util.h"
 
 
-static log_t palette_log = LOG_ERR;
+/* #define DEBUG_PALETTE */
+
+#ifdef DEBUG_PALETTE
+#define DBG(x) log_printf  x
+#else
+#define DBG(x)
+#endif
+
+static log_t palette_log = LOG_DEFAULT;
 
 
 palette_t *palette_create(unsigned int num_entries, const char *entry_names[])
@@ -58,7 +66,7 @@ palette_t *palette_create(unsigned int num_entries, const char *entry_names[])
 
     if (entry_names != NULL) {
         for (i = 0; i < num_entries; i++) {
-            p->entries[i].name = lib_stralloc(entry_names[i]);
+            p->entries[i].name = lib_strdup(entry_names[i]);
         }
     }
 
@@ -81,7 +89,7 @@ void palette_free(palette_t *p)
 }
 
 static int palette_set_entry(palette_t *p, unsigned int number,
-                             BYTE red, BYTE green, BYTE blue, BYTE dither)
+                             uint8_t red, uint8_t green, uint8_t blue)
 {
     if (p == NULL || number >= p->num_entries) {
         return -1;
@@ -90,7 +98,6 @@ static int palette_set_entry(palette_t *p, unsigned int number,
     p->entries[number].red = red;
     p->entries[number].green = green;
     p->entries[number].blue = blue;
-    p->entries[number].dither = dither;
 
     return 0;
 }
@@ -107,19 +114,19 @@ static int palette_copy(palette_t *dest, const palette_t *src)
 
     for (i = 0; i < src->num_entries; i++) {
         palette_set_entry(dest, i, src->entries[i].red, src->entries[i].green,
-                          src->entries[i].blue, src->entries[i].dither);
+                          src->entries[i].blue);
     }
 
     return 0;
 }
 
-static char *next_nonspace(const char *p)
+static const char *next_nonspace(const char *p)
 {
-    while (*p != '\0' && isspace((int)*p)) {
+    while (*p != '\0' && isspace((unsigned char)*p)) {
         p++;
     }
 
-    return (char *)p;
+    return p;
 }
 
 static int palette_load_core(FILE *f, const char *file_name,
@@ -133,7 +140,7 @@ static int palette_load_core(FILE *f, const char *file_name,
 
     while (1) {
         int i;
-        BYTE values[4];
+        uint8_t values[3];
         const char *p1;
 
         int line_len = util_get_line(buf, 1024, f);
@@ -154,42 +161,39 @@ static int palette_load_core(FILE *f, const char *file_name,
             continue;
         }
 
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < 3; i++) {
             long result;
             const char *p2;
 
             if (util_string_to_long(p1, &p2, 16, &result) < 0) {
-                log_error(palette_log, "%s, %d: number expected.",
+                log_error(palette_log, "%s, %u: number expected.",
                           file_name, line_num);
                 return -1;
             }
             if (result < 0
-                || (i == 3 && result > 0xf)
-                || result > 0xff
-                || result < 0) {
-                log_error(palette_log, "%s, %d: invalid value %lx.",
+                || result > 0xff) {
+                log_error(palette_log, "%s, %u: invalid value %lx.",
                           file_name, line_num, result);
                 return -1;
             }
-            values[i] = (BYTE)result;
+            values[i] = (uint8_t)result;
             p1 = p2;
         }
 
         p1 = next_nonspace(p1);
         if (*p1 != '\0') {
-            log_error(palette_log,
-                      "%s, %d: garbage at end of line.",
+            log_warning(palette_log,
+                      "%s, %u: garbage at end of line.",
                       file_name, line_num);
-            return -1;
         }
         if (entry_num >= palette_return->num_entries) {
             log_error(palette_log,
-                      "%s: too many entries, %d expected.", file_name,
+                      "%s: too many entries, %u expected.", file_name,
                       palette_return->num_entries);
             return -1;
         }
         if (palette_set_entry(tmp_palette, entry_num,
-                              values[0], values[1], values[2], values[3]) < 0) {
+                              values[0], values[1], values[2]) < 0) {
             log_error(palette_log, "Failed to set palette entry.");
             return -1;
         }
@@ -202,7 +206,7 @@ static int palette_load_core(FILE *f, const char *file_name,
     }
 
     if (entry_num < palette_return->num_entries) {
-        log_error(palette_log, "%s: too few entries, %d found, %d expected.",
+        log_error(palette_log, "%s: too few entries, %u found, %u expected.",
                   file_name, entry_num, palette_return->num_entries);
         return -1;
     }
@@ -215,8 +219,9 @@ static int palette_load_core(FILE *f, const char *file_name,
     return 0;
 }
 
-int palette_load(const char *file_name, palette_t *palette_return)
+int palette_load(const char *file_name, const char *subpath, palette_t *palette_return)
 {
+    (void)subpath;
     palette_t *tmp_palette;
     char *complete_path;
     FILE *f;
@@ -226,14 +231,14 @@ int palette_load(const char *file_name, palette_t *palette_return)
         return 0;
     }
 
-    f = sysfile_open(file_name, &complete_path, MODE_READ_TEXT);
+    f = sysfile_open(file_name, NULL, &complete_path, MODE_READ_TEXT);
 
     if (f == NULL) {
         /* Try to add the extension.  */
-        char *tmp = lib_stralloc(file_name);
+        char *tmp = lib_strdup(file_name);
 
         util_add_extension(&tmp, "vpl");
-        f = sysfile_open(tmp, &complete_path, MODE_READ_TEXT);
+        f = sysfile_open(tmp, NULL, &complete_path, MODE_READ_TEXT);
         lib_free(tmp);
 
         if (f == NULL) {
@@ -267,15 +272,14 @@ int palette_save(const char *file_name, const palette_t *palette)
     }
 
     fprintf(f, "#\n# VICE Palette file\n#\n");
-    fprintf(f, "# Syntax:\n# Red Green Blue Dither\n#\n\n");
+    fprintf(f, "# Syntax:\n# Red Green Blue\n#\n\n");
 
     for (i = 0; i < palette->num_entries; i++) {
-        fprintf(f, "# %s\n%02X %02X %02X %01X\n\n",
+        fprintf(f, "# %s\n%02X %02X %02X\n\n",
                 palette->entries[i].name,
                 palette->entries[i].red,
                 palette->entries[i].green,
-                palette->entries[i].blue,
-                palette->entries[i].dither);
+                palette->entries[i].blue);
     }
 
     return fclose(f);

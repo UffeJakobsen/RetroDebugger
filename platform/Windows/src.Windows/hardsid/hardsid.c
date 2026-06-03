@@ -32,6 +32,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <windows.h>
 
 #include "hardsid.h"
 #include "sid-snapshot.h"

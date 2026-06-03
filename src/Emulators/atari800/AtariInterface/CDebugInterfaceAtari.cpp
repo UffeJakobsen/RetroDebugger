@@ -16,11 +16,17 @@ extern "C" {
 #include "AtariWrapper.h"
 #include "sio.h"
 #include "cfg.h"
+#include "antic.h"
+#include "gtia.h"
+#include "pokey.h"
+#include "pia.h"
 }
 #endif
 
 #include "CDebugInterfaceAtari.h"
+#include "CDebugInterfaceAtariTasks.h"
 #include "CDebuggerApiAtari.h"
+#include "CDebuggerServerApiAtari.h"
 #include "RES_ResourceManager.h"
 #include "CByteBuffer.h"
 #include "CSlrString.h"
@@ -129,10 +135,12 @@ void CDebugInterfaceAtari::StepOneCycle()
 CDebugInterfaceAtari::~CDebugInterfaceAtari()
 {
 	debugInterfaceAtari = NULL;
-	if (screenImageData)
+	for (int i = 0; i < 3; i++)
 	{
-		delete screenImageData;
+		delete screenImageDataBuf[i];
+		screenImageDataBuf[i] = NULL;
 	}
+	screenImageData = NULL;
 	
 	if (dataAdapter)
 	{
@@ -186,6 +194,105 @@ const char *CDebugInterfaceAtari::GetPlatformNameString()
 const char *CDebugInterfaceAtari::GetPlatformNameEndpointString()
 {
 	return "atari800";
+}
+
+u8 CDebugInterfaceAtari::GetAnticRegister(int reg)
+{
+	switch (reg)
+	{
+		case 0x00: return ANTIC_DMACTL;
+		case 0x01: return ANTIC_CHACTL;
+		case 0x02: return ANTIC_dlist & 0xFF;
+		case 0x03: return (ANTIC_dlist >> 8) & 0xFF;
+		case 0x04: return ANTIC_HSCROL;
+		case 0x05: return ANTIC_VSCROL;
+		case 0x07: return ANTIC_PMBASE;
+		case 0x09: return ANTIC_CHBASE;
+		case 0x0B: return ANTIC_ypos >> 1;  // VCOUNT
+		case 0x0E: return ANTIC_NMIEN;
+		case 0x0F: return ANTIC_NMIST;
+		default: return 0;
+	}
+}
+
+u8 CDebugInterfaceAtari::GetGtiaRegister(int reg)
+{
+	switch (reg)
+	{
+		case 0x12: return GTIA_COLPM0;
+		case 0x13: return GTIA_COLPM1;
+		case 0x14: return GTIA_COLPM2;
+		case 0x15: return GTIA_COLPM3;
+		case 0x16: return GTIA_COLPF0;
+		case 0x17: return GTIA_COLPF1;
+		case 0x18: return GTIA_COLPF2;
+		case 0x19: return GTIA_COLPF3;
+		case 0x1A: return GTIA_COLBK;
+		case 0x1B: return GTIA_PRIOR;
+		case 0x1D: return GTIA_GRACTL;
+		default: return 0;
+	}
+}
+
+u8 CDebugInterfaceAtari::GetPokeyRegister(int reg)
+{
+	// POKEY registers are arrays: POKEY_AUDF[0..3], POKEY_AUDC[0..3], POKEY_AUDCTL[0]
+	switch (reg)
+	{
+		case 0x00: return POKEY_AUDF[0];
+		case 0x01: return POKEY_AUDC[0];
+		case 0x02: return POKEY_AUDF[1];
+		case 0x03: return POKEY_AUDC[1];
+		case 0x04: return POKEY_AUDF[2];
+		case 0x05: return POKEY_AUDC[2];
+		case 0x06: return POKEY_AUDF[3];
+		case 0x07: return POKEY_AUDC[3];
+		case 0x08: return POKEY_AUDCTL[0];
+		case 0x0E: return POKEY_IRQEN;
+		case 0x0F: return POKEY_SKCTL;
+		default: return 0;
+	}
+}
+
+u8 CDebugInterfaceAtari::GetPiaRegister(int reg)
+{
+	switch (reg)
+	{
+		case 0x00: return PIA_PORTA;
+		case 0x01: return PIA_PORTB;
+		case 0x02: return PIA_PACTL;
+		case 0x03: return PIA_PBCTL;
+		default: return 0;
+	}
+}
+
+void CDebugInterfaceAtari::SetAnticRegister(int reg, u8 value)
+{
+	ANTIC_PutByte((UWORD)reg, (UBYTE)value);
+}
+
+void CDebugInterfaceAtari::SetGtiaRegister(int reg, u8 value)
+{
+	GTIA_PutByte((UWORD)reg, (UBYTE)value);
+}
+
+void CDebugInterfaceAtari::SetPokeyRegister(int reg, u8 value)
+{
+	POKEY_PutByte((UWORD)reg, (UBYTE)value);
+}
+
+void CDebugInterfaceAtari::SetPiaRegister(int reg, u8 value)
+{
+	PIA_PutByte((UWORD)reg, (UBYTE)value);
+}
+
+CDebuggerServerApi *CDebugInterfaceAtari::GetDebuggerServerApi()
+{
+	if (debuggerServerApi)
+		return debuggerServerApi;
+
+	debuggerServerApi = new CDebuggerServerApiAtari(this);
+	return debuggerServerApi;
 }
 
 float CDebugInterfaceAtari::GetEmulationFPS()
@@ -415,6 +522,7 @@ void CDebugInterfaceAtari::RefreshScreenNoCallback()
 	}
 	
 	this->UnlockRenderScreenMutex();
+	this->PublishScreenImage();
 }
 
 
@@ -481,6 +589,12 @@ extern "C" {
 							 UBYTE *ret_CPU_IRQ);
 }
 
+void CDebugInterfaceAtari::GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S)
+{
+	u8 irq;
+	Atari800_GetCpuRegs(PC, A, X, Y, P, S, &irq);
+}
+
 void CDebugInterfaceAtari::GetCpuRegs(u16 *PC,
 				u8 *A,
 				u8 *X,
@@ -515,8 +629,8 @@ void CDebugInterfaceAtari::SetDebugMode(uint8 debugMode)
 
 uint8 CDebugInterfaceAtari::GetDebugMode()
 {
-	this->debugMode = atrd_debug_mode;
-	return debugMode;
+	this->debugMode.store(atrd_debug_mode, std::memory_order_release);
+	return this->debugMode.load(std::memory_order_acquire);
 }
 
 // make jmp without resetting CPU depending on dataAdapter
@@ -768,160 +882,135 @@ bool CDebugInterfaceAtari::KeyboardDown(uint32 mtKeyCode)
 	{
 		CDebuggerEmulatorPlugin *plugin = *it;
 		mtKeyCode = plugin->KeyDown(mtKeyCode);
-		
+
 		if (mtKeyCode == 0)
 			return false;
 	}
-	
-	
 
-	int shiftctrl = 0;
-
-	if (mtKeyCode == MTKEY_LSHIFT || mtKeyCode == MTKEY_RSHIFT)
-	{
-		INPUT_key_shift = 1;
-	}
-
-	if (mtKeyCode == MTKEY_LCONTROL || mtKeyCode == MTKEY_RCONTROL)
-	{
-		key_control = 1;
-	}
-
-	//	/* SHIFT STATE */
-	//	if ((kbhits[SDLK_LSHIFT]) || (kbhits[SDLK_RSHIFT]))
-	//		INPUT_key_shift = 1;
-	//	else
-	//		INPUT_key_shift = 0;
-	//
-	//	/* CONTROL STATE */
-	//	if ((kbhits[SDLK_LCTRL]) || (kbhits[SDLK_RCTRL]))
-	//		key_control = 1;
-	//	else
-	//		key_control = 0;
-
-
-	// OPTION / SELECT / START keys
-	if (mtKeyCode == MTKEY_F2)
-	{
-		INPUT_key_consol &= ~INPUT_CONSOL_OPTION;
-		return true;
-	}
-
-	if (mtKeyCode == MTKEY_F3)
-	{
-		INPUT_key_consol &= ~INPUT_CONSOL_SELECT;
-		return true;
-	}
-	
-	if (mtKeyCode == MTKEY_F4)
-	{
-		INPUT_key_consol &= ~INPUT_CONSOL_START;
-		return true;
-	}
-	
-	if (INPUT_key_shift)
-		shiftctrl ^= AKEY_SHFT;
-
-	int akey = MapMTKeyToAKey(mtKeyCode, shiftctrl, key_control);
-	
-	INPUT_key_code = akey;
-	return true;
+	// Dispatch to task queue for deterministic recording + application
+	CDebugInterfaceAtariTaskKeyboardEvent *task =
+		new CDebugInterfaceAtariTaskKeyboardEvent(this, DEBUGGER_EVENT_BUTTON_DOWN, mtKeyCode);
+	AddCpuDebugInterruptTask(task);
+	atrd_input_tasks_flag = 1;
+	return false;
 }
 
 bool CDebugInterfaceAtari::KeyboardUp(uint32 mtKeyCode)
 {
 	LOGI("CDebugInterfaceAtari::KeyboardUp: mtKeyCode=%04x INPUT_key_consol=%02x", mtKeyCode, INPUT_key_consol);
-	
+
 	for (std::list<CDebuggerEmulatorPlugin *>::iterator it = this->plugins.begin(); it != this->plugins.end(); it++)
 	{
 		CDebuggerEmulatorPlugin *plugin = *it;
 		mtKeyCode = plugin->KeyUp(mtKeyCode);
-		
+
 		if (mtKeyCode == 0)
 			return false;
 	}
-	
-	
-	// OPTION / SELECT / START keys
-	if (mtKeyCode == MTKEY_F2)
-	{
-		INPUT_key_consol |= INPUT_CONSOL_OPTION;
-		return true;
-	}
-	
-	if (mtKeyCode == MTKEY_F3)
-	{
-		INPUT_key_consol |= INPUT_CONSOL_SELECT;
-		return true;
-	}
-	
-	if (mtKeyCode == MTKEY_F4)
-	{
-		INPUT_key_consol |= INPUT_CONSOL_START;
-		return true;
-	}
-	
-	
-	INPUT_key_code = AKEY_NONE;
 
-	if (mtKeyCode == MTKEY_LSHIFT || mtKeyCode == MTKEY_RSHIFT)
-	{
-		INPUT_key_shift = 0;
-	}
-	
-	if (mtKeyCode == MTKEY_LCONTROL || mtKeyCode == MTKEY_RCONTROL)
-	{
-		key_control = 0;
-	}
-	
-	return true;
+	CDebugInterfaceAtariTaskKeyboardEvent *task =
+		new CDebugInterfaceAtariTaskKeyboardEvent(this, DEBUGGER_EVENT_BUTTON_UP, mtKeyCode);
+	AddCpuDebugInterruptTask(task);
+	atrd_input_tasks_flag = 1;
+	return false;
 }
 
 void CDebugInterfaceAtari::JoystickDown(int port, uint32 axis)
 {
-	LOGD("CDebugInterfaceAtari::JoystickDown: port=%d axis=%d", port, axis);
-
-	if (axis == JOYPAD_N)
-	{
-		if (this->joystickState[port] & JOYPAD_S)
-		{
-			this->joystickState[port] &= ~JOYPAD_S;
-		}
-	}
-	if (axis == JOYPAD_S)
-	{
-		if (this->joystickState[port] & JOYPAD_N)
-		{
-			this->joystickState[port] &= ~JOYPAD_N;
-		}
-	}
-	if (axis == JOYPAD_E)
-	{
-		if (this->joystickState[port] & JOYPAD_W)
-		{
-			this->joystickState[port] &= ~JOYPAD_W;
-		}
-	}
-	if (axis == JOYPAD_W)
-	{
-		if (this->joystickState[port] & JOYPAD_E)
-		{
-			this->joystickState[port] &= ~JOYPAD_E;
-		}
-	}
-	
-	this->joystickState[port] |= axis;
-	
-	LOGD("DOWN joystickState[%d] = %0x", port, this->joystickState[port]);
+	CDebugInterfaceAtariTaskJoystickEvent *task =
+		new CDebugInterfaceAtariTaskJoystickEvent(this, DEBUGGER_EVENT_BUTTON_DOWN, port, axis);
+	AddCpuDebugInterruptTask(task);
+	atrd_input_tasks_flag = 1;
 }
 
 void CDebugInterfaceAtari::JoystickUp(int port, uint32 axis)
 {
-	LOGD("CDebugInterfaceAtari::JoystickUp: port=%d axis=%d", port, axis);
-	
-	this->joystickState[port] &= ~axis;
+	CDebugInterfaceAtariTaskJoystickEvent *task =
+		new CDebugInterfaceAtariTaskJoystickEvent(this, DEBUGGER_EVENT_BUTTON_UP, port, axis);
+	AddCpuDebugInterruptTask(task);
+	atrd_input_tasks_flag = 1;
+}
 
-	LOGD("UP   joystickState[%d] = %0x", port, this->joystickState[port]);
+void CDebugInterfaceAtari::ReplayInputEventsFromSnapshotsManager(CByteBuffer *inputEventsBuffer)
+{
+	LOGD("CDebugInterfaceAtari::ReplayInputEventsFromSnapshotsManager");
+
+	while (inputEventsBuffer->IsEof() == false)
+	{
+		u8 eventType = inputEventsBuffer->GetU8();
+
+		if (eventType == DEBUGGER_EVENT_TYPE_JOYSTICK)
+		{
+			int port = inputEventsBuffer->GetI32();
+			u32 axis = inputEventsBuffer->GetU32();
+			u8 buttonState = inputEventsBuffer->GetU8();
+
+			if (buttonState == DEBUGGER_EVENT_BUTTON_DOWN)
+			{
+				// Apply with same conflict resolution as JoystickDown
+				if (axis == JOYPAD_N && (this->joystickState[port] & JOYPAD_S))
+					this->joystickState[port] &= ~JOYPAD_S;
+				if (axis == JOYPAD_S && (this->joystickState[port] & JOYPAD_N))
+					this->joystickState[port] &= ~JOYPAD_N;
+				if (axis == JOYPAD_E && (this->joystickState[port] & JOYPAD_W))
+					this->joystickState[port] &= ~JOYPAD_W;
+				if (axis == JOYPAD_W && (this->joystickState[port] & JOYPAD_E))
+					this->joystickState[port] &= ~JOYPAD_E;
+				this->joystickState[port] |= axis;
+			}
+			else
+			{
+				this->joystickState[port] &= ~axis;
+			}
+		}
+		else if (eventType == DEBUGGER_EVENT_TYPE_KEYBOARD)
+		{
+			u32 keyCode = inputEventsBuffer->GetU32();
+			u8 buttonState = inputEventsBuffer->GetU8();
+
+			// Replay directly to Atari keyboard globals — bypass plugin loop
+			// (plugins already ran during recording, replayed events are final)
+			if (buttonState == DEBUGGER_EVENT_BUTTON_DOWN)
+			{
+				int shiftctrl = 0;
+				if (keyCode == MTKEY_LSHIFT || keyCode == MTKEY_RSHIFT)
+					INPUT_key_shift = 1;
+				if (keyCode == MTKEY_LCONTROL || keyCode == MTKEY_RCONTROL)
+					key_control = 1;
+				if (keyCode == MTKEY_F2) { INPUT_key_consol &= ~INPUT_CONSOL_OPTION; }
+				else if (keyCode == MTKEY_F3) { INPUT_key_consol &= ~INPUT_CONSOL_SELECT; }
+				else if (keyCode == MTKEY_F4) { INPUT_key_consol &= ~INPUT_CONSOL_START; }
+				else
+				{
+					if (INPUT_key_shift) shiftctrl ^= AKEY_SHFT;
+					INPUT_key_code = MapMTKeyToAKey(keyCode, shiftctrl, key_control);
+				}
+			}
+			else
+			{
+				if (keyCode == MTKEY_F2) { INPUT_key_consol |= INPUT_CONSOL_OPTION; }
+				else if (keyCode == MTKEY_F3) { INPUT_key_consol |= INPUT_CONSOL_SELECT; }
+				else if (keyCode == MTKEY_F4) { INPUT_key_consol |= INPUT_CONSOL_START; }
+				else { INPUT_key_code = AKEY_NONE; }
+				if (keyCode == MTKEY_LSHIFT || keyCode == MTKEY_RSHIFT)
+					INPUT_key_shift = 0;
+				if (keyCode == MTKEY_LCONTROL || keyCode == MTKEY_RCONTROL)
+					key_control = 0;
+			}
+		}
+		else
+		{
+			LOGError("CDebugInterfaceAtari::ReplayInputEventsFromSnapshotsManager: unknown event type %d", eventType);
+			break;
+		}
+	}
+}
+
+uint32 CDebugInterfaceAtari::GetJoystickState(int port)
+{
+	if (port >= 0 && port < NUM_ATARI_JOYSTICKS)
+		return this->joystickState[port];
+	return JOYPAD_IDLE;
 }
 
 //
@@ -1172,12 +1261,22 @@ bool CDebugInterfaceAtari::LoadChipsSnapshotSynced(CByteBuffer *byteBuffer)
 	if (ret == false)
 	{
 		LOGError("CDebugInterfaceAtari::LoadFullSnapshotSynced: failed");
-		
+
 		debugInterfaceAtari->UnlockMutex();
 		gSoundEngine->UnlockMutex("LoadChipsSnapshotSynced");
 		return false;
 	}
-	
+
+	// Clear input tracking state to prevent stale keyboard/joystick data
+	// from bleeding through after snapshot restore during input event replay.
+	// These globals are not part of the Atari800 snapshot.
+	INPUT_key_code = AKEY_NONE;
+	INPUT_key_shift = 0;
+	INPUT_key_consol = INPUT_CONSOL_NONE;
+	key_control = 0;
+	for (int i = 0; i < NUM_ATARI_JOYSTICKS; i++)
+		joystickState[i] = JOYPAD_IDLE;
+
 	debugInterfaceAtari->UnlockMutex();
 	gSoundEngine->UnlockMutex("LoadChipsSnapshotSynced");
 	return true;

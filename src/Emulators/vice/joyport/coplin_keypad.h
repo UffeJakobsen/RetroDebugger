@@ -27,8 +27,8 @@
 #ifndef VICE_COPLIN_KEYPAD_H
 #define VICE_COPLIN_KEYPAD_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int joyport_coplin_keypad_resources_init(void);
+int joyport_coplin_keypad_resources_init(void);
 
 #endif

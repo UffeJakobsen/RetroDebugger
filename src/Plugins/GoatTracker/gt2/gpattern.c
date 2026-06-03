@@ -23,6 +23,19 @@ unsigned char jankokeytbl1[] = {KEY_Z, KEY_S, KEY_X, KEY_D, KEY_C, KEY_F, KEY_V,
 unsigned char jankokeytbl2[] = {KEY_Q, KEY_2, KEY_W, KEY_3, KEY_E, KEY_4, KEY_R,
   KEY_5, KEY_T, KEY_6, KEY_Y, KEY_7, KEY_U, KEY_8, KEY_I, KEY_9, KEY_O, KEY_0, KEY_P};
 
+// Renoise layout (initialized as copy of Tracker; will diverge as Renoise-specific bindings land)
+unsigned char renoisekeytbl1[] = {KEY_Z, KEY_S, KEY_X, KEY_D, KEY_C, KEY_V,
+  KEY_G, KEY_B, KEY_H, KEY_N, KEY_J, KEY_M, KEY_COMMA, KEY_L, KEY_COLON};
+
+unsigned char renoisekeytbl2[] = {KEY_Q, KEY_2, KEY_W, KEY_3, KEY_E, KEY_R,
+  KEY_5, KEY_T, KEY_6, KEY_Y, KEY_7, KEY_U, KEY_I, KEY_9, KEY_O, KEY_0, KEY_P};
+
+// Custom layout (initialized as copy of Tracker, editable by user)
+unsigned char customkeytbl1[15] = {KEY_Z, KEY_S, KEY_X, KEY_D, KEY_C, KEY_V,
+  KEY_G, KEY_B, KEY_H, KEY_N, KEY_J, KEY_M, KEY_COMMA, KEY_L, KEY_COLON};
+unsigned char customkeytbl2[17] = {KEY_Q, KEY_2, KEY_W, KEY_3, KEY_E, KEY_R,
+  KEY_5, KEY_T, KEY_6, KEY_Y, KEY_7, KEY_U, KEY_I, KEY_9, KEY_O, KEY_0, KEY_P};
+
 unsigned char patterncopybuffer[MAX_PATTROWS*4+4];
 unsigned char cmdcopybuffer[MAX_PATTROWS*4+4];
 int patterncopyrows = 0;
@@ -37,6 +50,22 @@ int epoctave = 2;
 int epmarkchn = -1;
 int epmarkstart;
 int epmarkend;
+
+void gt2advanceeditstep(void)
+{
+  if (gt2RenoiseEditStep <= 0) return;
+
+  int len = pattlen[epnum[epchn]];
+  if (len < 0)
+  {
+    eppos = 0;
+    return;
+  }
+
+  int span = len + 1;
+  eppos = (int)(((long long)eppos + (long long)gt2RenoiseEditStep) % span);
+  epview = eppos - VISIBLEPATTROWS / 2;
+}
 
 void patterncommands(void)
 {
@@ -93,6 +122,40 @@ void patterncommands(void)
 				  }
 			  }
 			  break;
+
+		  case KEY_CUSTOM:
+			  for (c = 0; c < 15; c++)
+			  {
+				  if ((virtualkeycode == customkeytbl1[c]) && (!epcolumn) && (!shiftpressed))
+				  {
+					  newnote = FIRSTNOTE+c+epoctave*12;
+				  }
+			  }
+			  for (c = 0; c < 17; c++)
+			  {
+				  if ((virtualkeycode == customkeytbl2[c]) && (!epcolumn) && (!shiftpressed))
+				  {
+					  newnote = FIRSTNOTE+c+(epoctave+1)*12;
+				  }
+			  }
+			  break;
+
+		  case KEY_RENOISE:
+			  for (c = 0; c < sizeof(renoisekeytbl1); c++)
+			  {
+				  if ((virtualkeycode == renoisekeytbl1[c]) && (!epcolumn) && (!shiftpressed))
+				  {
+					  newnote = FIRSTNOTE+c+epoctave*12;
+				  }
+			  }
+			  for (c = 0; c < sizeof(renoisekeytbl2); c++)
+			  {
+				  if ((virtualkeycode == renoisekeytbl2[c]) && (!epcolumn) && (!shiftpressed))
+				  {
+					  newnote = FIRSTNOTE+c+(epoctave+1)*12;
+				  }
+			  }
+			  break;
       }
       
       virtualkeycode = 0xff; // Reset after handling
@@ -142,6 +205,40 @@ void patterncommands(void)
         for (c = 0; c < sizeof(jankokeytbl2); c++)
         {
           if ((rawkey == jankokeytbl2[c]) && (!epcolumn) && (!shiftpressed))
+          {
+            newnote = FIRSTNOTE+c+(epoctave+1)*12;
+          }
+        }
+        break;
+
+        case KEY_CUSTOM:
+        for (c = 0; c < 15; c++)
+        {
+          if ((rawkey == customkeytbl1[c]) && (!epcolumn) && (!shiftpressed))
+          {
+            newnote = FIRSTNOTE+c+epoctave*12;
+          }
+        }
+        for (c = 0; c < 17; c++)
+        {
+          if ((rawkey == customkeytbl2[c]) && (!epcolumn) && (!shiftpressed))
+          {
+            newnote = FIRSTNOTE+c+(epoctave+1)*12;
+          }
+        }
+        break;
+
+        case KEY_RENOISE:
+        for (c = 0; c < sizeof(renoisekeytbl1); c++)
+        {
+          if ((rawkey == renoisekeytbl1[c]) && (!epcolumn) && (!shiftpressed))
+          {
+            newnote = FIRSTNOTE+c+epoctave*12;
+          }
+        }
+        for (c = 0; c < sizeof(renoisekeytbl2); c++)
+        {
+          if ((rawkey == renoisekeytbl2[c]) && (!epcolumn) && (!shiftpressed))
           {
             newnote = FIRSTNOTE+c+(epoctave+1)*12;
           }
@@ -364,7 +461,9 @@ void patterncommands(void)
       }
       if (recordmode)
       {
-        if (autoadvance < 2)
+        if (keypreset == KEY_RENOISE)
+          gt2advanceeditstep();
+        else if (autoadvance < 2)
         {
           eppos++;
           if (eppos > pattlen[epnum[epchn]])
@@ -1409,5 +1508,3 @@ void joinpattern(void)
     }
   }
 }
-
-

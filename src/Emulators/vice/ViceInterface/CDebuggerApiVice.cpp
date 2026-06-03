@@ -157,7 +157,7 @@ void CDebuggerApiVice::SetupVicEditorForScreenOnly()
 	SetViewLayersVisible(false);
 	SetViewPreviewVisible(false);
 	SetSpritesFramesVisible(false);
-	ZoomDisplay(1.80f);
+	viewC64->viewVicEditor->ResetZoomAndPosition();
 }
 
 u8 CDebuggerApiVice::FindC64Color(u8 r, u8 g, u8 b)

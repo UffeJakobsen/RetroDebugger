@@ -16,13 +16,16 @@ public:
 	virtual CDebugBreakpointData *EvaluateBreakpoint(int addr, int value, u32 memoryAccess);
 
 	virtual void RenderImGui();
-	
+
 	static const char *DataBreakpointComparisonToStr(DataBreakpointComparison comparison);
 	static DataBreakpointComparison StrToDataBreakpointComparison(const char *comparisonStr);
 
 protected:
 	int addBreakpointPopupValue;
 	int addBreakpointPopupComparisonMethod;
+	// "End" address for range breakpoints. Stored as text so the user can leave
+	// it blank to keep the legacy single-address behavior.
+	char addBreakpointPopupAddrEndBuf[16];
 };
 
 #endif

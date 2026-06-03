@@ -104,7 +104,10 @@ void CViewEmulatorScreen::RefreshImageParameters()
 
 void CViewEmulatorScreen::RefreshImage()
 {
+	CImageData *screenImg = debugInterface->AcquireScreenImageForRendering();
+	image->SetLoadImageData(screenImg);
 	image->ReBindImage();
+	debugInterface->ReleaseScreenImageAfterRendering();
 }
 
 bool CViewEmulatorScreen::HasContextMenuItems()
@@ -272,7 +275,12 @@ bool CViewEmulatorScreen::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool is
 	if (c64SettingsEmulatorScreenBypassKeyboardShortcuts == false)
 	{
 		if (guiMain->CheckKeyboardShortcut(keyCode))
+		{
+			// Remember this physical key so its release is not routed into the
+			// emulator (e.g. Cmd+Left rewind must not reach the C64 keyboard).
+			consumedShortcutKeyCodes.insert(keyCode);
 			return true;
+		}
 	}
 
 	if (keyCode == MTKEY_ENTER && isAlt)
@@ -345,6 +353,18 @@ bool CViewEmulatorScreen::KeyDownRepeat(u32 keyCode, bool isShift, bool isAlt, b
 bool CViewEmulatorScreen::KeyUp(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper)
 {
 	LOGI(".......... CViewEmulatorScreen::KeyUp: keyCode=%d", keyCode);
+
+	// If this key's press was consumed as a global keyboard shortcut (e.g.
+	// Cmd+Left rewind), do NOT route its release into the emulator — otherwise
+	// the C64 gets a spurious key-up and raises c64d_vice_input_tasks_flag.
+	{
+		std::set<u32>::iterator it = consumedShortcutKeyCodes.find(keyCode);
+		if (it != consumedShortcutKeyCodes.end())
+		{
+			consumedShortcutKeyCodes.erase(it);
+			return true;
+		}
+	}
 
 	if (c64SettingsSelectedJoystick1 == SelectedJoystick::SelectedJoystickKeyboard
 		|| c64SettingsSelectedJoystick2 == SelectedJoystick::SelectedJoystickKeyboard)

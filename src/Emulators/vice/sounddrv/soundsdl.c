@@ -44,7 +44,7 @@
 
 #include "ViceWrapper.h"
 
-static SWORD *sdl_buf = NULL;
+static int16_t *sdl_buf = NULL;
 //static SDL_AudioSpec sdl_spec;
 static volatile int sdl_inptr = 0;
 static volatile int sdl_outptr = 0;
@@ -56,19 +56,14 @@ int sidNumChannels = 0;
 void sdl_callback(void *userdata, uint8 *stream, int numSamples)
 {
 //	LOGD("sdl sound callback: numSamples=%d numChannels=%d", numSamples, sidNumChannels);
-	uint8 *dest;
-	uint8 *src;
 	int i;
 
 	if (sidNumChannels == 1)
 	{
-		// mono
-		int len = numSamples * sizeof(SWORD);
-		
+		// mono -> stereo duplication using 16-bit copies
 		int	amount, total;
 		total = 0;
-		
-		//  while (total < len/sizeof(SWORD))
+
 		while (total < numSamples)
 		{
 			amount = sdl_inptr - sdl_outptr;
@@ -76,51 +71,33 @@ void sdl_callback(void *userdata, uint8 *stream, int numSamples)
 			{
 				amount = sdl_len - sdl_outptr;
 			}
-			
-			//      if (amount + total > len/sizeof(SWORD))
+
 			if (amount + total > numSamples)
 			{
-				//          amount = len/sizeof(SWORD) - total;
 				amount = numSamples - total;
 			}
-			
+
 			sdl_full = 0;
-			
+
 			if (!amount)
 			{
 				LOGError("sdl_callback: amount=%d", amount);
-				memset(stream + total*sizeof(SWORD), 0, len - total*sizeof(SWORD));
+				memset(stream + total*sizeof(int16_t)*2, 0, (numSamples - total)*sizeof(int16_t)*2);
 				return;
 			}
 
-			dest = stream + total*sizeof(SWORD);
-			src = (uint8*) (sdl_buf + sdl_outptr);
-			
+			int16_t *src16 = sdl_buf + sdl_outptr;
+			int16_t *dest16 = (int16_t *)stream + total * 2;
+
 			for (i = 0; i < amount; i++)
 			{
-				uint8 s1, s2;
-				
-				s1 = *src;
-				src++;
-				s2 = *src;
-				src++;
-				
-				// L
-				*dest = s1;
-				dest++;
-				*dest = s2;
-				dest++;
-				
-				// R
-				*dest = s1;
-				dest++;
-				*dest = s2;
-				dest++;
+				dest16[i * 2] = src16[i];
+				dest16[i * 2 + 1] = src16[i];
 			}
-			
+
 			total += amount;
 			sdl_outptr += amount;
-			
+
 			if (sdl_outptr == sdl_len)
 			{
 				sdl_outptr = 0;
@@ -131,12 +108,12 @@ void sdl_callback(void *userdata, uint8 *stream, int numSamples)
 	{
 		// stereo
 		
-		int len = numSamples * sizeof(SWORD) * 2;
+		int len = numSamples * sizeof(int16_t) * 2;
 		
 		int	amount, total;
 		total = 0;
 		
-		//  while (total < len/sizeof(SWORD))
+		//  while (total < len/sizeof(int16_t))
 		while (total < numSamples)
 		{
 			amount = (sdl_inptr - sdl_outptr) / 2;
@@ -145,10 +122,10 @@ void sdl_callback(void *userdata, uint8 *stream, int numSamples)
 				amount = (sdl_len - sdl_outptr) / 2;
 			}
 			
-			//      if (amount + total > len/sizeof(SWORD))
+			//      if (amount + total > len/sizeof(int16_t))
 			if (amount + total > numSamples)
 			{
-				//          amount = len/sizeof(SWORD) - total;
+				//          amount = len/sizeof(int16_t) - total;
 				amount = numSamples - total;
 			}
 			
@@ -157,12 +134,12 @@ void sdl_callback(void *userdata, uint8 *stream, int numSamples)
 			if (!amount)
 			{
 				LOGError("sdl_callback: amount=%d", amount);
-				memset(stream + total*sizeof(SWORD)*2, 0, len - total*sizeof(SWORD)*2);
+				memset(stream + total*sizeof(int16_t)*2, 0, len - total*sizeof(int16_t)*2);
 				return;
 			}
 			
-			memcpy(stream + total*sizeof(SWORD)*2, sdl_buf + sdl_outptr,
-				   amount*sizeof(SWORD)*2);
+			memcpy(stream + total*sizeof(int16_t)*2, sdl_buf + sdl_outptr,
+				   amount*sizeof(int16_t)*2);
 
 			total += amount;
 			sdl_outptr += amount*2;
@@ -218,8 +195,8 @@ static int sdl_init(const char *param, int *speed,
 	
     sdl_inptr = sdl_outptr = sdl_full = 0;
 	
-    sdl_buf = lib_malloc(sizeof(SWORD)*sdl_len);
-	memset(sdl_buf, 0, sizeof(SWORD)*sdl_len);
+    sdl_buf = lib_malloc(sizeof(int16_t)*sdl_len);
+	memset(sdl_buf, 0, sizeof(int16_t)*sdl_len);
 
 	
 //    if (!sdl_buf) {
@@ -281,7 +258,7 @@ void swab(void *src, void *dst, size_t length)
 #endif
 #endif
 
-static int sdl_write(SWORD *pbuf, size_t nr)
+static int sdl_write(int16_t *pbuf, size_t nr)
 {
 //	LOGD("soundsdl: sdl_write, nr=%d");
 	
@@ -292,7 +269,7 @@ static int sdl_write(SWORD *pbuf, size_t nr)
     if (sdl_spec.format != AUDIO_S16MSB)
     {
         /* Swap bytes if we're on a big-endian machine, like the Macintosh */
-        swab(pbuf, pbuf, sizeof(SWORD)*nr);
+        swab(pbuf, pbuf, sizeof(int16_t)*nr);
     }
 #endif
 
@@ -310,11 +287,11 @@ static int sdl_write(SWORD *pbuf, size_t nr)
 
         if (amount <= 0)
 		{
-        //    SDL_Delay(5);
+            mt_SYS_Sleep(1);  /* yield to audio thread instead of busy-spinning */
             continue;
         }
 
-        memcpy(sdl_buf + sdl_inptr, pbuf + total, amount*sizeof(SWORD));
+        memcpy(sdl_buf + sdl_inptr, pbuf + total, amount*sizeof(int16_t));
         sdl_inptr += amount;
         total += amount;
 
@@ -363,6 +340,17 @@ static int sdl_bufferspace(void)
 	//	LOGD("sdl_bufferspace ret=%d", ret);
 
     return ret;
+}
+
+void c64d_sound_sdl_reset_buffer(void)
+{
+    sdl_inptr = 0;
+    sdl_outptr = 0;
+    sdl_full = 0;
+
+    if (sdl_buf && sdl_len > 0) {
+        memset(sdl_buf, 0, sizeof(int16_t) * sdl_len);
+    }
 }
 
 static void sdl_close(void)

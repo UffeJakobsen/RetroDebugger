@@ -2,8 +2,8 @@
 #define GFILE_H
 
 #define MAX_DIRFILES 16384
-#define MAX_FILENAME 60
-#define MAX_PATHNAME 256
+#define MAX_FILENAME 1024
+#define MAX_PATHNAME 1024
 
 typedef struct
 {

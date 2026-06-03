@@ -54,6 +54,7 @@ public:
 	void CheckDisplayBoundaries(float *px, float *py);
 	void ZoomDisplay(float newScale);
 	void ZoomDisplay(float newScale, float anchorX, float anchorY);
+	void ResetZoomAndPosition();
 	bool isKeyboardMovingDisplay;
 	
 	CSlrFont *font;
@@ -146,6 +147,7 @@ public:
 	std::list<CSlrString *> exportHyperBitmapFileExtensions;
 	std::list<CSlrString *> exportVCEFileExtensions;
 	std::list<CSlrString *> exportPNGFileExtensions;
+	std::list<CSlrString *> exportPRGFileExtensions;
 	u8 exportMode;
 	void OpenDialogImportFile();
 	void OpenDialogExportFile();
@@ -178,6 +180,8 @@ public:
 	bool ExportSpritesData(CSlrString *path);
 	void SaveScreenshotAsPNG();
 	bool ExportPNG(CSlrString *path);
+	void SaveAsPRG();
+	bool ExportPRG(CSlrString *path);
 	
 	// helpers
 	void EnsureCorrectScreenAndBitmapAddr();

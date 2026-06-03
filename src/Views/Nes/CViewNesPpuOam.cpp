@@ -62,25 +62,23 @@ void CViewNesPpuOam::RefreshScreen()
 {
 //	LOGD("CViewNesPpuOam::RefreshScreen");
 	
-	debugInterface->LockRenderScreenMutex();
-	
 	// refresh texture of Nes screen
-	CImageData *screen = debugInterface->GetScreenImageData();
-	
+	CImageData *screen = debugInterface->AcquireScreenImageForRendering();
+
 #if !defined(FINAL_RELEASE)
 	if (screen == NULL)
 	{
 		//LOGError("CViewNesPpuOam::RefreshScreen: screen is NULL!");
-		debugInterface->UnlockRenderScreenMutex();
+		debugInterface->ReleaseScreenImageAfterRendering();
 		return;
 	}
 #endif
-	
+
 	imageScreen->SetLoadImageData(screen);
 	imageScreen->ReBindImage();
 	imageScreen->loadImageData = NULL;
-	
-	debugInterface->UnlockRenderScreenMutex();
+
+	debugInterface->ReleaseScreenImageAfterRendering();
 }
 
 

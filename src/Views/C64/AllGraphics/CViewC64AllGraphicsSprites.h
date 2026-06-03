@@ -7,6 +7,7 @@ class CDebugInterfaceC64;
 class CViewC64VicDisplay;
 class CViewC64VicControl;
 class CSlrFont;
+class CDataAdapter;
 
 class CViewC64AllGraphicsSprites : public CGuiViewMovingPane
 {
@@ -15,6 +16,13 @@ public:
 	virtual ~CViewC64AllGraphicsSprites();
 	
 	CDebugInterfaceC64 *debugInterface;
+	CDataAdapter *graphicsDataAdapter;
+	bool useExternalRenderParameters;
+	bool renderDataWithColors;
+	u8 renderColorD021;
+	u8 renderColorD025;
+	u8 renderColorD026;
+	u8 renderColorD027;
 	
 	virtual void Render();
 	virtual void Render(float posX, float posY);
@@ -59,9 +67,15 @@ public:
 	void SetSelectedItemId(int itemId);
 	
 	// sprites
+	bool spritesImagesAllocated;
+	void EnsureSpritesImagesAllocated();
 	std::vector<CImageData *> spritesImageData;
 	std::vector<CSlrImage *> spritesImages;
 	void UpdateSprites(bool useColors, u8 colorD021, u8 colorD025, u8 colorD026, u8 colorD027);
+	CDataAdapter *GetGraphicsDataAdapter();
+	void SetGraphicsDataAdapter(CDataAdapter *dataAdapter);
+	void SetRenderParameters(bool useColors, u8 colorD021, u8 colorD025, u8 colorD026, u8 colorD027);
+	void ResetRenderParameters();
 	
 	// handle ctrl+k shortcut
 	void UpdateRenderDataWithColors();

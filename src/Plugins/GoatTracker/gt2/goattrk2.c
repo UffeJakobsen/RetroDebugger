@@ -26,6 +26,13 @@
 #include "bme.h"
 #include "log.h"
 
+extern void gt2BeginPatternUndoStep(void);
+extern void gt2CommitPatternUndoStep(void);
+extern void gt2BeginTableUndoStep(void);
+extern void gt2CommitTableUndoStep(void);
+extern void gt2ClearPatternUndoHistory(void);
+extern void gt2ClearPatternUndoHistoryIfSongChanged(int cs, int cp, int ci, int ct, int cn);
+
 int menu = 0;
 int editmode = EDIT_PATTERN;
 int recordmode = 1;
@@ -33,10 +40,12 @@ int followplay = 0;
 int hexnybble = -1;
 int stepsize = 4;
 int autoadvance = 0;
+int gt2RenoiseEditStep = 1;
 int defaultpatternlength = 64;
 int cursorflash = 0;
 int cursorcolortable[] = {1,2,7,2};
 int exitprogram = 0;
+int gt2_engine_ready = 0;
 int eacolumn = 0;
 int eamode = 0;
 
@@ -173,7 +182,16 @@ int gtmain(int argc, const char **argv)
     getparam(configfile, (unsigned *)&playeradr);
     getparam(configfile, (unsigned *)&zeropageadr);
     getparam(configfile, &playerversion);
-    getparam(configfile, &keypreset);
+    {
+      // c64d: keypreset is owned by c64d's hjson config (key "GT2KeyboardLayout"),
+      // restored via GT2_RestoreSubViewVisibility(). gtmain runs on a worker
+      // thread and used to clobber whatever we'd already restored. Also note
+      // that GT2's own save target (goattrk.cfg) differs from its load target
+      // (goattrk-c64d.cfg), so this load was reading stale data anyway. Read
+      // into a dummy to keep file position intact.
+      unsigned dummy_keypreset;
+      getparam(configfile, &dummy_keypreset);
+    }
     getparam(configfile, (unsigned *)&stepsize);
     getparam(configfile, &multiplier);
     getparam(configfile, &catweasel);
@@ -396,7 +414,7 @@ int gtmain(int argc, const char **argv)
   sidaddress &= 0xffff;
   if (!stepsize) stepsize = 4;
   if (multiplier > 16) multiplier = 16;
-  if (keypreset > 2) keypreset = 0;
+  if (keypreset > 4) keypreset = 0;
   if ((finevibrato == 1) && (multiplier < 2)) usefinevib = 1;
   if (finevibrato > 1) usefinevib = 1;
   if (optimizepulse > 1) optimizepulse = 1;
@@ -438,12 +456,16 @@ int gtmain(int argc, const char **argv)
   }
 
   // Load song if applicable
-	sprintf(songfilename, "/Users/mars/Desktop/HappyTreeFriends.sng");
-
-  if (strlen(songfilename)) loadsong();
+  if (strlen(songfilename))
+  {
+    loadsong();
+    gt2ClearPatternUndoHistory();
+  }
 
   // Start editor mainloop
   printmainscreen();
+  gt2_engine_ready = 1;
+  LOGD("GT2: gt2_engine_ready set to 1");
   while (!exitprogram)
   {
     waitkeymouse();
@@ -645,7 +667,24 @@ void converthex()
 
 void docommand(void)
 {
+  int patternUndoStep = (editmode == EDIT_PATTERN);
+  int tableUndoStep = (editmode == EDIT_TABLES);
+  int instrumentInvalidationStep = (editmode == EDIT_INSTRUMENT);
+  static unsigned char beforeInstrumentData[sizeof(ginstr)];
+  static unsigned char beforeLeftTableData[sizeof(ltable)];
+  static unsigned char beforeRightTableData[sizeof(rtable)];
+  static unsigned char beforePatternData[sizeof(pattern)];
+
   // "GUI" operation :)
+  if (patternUndoStep) gt2BeginPatternUndoStep();
+  if (tableUndoStep) gt2BeginTableUndoStep();
+  if (instrumentInvalidationStep)
+  {
+    memcpy(beforeInstrumentData, ginstr, sizeof(ginstr));
+    memcpy(beforeLeftTableData, ltable, sizeof(ltable));
+    memcpy(beforeRightTableData, rtable, sizeof(rtable));
+    memcpy(beforePatternData, pattern, sizeof(pattern));
+  }
   mousecommands();
 
   // Mode-specific commands
@@ -669,7 +708,18 @@ void docommand(void)
 
     case EDIT_NAMES:
     namecommands();
-    break;
+      break;
+  }
+
+  if (patternUndoStep) gt2CommitPatternUndoStep();
+  if (tableUndoStep) gt2CommitTableUndoStep();
+  if (instrumentInvalidationStep)
+  {
+    if (memcmp(beforeInstrumentData, ginstr, sizeof(ginstr))
+        || memcmp(beforeLeftTableData, ltable, sizeof(ltable))
+        || memcmp(beforeRightTableData, rtable, sizeof(rtable))
+        || memcmp(beforePatternData, pattern, sizeof(pattern)))
+      gt2ClearPatternUndoHistory();
   }
 
   // General commands
@@ -1157,12 +1207,18 @@ void load(void)
     if (!shiftpressed)
     {
       if (fileselector(songfilename, songpath, songfilter, "LOAD SONG", 0))
+      {
         loadsong();
+        gt2ClearPatternUndoHistory();
+      }
     }
     else
     {
       if (fileselector(songfilename, songpath, songfilter, "MERGE SONG", 0))
+      {
         mergesong();
+        gt2ClearPatternUndoHistory();
+      }
     }
   }
   else
@@ -1327,6 +1383,7 @@ void gt_clear(void)
   if (cs | cp | ci | ct | cn)
     memset(songfilename, 0, sizeof songfilename);
   clearsong(cs, cp, ci, ct, cn);
+  gt2ClearPatternUndoHistoryIfSongChanged(cs, cp, ci, ct, cn);
 
   key = 0;
   rawkey = 0;

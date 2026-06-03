@@ -32,36 +32,36 @@ void C64VicDisplayCanvasExtendedText::RefreshScreen(vicii_cycle_state_t *viciiSt
 	
 	vicDisplay->GetViciiPointers(viciiState, &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, colors);
 	
-	u8 bitmap;
-	
-	u8 bgcolor;
-	u8 bgColorR, bgColorG, bgColorB;
-	u8 fgcolor;
-	u8 fgColorR, fgColorG, fgColorB;
-	
+	// Precompute 16-entry RGBA lookup tables
+	uint32_t colorLutFg[16], colorLutBg[16];
+	for (int c = 0; c < 16; c++)
+	{
+		u8 r, g, b;
+		debugInterface->GetCBMColor(c, &r, &g, &b);
+		colorLutFg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)foregroundColorAlpha << 24);
+		colorLutBg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)backgroundColorAlpha << 24);
+	}
+
+	u8 *imageData = (u8 *)imageDataScreen->resultData;
+	int imgWidth = imageDataScreen->width;
+
 	for (int i = 0; i < 25; i++)
 	{
 		for (int j = 0; j < 40; j++)
 		{
-			fgcolor = color_ram_ptr[(i * 40) + j] & 0xf;
-			bgcolor = colors[1 + ((screen_ptr[(i * 40) + j] & 0xc0) >> 6)] & 0xf;
-			
-			debugInterface->GetCBMColor(bgcolor, &bgColorR, &bgColorG, &bgColorB);
-			debugInterface->GetCBMColor(fgcolor, &fgColorR, &fgColorG, &fgColorB);
-			
+			u8 fgcolor = color_ram_ptr[(i * 40) + j] & 0xf;
+			u8 bgcolor = colors[1 + ((screen_ptr[(i * 40) + j] & 0xc0) >> 6)] & 0xf;
+
+			uint32_t fgRGBA = colorLutFg[fgcolor];
+			uint32_t bgRGBA = colorLutBg[bgcolor];
+
 			for (int k = 0; k < 8; k++)
 			{
-				bitmap = chargen_ptr[((screen_ptr[(i * 40) + j] & 0x3f) * 8) + k];
+				u8 bitmap = chargen_ptr[((screen_ptr[(i * 40) + j] & 0x3f) * 8) + k];
+				uint32_t *row = (uint32_t *)(imageData + ((i*8 + k) * imgWidth + j*8) * 4);
 				for (int l = 0; l < 8; l++)
 				{
-					if (bitmap & (1 << (7 - l)))
-					{
-						imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, fgColorR, fgColorG, fgColorB, foregroundColorAlpha);
-					}
-					else
-					{
-						imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, bgColorR, bgColorG, bgColorB, backgroundColorAlpha);
-					}
+					row[l] = (bitmap & (1 << (7 - l))) ? fgRGBA : bgRGBA;
 				}
 			}
 		}

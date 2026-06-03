@@ -24,6 +24,10 @@
 #include "CDebugMemoryCell.h"
 #include "CLayoutParameter.h"
 #include "CMainMenuBar.h"
+#include "CDisassemblyInterpreter.h"
+
+#include <string>
+#include <algorithm>
 
 #include "CViewC64Screen.h"
 #include "CViewAtariScreen.h"
@@ -115,6 +119,15 @@ CViewDisassembly::CViewDisassembly(const char *name, float posX, float posY, flo
 //	jumpOpcodes.insert({0x6C, 0x6C});	// JMP ($aabb)
 
 
+	// Selection
+	this->selectionStartAddr = -1;
+	this->selectionEndAddr = -1;
+	this->isSelecting = false;
+	this->autoScrollLastTime = 0;
+
+	// Effective address interpreter
+	this->interpreter = new CDisassemblyInterpreter();
+
 	AddLayoutParameter(new CLayoutParameterFloat("Font Size", &fontSize));
 	AddLayoutParameter(new CLayoutParameterBool("Hex codes", &showHexCodes));
 	AddLayoutParameter(new CLayoutParameterBool("Code cycles", &showCodeCycles));
@@ -128,6 +141,7 @@ CViewDisassembly::CViewDisassembly(const char *name, float posX, float posY, flo
 
 CViewDisassembly::~CViewDisassembly()
 {
+	delete interpreter;
 }
 
 void CViewDisassembly::SetViewDataDump(CViewDataDump *viewDataDump)
@@ -138,6 +152,7 @@ void CViewDisassembly::SetViewDataDump(CViewDataDump *viewDataDump)
 void CViewDisassembly::ScrollToAddress(int addr)
 {
 //	LOGD("CViewDisassembly::ScrollToAddress=%04x", addr);
+	ClearSelection();
 
 	this->cursorAddress = addr;
 	this->isTrackingPC = false;
@@ -562,8 +577,12 @@ void CViewDisassembly::RenderDisassembly(int startAddress, int endAddress)
 		endAddress = 0x10000;
 	
 	UpdateLocalMemoryCopy(startAddress, endAddress);
-	
-	
+
+	if (c64SettingsDisassemblyShowEffectiveAddress)
+	{
+		RunInterpreterForVisibleRange();
+	}
+
 	CalcDisassemblyStart(startAddress, &renderAddress, &renderLinesBefore);
 	
 	
@@ -992,10 +1011,16 @@ int CViewDisassembly::RenderDisassemblyLine(float px, float py, int addr, uint8 
 		}
 	}
 
+	// Selection highlight
+	if (IsAddressSelected(addr))
+	{
+		BlitFilledRectangle(posX, py, -1.0f, sizeX, fontSize, 0.55f, 0.55f, 1.0f, 1.0f);
+	}
+
 	CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
-	
+
 	float cr, cg, cb, ca;
-	
+
 	if (cell->isExecuteCode)
 	{
 		cr = colorExecuteR;
@@ -1010,7 +1035,7 @@ int CViewDisassembly::RenderDisassemblyLine(float px, float py, int addr, uint8 
 		cb = colorNonExecuteB;
 		ca = colorNonExecuteA;
 	}
-	
+
 	length = opcodes[op].addressingLength;
 
 //	LOGD("showLabels=%d symbols=%x symbols->currentSegment=%x", showLabels, symbols, symbols->currentSegment);
@@ -1283,10 +1308,15 @@ int CViewDisassembly::RenderDisassemblyLine(float px, float py, int addr, uint8 
 		}
 	}
 	
+	if (c64SettingsDisassemblyShowEffectiveAddress)
+	{
+		RenderEffectiveAddressAnnotation(py, addr);
+	}
+
 	SYS_ReleaseCharBuf(buf);
-	
+
 	return numBytesPerOp;
-	
+
 }
 
 // Draw colored background rects behind hex argument digits in the mnemonic
@@ -1782,7 +1812,7 @@ void CViewDisassembly::MnemonicWithDollarArgumentToStr(u16 addr, u8 op, u8 lo, u
 			
 		case ADDR_ABS:
 			//sprintf(buf4, "%4.4x", (hi << 8) | lo);
-			buf4[1] = '$';
+			buf4[0] = '$';
 			sprintfHexCode8WithoutZeroEnding(buf4+1, hi);
 			sprintfHexCode8(buf4+3, lo);
 			break;
@@ -1874,11 +1904,17 @@ void CViewDisassembly::RenderHexLine(float px, float py, int addr)
 								sizeX, fontSize, breakpointNotActiveColorR, breakpointNotActiveColorG, breakpointNotActiveColorB, breakpointNotActiveColorA);
 		}
 	}
-	
+
+	// Selection highlight
+	if (IsAddressSelected(addr))
+	{
+		BlitFilledRectangle(posX, py, -1.0f, sizeX, fontSize, 0.55f, 0.55f, 1.0f, 1.0f);
+	}
+
 	CDebugMemoryCell *cell = debugMemory->GetMemoryCell(addr);
-	
+
 	float cr, cg, cb, ca;
-	
+
 	if (cell->isExecuteCode)
 	{
 		cr = colorExecuteR;
@@ -2497,7 +2533,8 @@ void CViewDisassembly::UpdateDisassembly(int startAddress, int endAddress)
 void CViewDisassembly::StartEditingAtCursorPosition(int newCursorPos, bool goLeft)
 {
 	//LOGD("CViewDisassembly::StartEditingAtCursorPosition: adr=%4.4x newCursorPos=%d", cursorAddress, newCursorPos);
-	
+	ClearSelection();
+
 	if (newCursorPos < EDIT_CURSOR_POS_ADDR || newCursorPos > EDIT_CURSOR_POS_MNEMONIC)
 		return;
 		
@@ -2731,51 +2768,170 @@ u64 CViewDisassembly::RemovePCBreakpoint(int addr)
 	return breakpointId;
 }
 
+int CViewDisassembly::FindAddrAtScreenY(float y)
+{
+	for (int i = 0; i < addrPositionCounter; i++)
+	{
+		if (y > addrPositions[i].y && y <= addrPositions[i].y + fontSize)
+		{
+			return addrPositions[i].addr;
+		}
+	}
+	return -1;
+}
+
+bool CViewDisassembly::GetSelectionRange(int *fromAddr, int *toAddr)
+{
+	if (selectionStartAddr < 0)
+		return false;
+	int s = selectionStartAddr;
+	int e = selectionEndAddr;
+	if (s > e) { int tmp = s; s = e; e = tmp; }
+	*fromAddr = s;
+	*toAddr = e;
+	return true;
+}
+
+bool CViewDisassembly::IsAddressSelected(int addr)
+{
+	if (selectionStartAddr < 0)
+		return false;
+	int s = selectionStartAddr;
+	int e = selectionEndAddr;
+	if (s > e) { int tmp = s; s = e; e = tmp; }
+	return (addr >= s && addr <= e);
+}
+
+void CViewDisassembly::ClearSelection()
+{
+	selectionStartAddr = -1;
+	selectionEndAddr = -1;
+	isSelecting = false;
+}
+
 //@returns is consumed
 bool CViewDisassembly::DoTap(float x, float y)
 {
 	LOGG("CViewDisassembly::DoTap:  x=%f y=%f", x, y);
 
-	// set breakpoint?
+	// Determine if this click is on the address/breakpoint column
+	bool isOnAddressColumn = false;
 	if (c64SettingsPressCtrlToSetBreakpoint)
 	{
-		// no ctrl pressed, skip this tap
-		if (!guiMain->isControlPressed)
-			return false;
+		isOnAddressColumn = guiMain->isControlPressed;
 	}
 	else
 	{
-		// check if pressed on address field
 		float numChars = 4.0f;
 		if (showLabels == true)
 		{
 			numChars = 4.0f + numberOfCharactersInLabel;
 		}
+		isOnAddressColumn = (x >= posX && x <= (posX+fontSize * numChars));
+	}
 
-		if (!(x >= posX && x <= (posX+fontSize * numChars)))
+	if (isOnAddressColumn)
+	{
+		// Breakpoint toggle
+		ClearSelection();
+		UpdateDisassembly(this->cursorAddress, this->cursorAddress + 0x0100);
+
+		if (c64SettingsExecuteAwareDisassembly == false)
 		{
-			return false;
+			return DoTapNotExecuteAware(x, y);
+		}
+
+		for (int i = 0; i < addrPositionCounter; i++)
+		{
+			if (y > addrPositions[i].y
+				&& y <= addrPositions[i].y + fontSize)
+			{
+				TogglePCBreakpoint(addrPositions[i].addr);
+				break;
+			}
+		}
+		return true;
+	}
+
+	// Selection: set anchor on click inside the view
+	if (IsInside(x, y))
+	{
+		UpdateDisassembly(this->cursorAddress, this->cursorAddress + 0x0100);
+		int addr = FindAddrAtScreenY(y);
+		if (addr >= 0)
+		{
+			selectionStartAddr = addr;
+			selectionEndAddr = addr;
+			isSelecting = true;
+			autoScrollLastTime = 0;
 		}
 	}
+
+	return false;
+}
+
+bool CViewDisassembly::DoMove(float x, float y, float distX, float distY, float diffX, float diffY)
+{
+	if (!isSelecting)
+		return false;
 
 	UpdateDisassembly(this->cursorAddress, this->cursorAddress + 0x0100);
-	
-	// set the breakpoint
-	if (c64SettingsExecuteAwareDisassembly == false)
+
+	int addr = FindAddrAtScreenY(y);
+	if (addr >= 0)
 	{
-		return DoTapNotExecuteAware(x, y);
+		selectionEndAddr = addr;
 	}
-	
-	for (int i = 0; i < addrPositionCounter; i++)
+	else
 	{
-		if (y > addrPositions[i].y
-			&& y <= addrPositions[i].y + fontSize)
+		// Auto-scroll when cursor above or below view
+		long now = SYS_GetCurrentTimeInMillis();
+		if (autoScrollLastTime == 0 || (now - autoScrollLastTime) >= 70)
 		{
-			TogglePCBreakpoint(addrPositions[i].addr);
-			break;
+			if (y < posY)
+			{
+				ScrollUp();
+				UpdateDisassembly(this->cursorAddress, this->cursorAddress + 0x0100);
+				if (addrPositionCounter > 0)
+					selectionEndAddr = addrPositions[0].addr;
+				autoScrollLastTime = now;
+			}
+			else if (y > posEndY)
+			{
+				ScrollDown();
+				UpdateDisassembly(this->cursorAddress, this->cursorAddress + 0x0100);
+				if (addrPositionCounter > 0)
+					selectionEndAddr = addrPositions[addrPositionCounter - 1].addr;
+				autoScrollLastTime = now;
+			}
 		}
 	}
-	
+	return true;
+}
+
+bool CViewDisassembly::FinishMove(float x, float y, float distX, float distY, float accelerationX, float accelerationY)
+{
+	if (!isSelecting)
+		return false;
+	isSelecting = false;
+	if (selectionStartAddr == selectionEndAddr)
+	{
+		selectionStartAddr = -1;
+		selectionEndAddr = -1;
+	}
+	return true;
+}
+
+bool CViewDisassembly::DoFinishTap(float x, float y)
+{
+	if (!isSelecting)
+		return false;
+	isSelecting = false;
+	if (selectionStartAddr == selectionEndAddr)
+	{
+		selectionStartAddr = -1;
+		selectionEndAddr = -1;
+	}
 	return true;
 }
 
@@ -2963,6 +3119,14 @@ bool CViewDisassembly::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isCon
 		return true;
 	}
 
+	if (keyCode == MTKEY_ARROW_DOWN || keyCode == MTKEY_ARROW_UP
+		|| keyCode == MTKEY_PAGE_DOWN || keyCode == MTKEY_PAGE_UP
+		|| ((keyCode == MTKEY_ARROW_LEFT || keyCode == MTKEY_ARROW_RIGHT) && !isControl)
+		|| keyCode == MTKEY_ENTER)
+	{
+		ClearSelection();
+	}
+
 	if (keyCode == MTKEY_ARROW_DOWN)
 	{
 		ScrollDown();
@@ -3018,13 +3182,15 @@ bool CViewDisassembly::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isCon
 			cursorAddress = dataAdapter->AdapterGetDataLength()-1;
 		return true;
 	}
-	else if (keyCode == MTKEY_ARROW_LEFT)
+	else if (keyCode == MTKEY_ARROW_LEFT && !isControl)
 	{
+		// cmd/ctrl+left is the global "rewind emulation" shortcut; let it fall through
 		MoveAddressHistoryBack();
 		return true;
 	}
-	else if (keyCode == MTKEY_ARROW_RIGHT)
+	else if (keyCode == MTKEY_ARROW_RIGHT && !isControl)
 	{
+		// cmd/ctrl+right is the global "forward emulation" shortcut; let it fall through
 		MoveAddressHistoryForward();
 		return true;
 	}
@@ -3057,10 +3223,13 @@ void CViewDisassembly::SetIsTrackingPC(bool followPC)
 void CViewDisassembly::StepOverJsr()
 {
 //	LOGD("CViewDisassembly::StepOverJsr");
-	
+
 	// step over JSR
 	debugInterface->LockMutex();
-	
+
+	// Clear any stale temporary breakpoint from previous step-over
+	symbols->ClearTemporaryBreakpoint();
+
 	bool a;
 	int pc = symbols->GetCurrentExecuteAddr();
 	uint8 opcode;
@@ -3072,12 +3241,12 @@ void CViewDisassembly::StepOverJsr()
 		if (opcode == 0x20)
 		{
 			int breakPC = pc + opcodes[opcode].addressingLength;
-			
+
 			CDebugBreakpointsAddr *breakpointsPC = symbols->currentSegment->breakpointsPC;
 			breakpointsPC->SetTemporaryBreakpointPC(breakPC);
-			
+
 //			LOGD("temporary C64 breakPC=%04x", breakPC);
-			
+
 			// run to temporary breakpoint (next line after JSR)
 			debugInterface->SetDebugMode(DEBUGGER_MODE_RUNNING);
 		}
@@ -3531,19 +3700,19 @@ int CViewDisassembly::Assemble(int assembleAddress, char *lineBuffer, int *instr
 {
 	CSlrTextParser *textParser = new CSlrTextParser(lineBuffer);
 	textParser->ToUpper();
-	
+
 	isErrorCode = false;
-	
+
 	char mnemonic[4] = {0x00};
 	textParser->GetChars(mnemonic, 3);
-	
+
 	int baseOp = AssembleFindOp(mnemonic);
-	
+
 	if (baseOp < 0)
 	{
 		FAIL("Unknown mnemonic");
 	}
-	
+
 	AssembleToken token = AssembleGetToken(textParser);
 	if (token == TOKEN_UNKNOWN)
 	{
@@ -3975,7 +4144,12 @@ void CViewDisassembly::RenderDisassemblyNotExecuteAware(int startAddress, int en
 		endAddress = 0xFFFF;
 	
 	UpdateLocalMemoryCopy(startAddress, endAddress);
-	
+
+	if (c64SettingsDisassemblyShowEffectiveAddress)
+	{
+		RunInterpreterForVisibleRange();
+	}
+
 	CalcDisassembleStartNotExecuteAware(startAddress, &renderAddress, &renderLinesBefore);
 	
 	//LOGD("startAddress=%4.4x numberOfLinesBack=%d | renderAddress=%4.4x  renderLinesBefore=%d", startAddress, numberOfLinesBack, renderAddress, renderLinesBefore);
@@ -4274,126 +4448,258 @@ void CViewDisassembly::PasteHexValuesFromClipboard()
 
 	u16 currentAssembleAddress = this->cursorAddress;
 
-	//	int CViewDisassembly::Assemble(int assembleAddress, char *lineBuffer)
-
 	CSlrString *pasteStr = SYS_GetClipboardAsSlrString();
-	pasteStr->DebugPrint("pasteStr=");
-	
-	pasteStr->RemoveCharacter('$');
+	char *clipText = pasteStr->GetStdASCII();
 
-	std::list<u16> splitChars;
-	splitChars.push_back(' ');
-	splitChars.push_back('\n');
-	splitChars.push_back('\r');
-	splitChars.push_back('\t');
-	
-	std::vector<CSlrString *> *strs = pasteStr->Split(splitChars);
-	
-	for (std::vector<CSlrString *>::iterator it = strs->begin(); it != strs->end(); it++)
+	// Process line by line
+	char *lineStart = clipText;
+	while (*lineStart)
 	{
-		CSlrString *hexVal = *it;
+		// Find end of line
+		char *lineEnd = lineStart;
+		while (*lineEnd && *lineEnd != '\n' && *lineEnd != '\r')
+			lineEnd++;
 
-		CDataAdapter *dataAdapter = debugInterface->GetDataAdapter();
+		// Save and null-terminate this line
+		char savedChar = *lineEnd;
+		*lineEnd = '\0';
 
-		if (hexVal->IsHexValue() == true)
+		// Find the mnemonic and optional original address in this line
+		char *p = lineStart;
+		char *mnemonicStart = NULL;
+		int origAddr = -1;
+
+		while (*p)
 		{
-			int len = hexVal->GetLength();
-			
-			if (len == 4 || len == 3)
+			// Skip whitespace
+			while (*p && (*p == ' ' || *p == '\t')) p++;
+			if (!*p) break;
+
+			// Read a token
+			char *tokenStart = p;
+			while (*p && *p != ' ' && *p != '\t') p++;
+			int tokenLen = (int)(p - tokenStart);
+
+			// Check if this is a 3-char alphabetic token (mnemonic candidate)
+			if (tokenLen == 3)
 			{
-				// 4 hex digits mean an address
-				currentAssembleAddress = hexVal->ToIntFromHex();
+				bool allAlpha = true;
+				for (int i = 0; i < 3; i++)
+				{
+					char c = tokenStart[i];
+					if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')))
+					{
+						allAlpha = false;
+						break;
+					}
+				}
+				if (allAlpha)
+				{
+					mnemonicStart = tokenStart;
+					break;
+				}
 			}
-			
-			if (len == 2 || len == 1)
+
+			// Capture first 4-digit hex token as original address
+			if (origAddr < 0 && tokenLen == 4)
 			{
-				dataAdapter->AdapterWriteByte(currentAssembleAddress, hexVal->ToIntFromHex());
-				currentAssembleAddress++;
+				bool allHex = true;
+				for (int i = 0; i < 4; i++)
+				{
+					char c = tokenStart[i];
+					if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+					{
+						allHex = false;
+						break;
+					}
+				}
+				if (allHex)
+				{
+					origAddr = (int)strtol(tokenStart, NULL, 16);
+				}
 			}
-			
-			continue;
+		}
+
+		if (mnemonicStart)
+		{
+			// Restore line end for assembler to see the full mnemonic + argument
+			*lineEnd = savedChar;
+
+			// Null-terminate at end of this line for the assembler
+			char *assembleEnd = mnemonicStart;
+			while (*assembleEnd && *assembleEnd != '\n' && *assembleEnd != '\r')
+				assembleEnd++;
+			char savedEnd = *assembleEnd;
+			*assembleEnd = '\0';
+
+			// Copy and strip '$' — the assembler expects raw hex values
+			char assembleBuf[128];
+			int j = 0;
+			for (char *s = mnemonicStart; *s && j < 126; s++)
+			{
+				if (*s != '$')
+					assembleBuf[j++] = *s;
+			}
+			assembleBuf[j] = '\0';
+
+			// Trim trailing whitespace — copy adds a trailing space for implied-mode
+			// mnemonics (SEI, NOP, RTS, etc.) which confuses ScrollWhiteChars at EOF
+			while (j > 0 && (assembleBuf[j-1] == ' ' || assembleBuf[j-1] == '\t'))
+				assembleBuf[--j] = '\0';
+
+			// Relocate branch targets when original address is known
+			if (origAddr >= 0)
+			{
+				char mnem[4];
+				mnem[0] = toupper(assembleBuf[0]);
+				mnem[1] = toupper(assembleBuf[1]);
+				mnem[2] = toupper(assembleBuf[2]);
+				mnem[3] = '\0';
+
+				bool isBranch = (strcmp(mnem, "BPL") == 0 || strcmp(mnem, "BMI") == 0 ||
+								strcmp(mnem, "BVC") == 0 || strcmp(mnem, "BVS") == 0 ||
+								strcmp(mnem, "BCC") == 0 || strcmp(mnem, "BCS") == 0 ||
+								strcmp(mnem, "BNE") == 0 || strcmp(mnem, "BEQ") == 0);
+
+				if (isBranch)
+				{
+					// Find the argument after mnemonic + whitespace
+					char *arg = assembleBuf + 3;
+					while (*arg == ' ' || *arg == '\t') arg++;
+
+					if (*arg)
+					{
+						int origTarget = (int)strtol(arg, NULL, 16);
+						int offset = origTarget - origAddr;
+						int newTarget = (currentAssembleAddress + offset) & 0xFFFF;
+						sprintf(arg, "%04X", newTarget);
+					}
+				}
+			}
+
+			int opLen = this->Assemble(currentAssembleAddress, assembleBuf, true);
+			if (opLen > 0)
+			{
+				currentAssembleAddress += opLen;
+			}
+
+			*assembleEnd = savedEnd;
 		}
 		else
 		{
-			// mnemonic
-			CSlrString *assembleStr = new CSlrString(hexVal);
-			char *cAssembleStr = assembleStr->GetStdASCII();
-
-			assembleStr->DebugPrint("assembleStr1=");
-
-			int opLen = this->Assemble(currentAssembleAddress, cAssembleStr, false);
-			
-			if (opLen == -1)
-			{
-				delete [] cAssembleStr;
-				
-				it++;
-				
-				if (it != strs->end())
-				{
-					CSlrString *argument = *it;
-					assembleStr->Concatenate(' ');
-					assembleStr->Concatenate(argument);
-				}
-				
-				assembleStr->DebugPrint("assembleStr2=");
-				cAssembleStr = assembleStr->GetStdASCII();
-
-				opLen = this->Assemble(currentAssembleAddress, cAssembleStr, false);
-			}
-			
-			delete [] cAssembleStr;
-			
-			if (opLen == -1)
-				continue;
-			
-			currentAssembleAddress += opLen;
-			
+			// Restore
+			*lineEnd = savedChar;
 		}
+
+		// Advance past end of line
+		if (*lineEnd == '\r' && *(lineEnd + 1) == '\n')
+			lineStart = lineEnd + 2;
+		else if (*lineEnd == '\n' || *lineEnd == '\r')
+			lineStart = lineEnd + 1;
+		else
+			lineStart = lineEnd; // end of string
 	}
-	
-	while (!strs->empty())
-	{
-		CSlrString *str = strs->back();
-		
-		strs->pop_back();
-		delete str;
-	}
-	
-	this->ScrollToAddress(currentAssembleAddress);
-	
+
+	delete[] clipText;
 	delete pasteStr;
+
+	this->ScrollToAddress(currentAssembleAddress);
 }
 
 void CViewDisassembly::CopyAssemblyToClipboard()
 {
 	LOGD("CViewDisassembly::CopyAssemblyToClipboard");
-	
-	u8 op = 0x00;
-	u8 hi = 0x00;
-	u8 lo = 0x00;
-	bool isAvailable;
-	
-	// TODO: create wrapping adapter for post $FFFF-reads to wrap starting from $0000
-	dataAdapter->AdapterReadByte(this->cursorAddress, &op, &isAvailable);
-	dataAdapter->AdapterReadByte(this->cursorAddress + 1, &lo, &isAvailable);
-	dataAdapter->AdapterReadByte(this->cursorAddress + 2, &hi, &isAvailable);
-	
-	char *buf = SYS_GetCharBuf();
-	MnemonicWithDollarArgumentToStr(this->cursorAddress, op, lo, hi, buf);
-	
-	CSlrString *str = new CSlrString(buf);
-	SYS_SetClipboardAsSlrString(str);
-	delete str;
 
-	char *buf2 = SYS_GetCharBuf();
+	int fromAddr, toAddr;
+	if (GetSelectionRange(&fromAddr, &toAddr) && fromAddr != toAddr)
+	{
+		// Multi-line selection copy
+		std::string result;
+		int addr = fromAddr;
+		char lineBuf[128];
+		char addrBuf[16];
+		char hexBuf[16];
+		char mnemBuf[64];
 
-	sprintf(buf2, "Copied %s", buf);
-	viewC64->ShowMessageInfo(buf2);
-	
-	SYS_ReleaseCharBuf(buf);
-	SYS_ReleaseCharBuf(buf2);
-	
+		while (addr <= toAddr)
+		{
+			u8 op, lo, hi;
+			bool isAvailable;
+			dataAdapter->AdapterReadByte(addr, &op, &isAvailable);
+			dataAdapter->AdapterReadByte(addr + 1, &lo, &isAvailable);
+			dataAdapter->AdapterReadByte(addr + 2, &hi, &isAvailable);
+
+			int length = opcodes[op].addressingLength;
+
+			// Format address
+			dataAdapter->GetAddressStringForCell(addr, addrBuf, sizeof(addrBuf));
+
+			// Format hex bytes (padded to 9 chars: "XX XX XX ")
+			strcpy(hexBuf, "         ");
+			switch (length)
+			{
+				case 1:
+					sprintfHexCode8WithoutZeroEnding(hexBuf, op);
+					break;
+				case 2:
+					sprintfHexCode8WithoutZeroEnding(hexBuf, op);
+					sprintfHexCode8WithoutZeroEnding(hexBuf + 3, lo);
+					break;
+				case 3:
+					sprintfHexCode8WithoutZeroEnding(hexBuf, op);
+					sprintfHexCode8WithoutZeroEnding(hexBuf + 3, lo);
+					sprintfHexCode8WithoutZeroEnding(hexBuf + 6, hi);
+					break;
+			}
+			hexBuf[9] = '\0';
+
+			// Format mnemonic
+			MnemonicWithDollarArgumentToStr(addr, op, lo, hi, mnemBuf);
+
+			// Assemble line: "ADDR HEX       MNE ARG"
+			sprintf(lineBuf, "%s %s %s", addrBuf, hexBuf, mnemBuf);
+
+			if (!result.empty())
+				result += "\n";
+			result += lineBuf;
+
+			addr += length;
+		}
+
+		CSlrString *str = new CSlrString(result.c_str());
+		SYS_SetClipboardAsSlrString(str);
+		delete str;
+
+		char msgBuf[64];
+		sprintf(msgBuf, "Copied %d lines", (int)std::count(result.begin(), result.end(), '\n') + 1);
+		viewC64->ShowMessageInfo(msgBuf);
+	}
+	else
+	{
+		// Single line at cursor (existing behavior)
+		u8 op = 0x00;
+		u8 hi = 0x00;
+		u8 lo = 0x00;
+		bool isAvailable;
+
+		dataAdapter->AdapterReadByte(this->cursorAddress, &op, &isAvailable);
+		dataAdapter->AdapterReadByte(this->cursorAddress + 1, &lo, &isAvailable);
+		dataAdapter->AdapterReadByte(this->cursorAddress + 2, &hi, &isAvailable);
+
+		char *buf = SYS_GetCharBuf();
+		MnemonicWithDollarArgumentToStr(this->cursorAddress, op, lo, hi, buf);
+
+		CSlrString *str = new CSlrString(buf);
+		SYS_SetClipboardAsSlrString(str);
+		delete str;
+
+		char *buf2 = SYS_GetCharBuf();
+		sprintf(buf2, "Copied %s", buf);
+		viewC64->ShowMessageInfo(buf2);
+
+		SYS_ReleaseCharBuf(buf);
+		SYS_ReleaseCharBuf(buf2);
+	}
 }
 
 void CViewDisassembly::CopyHexAddressToClipboard()
@@ -4437,6 +4743,120 @@ void CViewDisassembly::PasteKeysFromClipboard()
 //{
 //	LOGI("CViewDisassembly::KeyDown: %x %s %s %s", keyCode, STRBOOL(isShift), STRBOOL(isAlt), STRBOOL(isControl));
 //	
+
+//
+// Effective Address Interpreter integration
+//
+void CViewDisassembly::RunInterpreterForVisibleRange()
+{
+	if (currentPC < 0)
+		return;
+
+	u16 pc;
+	u8 a, x, y, p, s;
+	debugInterface->GetCpuRegs(&pc, &a, &x, &y, &p, &s);
+
+	interpreter->instructionBudget = c64SettingsDisassemblyEAInstructionBudget;
+	interpreter->jsrDepthLimit = c64SettingsDisassemblyEAJsrDepthLimit;
+
+	// Set I/O range based on emulator type
+	int emulatorType = debugInterface->GetEmulatorType();
+	// Default: C64 I/O range $D000-$DFFF
+	interpreter->ioRangeStart = 0xD000;
+	interpreter->ioRangeEnd = 0xDFFF;
+
+	interpreter->Init(a, x, y, s, p, pc);
+	interpreter->SimulateRange(pc, 0xFFFF, dataAdapter, memoryLength);
+	interpreter->debugStartPC = pc;
+}
+
+void CViewDisassembly::RenderEffectiveAddressAnnotation(float py, int addr)
+{
+	AnnotationInfo info;
+	if (!interpreter->GetAnnotation(addr, &info))
+	{
+		// No simulated annotation — compute fallback with last register state
+		if (!interpreter->GetFallbackAnnotation(addr, &info))
+			return;
+	}
+	if (!info.hasAnnotation)
+		return;
+
+	// Check if we should hide unknown values
+	if (c64SettingsDisassemblyEAHideUnknown && info.certainty == RegCertainty::Unknown)
+		return;
+
+	char annotBuf[64];
+	int pos = 0;
+
+	if (info.hasIndexReg)
+	{
+		// Indexed/indirect modes: "Y=03 D003=0E"
+		char ic = (info.indexReg == DispRegX) ? 'X' : 'Y';
+		pos += sprintf(annotBuf + pos, "%c=%02X %04X=%02X", ic, info.indexRegValue, info.effectiveAddr, info.value);
+	}
+	else if (info.isStore && info.displayReg != DispRegNone)
+	{
+		// Direct store: show register = value (e.g., "X=03", "Y=FF")
+		char rc = (info.displayReg == DispRegA) ? 'A' : (info.displayReg == DispRegX) ? 'X' : 'Y';
+		pos += sprintf(annotBuf + pos, "%c=%02X", rc, info.displayRegValue);
+	}
+	else if (info.isDirectAddress)
+	{
+		// Direct RMW/load/other: show address = value (e.g., "D020=0E")
+		pos += sprintf(annotBuf + pos, "%04X=%02X", info.effectiveAddr, info.value);
+	}
+	else
+	{
+		// Indirect JMP: show resolved target address
+		pos += sprintf(annotBuf + pos, "=%04X", info.effectiveAddr);
+	}
+
+	float textWidth = strlen(annotBuf) * fontSize;
+	float padding = fontSize;
+	float annotX = posX + sizeX - textWidth - padding;
+
+	// Colors based on certainty
+	float cr, cg, cb, ca;
+	float colorExecuteR, colorExecuteG, colorExecuteB;
+	GetColorsFromScheme(c64SettingsDisassemblyExecuteColor, &colorExecuteR, &colorExecuteG, &colorExecuteB);
+
+	float bgAlpha = 0.6f;
+
+	switch (info.certainty)
+	{
+		case RegCertainty::Certain:
+			cr = colorExecuteR;
+			cg = colorExecuteG;
+			cb = colorExecuteB;
+			ca = 1.0f;
+			break;
+		case RegCertainty::Simulated:
+			cr = colorExecuteR * 0.85f;
+			cg = colorExecuteG * 0.85f;
+			cb = colorExecuteB * 0.85f;
+			ca = 1.0f;
+			bgAlpha = 0.4f;
+			break;
+		case RegCertainty::Unknown:
+			cr = colorExecuteR * 0.65f;
+			cg = colorExecuteG * 0.65f;
+			cb = colorExecuteB * 0.65f;
+			ca = 0.8f;
+			bgAlpha = 0.3f;
+			break;
+	}
+
+	// Draw background rect
+	float bgColorR, bgColorG, bgColorB;
+	GetDisassemblyBackgroundColor(&bgColorR, &bgColorG, &bgColorB);
+	BlitFilledRectangle(annotX - fontSize * 0.5f, py, -1.0f,
+						textWidth + fontSize, fontSize,
+						bgColorR * 0.3f + 0.1f, bgColorG * 0.3f + 0.1f, bgColorB * 0.3f + 0.2f, bgAlpha);
+
+	// Draw text
+	fontDisassembly->BlitTextColor(annotBuf, annotX, py, -1, fontSize, cr, cg, cb, ca);
+}
 
 //
 bool CViewDisassembly::HasContextMenuItems()

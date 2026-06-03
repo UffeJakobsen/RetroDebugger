@@ -750,7 +750,7 @@ void inserttable(int num, int pos, int mode)
     {
       if ((num == WTBL) && (mode == 1))
       {
-        ltable[num][c] = 0xe9;
+		ltable[num][c] = 0x11; //0xe9;
         rtable[num][c] = 0;
       }
       else

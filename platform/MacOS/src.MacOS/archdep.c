@@ -153,7 +153,7 @@ const char *archdep_boot_path(void)
 		/* known from setup in archdep_init_extra() so just reuse it */
 		boot_path = lib_stralloc(argv0);
 #else
-		boot_path = findpath(argv0, getenv("PATH"), IOUTIL_ACCESS_X_OK);
+		boot_path = findpath(argv0, getenv("PATH"), NULL, IOUTIL_ACCESS_X_OK);
 #endif
 		
 		/* Remove the program name.  */

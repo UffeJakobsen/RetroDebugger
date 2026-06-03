@@ -960,6 +960,288 @@ void CopyMultiCharsetToImage(u8 *charsetData, CImageData *imageData, int numColu
 	}
 }
 
+void CopyHiresBitmapToImage(u8 *bitmapData, u8 *screenData,
+					CImageData *imageData,
+					u8 colorBg, CDebugInterfaceC64 *debugInterface)
+{
+	u8 defaultBgR, defaultBgG, defaultBgB;
+	debugInterface->GetCBMColor(colorBg, &defaultBgR, &defaultBgG, &defaultBgB);
+	imageData->EraseContent(defaultBgR, defaultBgG, defaultBgB, 255);
+
+	for (int charRow = 0; charRow < 25; charRow++)
+	{
+		for (int charColumn = 0; charColumn < 40; charColumn++)
+		{
+			int cellOffset = charRow * 40 + charColumn;
+			u8 screenByte = screenData[cellOffset];
+			u8 colorBackground = screenByte & 0x0F;
+			u8 colorForeground = (screenByte >> 4) & 0x0F;
+
+			u8 bgR, bgG, bgB;
+			u8 fgR, fgG, fgB;
+			debugInterface->GetCBMColor(colorBackground, &bgR, &bgG, &bgB);
+			debugInterface->GetCBMColor(colorForeground, &fgR, &fgG, &fgB);
+
+			for (int charY = 0; charY < 8; charY++)
+			{
+				int bitmapOffset = cellOffset * 8 + charY;
+				u8 row = bitmapData[bitmapOffset];
+				int pixelY = charRow * 8 + charY;
+
+				for (int charX = 0; charX < 8; charX++)
+				{
+					bool isForeground = ((row & (0x80 >> charX)) != 0);
+					int pixelX = charColumn * 8 + charX;
+					if (isForeground)
+					{
+						imageData->SetPixelResultRGBA(pixelX, pixelY, fgR, fgG, fgB, 255);
+					}
+					else
+					{
+						imageData->SetPixelResultRGBA(pixelX, pixelY, bgR, bgG, bgB, 255);
+					}
+				}
+			}
+		}
+	}
+}
+
+void CopyMultiBitmapToImage(u8 *bitmapData, u8 *screenData, u8 *colorData,
+					CImageData *imageData,
+					u8 d021, CDebugInterfaceC64 *debugInterface)
+{
+	u8 bgR, bgG, bgB;
+	debugInterface->GetCBMColor(d021, &bgR, &bgG, &bgB);
+	imageData->EraseContent(bgR, bgG, bgB, 255);
+
+	for (int charRow = 0; charRow < 25; charRow++)
+	{
+		for (int charColumn = 0; charColumn < 40; charColumn++)
+		{
+			int cellOffset = charRow * 40 + charColumn;
+			u8 screenByte = screenData[cellOffset];
+			u8 colors[4];
+			colors[0] = d021 & 0x0F;
+			colors[1] = (screenByte >> 4) & 0x0F;
+			colors[2] = screenByte & 0x0F;
+			colors[3] = colorData[cellOffset] & 0x0F;
+
+			u8 rgb[4][3];
+			for (int i = 0; i < 4; i++)
+			{
+				debugInterface->GetCBMColor(colors[i], &rgb[i][0], &rgb[i][1], &rgb[i][2]);
+			}
+
+			for (int charY = 0; charY < 8; charY++)
+			{
+				int bitmapOffset = cellOffset * 8 + charY;
+				u8 row = bitmapData[bitmapOffset];
+				int pixelY = charRow * 8 + charY;
+
+				for (int pair = 0; pair < 4; pair++)
+				{
+					u8 colorIndex = (row >> (6 - pair * 2)) & 0x03;
+					int pixelX = charColumn * 8 + pair * 2;
+					imageData->SetPixelResultRGBA(pixelX + 0, pixelY, rgb[colorIndex][0], rgb[colorIndex][1], rgb[colorIndex][2], 255);
+					imageData->SetPixelResultRGBA(pixelX + 1, pixelY, rgb[colorIndex][0], rgb[colorIndex][1], rgb[colorIndex][2], 255);
+				}
+			}
+		}
+	}
+}
+
+void CopyCharsetFromAdapterToImage(CDataAdapter *dataAdapter, int charsetAddr,
+					   CImageData *imageData, bool useColors,
+					   u8 colorD021, u8 colorD022, u8 colorD023, u8 colorD800,
+					   CDebugInterfaceC64 *debugInterface)
+{
+	u8 charsetData[0x800];
+	for (int i = 0; i < 0x800; i++)
+	{
+		dataAdapter->AdapterReadByte(charsetAddr + i, &charsetData[i]);
+	}
+
+	if (useColors == false)
+	{
+		CopyHiresCharsetToImage(charsetData, imageData, 32, 0, 1, debugInterface);
+	}
+	else
+	{
+		CopyMultiCharsetToImage(charsetData, imageData, 32, colorD021, colorD022, colorD023, colorD800, debugInterface);
+	}
+}
+
+void CopySpriteFromAdapterToImage(CDataAdapter *dataAdapter, int spriteAddr,
+					  CImageData *imageData, bool useColors,
+					  u8 colorD021, u8 colorD025, u8 colorD026, u8 colorD027,
+					  CDebugInterfaceC64 *debugInterface, int gap, u8 alpha)
+{
+	u8 spriteData[63];
+	for (int i = 0; i < 63; i++)
+	{
+		dataAdapter->AdapterReadByte(spriteAddr + i, &spriteData[i]);
+	}
+
+	if (useColors == false)
+	{
+		ConvertSpriteDataToImage(spriteData, imageData, gap);
+	}
+	else
+	{
+		ConvertColorSpriteDataToImage(spriteData, imageData, colorD021, colorD025, colorD026, colorD027, debugInterface, gap, alpha);
+	}
+}
+
+void CopyBitmapFromAdapterToImage(CDataAdapter *dataAdapter, int bitmapAddr, int screenAddr, int colorAddr,
+					  CImageData *imageData, bool useColors,
+					  u8 colorD021, CDebugInterfaceC64 *debugInterface)
+{
+	u8 bitmapData[8000];
+	u8 screenData[1000];
+	u8 colorData[1000];
+
+	for (int i = 0; i < 8000; i++)
+	{
+		dataAdapter->AdapterReadByte(bitmapAddr + i, &bitmapData[i]);
+	}
+
+	for (int i = 0; i < 1000; i++)
+	{
+		dataAdapter->AdapterReadByte(screenAddr + i, &screenData[i]);
+		dataAdapter->AdapterReadByte(colorAddr + i, &colorData[i]);
+	}
+
+	if (useColors)
+	{
+		CopyMultiBitmapToImage(bitmapData, screenData, colorData, imageData, colorD021, debugInterface);
+	}
+	else
+	{
+		CopyHiresBitmapToImage(bitmapData, screenData, imageData, colorD021, debugInterface);
+	}
+}
+
+void CopyScreenFromAdapterToImage(CDataAdapter *dataAdapter, int screenAddr, int charsetAddr, int colorAddr,
+					  CImageData *imageData,
+					  u8 colorD021, CDebugInterfaceC64 *debugInterface)
+{
+	u8 screenData[1000];
+	u8 charsetData[2048];
+	u8 colorData[1000];
+
+	for (int i = 0; i < 1000; i++)
+	{
+		dataAdapter->AdapterReadByte(screenAddr + i, &screenData[i]);
+		dataAdapter->AdapterReadByte(colorAddr + i, &colorData[i]);
+	}
+
+	for (int i = 0; i < 2048; i++)
+	{
+		dataAdapter->AdapterReadByte(charsetAddr + i, &charsetData[i]);
+	}
+
+	CopyScreenTextToImage(screenData, charsetData, colorData, imageData, colorD021, debugInterface);
+}
+
+void CopyBitmapIndexFromAdapterToImage(CDataAdapter *dataAdapter, int bitmapIndex, int screenAddr, int colorAddr,
+					   CImageData *imageData, bool useColors,
+					   u8 colorD021, CDebugInterfaceC64 *debugInterface)
+{
+	CopyBitmapFromAdapterToImage(dataAdapter, bitmapIndex * 0x2000, screenAddr, colorAddr,
+					 imageData, useColors, colorD021, debugInterface);
+}
+
+void CopyScreenIndexFromAdapterToImage(CDataAdapter *dataAdapter, int screenIndex, int charsetAddr, int colorAddr,
+					   CImageData *imageData,
+					   u8 colorD021, CDebugInterfaceC64 *debugInterface)
+{
+	CopyScreenFromAdapterToImage(dataAdapter, screenIndex * 0x0400, charsetAddr, colorAddr,
+					 imageData, colorD021, debugInterface);
+}
+
+void GetC64UBitmapRenderParams(const C64ULogicalState &state, bool *useColors,
+					   uint16_t *bitmapAddr, uint16_t *screenAddr,
+					   uint16_t *colorAddr, uint8_t *colorD021)
+{
+	*useColors = state.vic.IsMulticolorMode();
+	*bitmapAddr = state.bank.bitmapAddress;
+	*screenAddr = state.bank.screenAddress;
+	*colorAddr = 0xD800;
+	*colorD021 = state.vic.GetBackgroundColor(0);
+}
+
+void GetC64UScreenRenderParams(const C64ULogicalState &state,
+					   uint16_t *screenAddr, uint16_t *charsetAddr,
+					   uint16_t *colorAddr, uint8_t *colorD021)
+{
+	*screenAddr = state.bank.screenAddress;
+	*charsetAddr = state.bank.charsetAddress;
+	*colorAddr = 0xD800;
+	*colorD021 = state.vic.GetBackgroundColor(0);
+}
+
+void GetC64UCharsetRenderParams(const C64ULogicalState &state, bool *useColors,
+					   uint16_t *charsetAddr,
+					   uint8_t *colorD021, uint8_t *colorD022,
+					   uint8_t *colorD023, uint8_t *colorD800)
+{
+	*useColors = (!state.vic.IsBitmapMode() && state.vic.IsMulticolorMode());
+	*charsetAddr = state.bank.charsetAddress;
+	*colorD021 = state.vic.GetBackgroundColor(0);
+	*colorD022 = state.vic.GetBackgroundColor(1);
+	*colorD023 = state.vic.GetBackgroundColor(2);
+	*colorD800 = 0x01;
+}
+
+void GetC64USpriteRenderParams(const C64ULogicalState &state, bool *useColors,
+					  uint8_t *colorD021, uint8_t *colorD025,
+					  uint8_t *colorD026, uint8_t *colorD027)
+{
+	*useColors = (state.vic.registers[0x1C] != 0x00);
+	*colorD021 = state.vic.GetBackgroundColor(0);
+	*colorD025 = state.vic.GetSpriteMulticolor0();
+	*colorD026 = state.vic.GetSpriteMulticolor1();
+	*colorD027 = state.vic.GetSpriteColor(0);
+}
+
+void CopyScreenTextToImage(u8 *screenData, u8 *charsetData, u8 *colorData,
+					   CImageData *imageData,
+					   u8 d021, CDebugInterfaceC64 *debugInterface)
+{
+	u8 bgR, bgG, bgB;
+	debugInterface->GetCBMColor(d021, &bgR, &bgG, &bgB);
+	imageData->EraseContent(bgR, bgG, bgB, 255);
+
+	for (int screenY = 0; screenY < 25; screenY++)
+	{
+		for (int screenX = 0; screenX < 40; screenX++)
+		{
+			int screenOffset = screenY * 40 + screenX;
+			u8 characterCode = screenData[screenOffset];
+			u8 colorForeground = colorData[screenOffset] & 0x0F;
+
+			u8 fgR, fgG, fgB;
+			debugInterface->GetCBMColor(colorForeground, &fgR, &fgG, &fgB);
+
+			u8 *characterData = charsetData + characterCode * 8;
+			int pixelX = screenX * 8;
+			int pixelY = screenY * 8;
+
+			for (int charY = 0; charY < 8; charY++)
+			{
+				u8 row = characterData[charY];
+				for (int charX = 0; charX < 8; charX++)
+				{
+					if ((row & (0x80 >> charX)) != 0)
+					{
+						imageData->SetPixelResultRGBA(pixelX + charX, pixelY + charY, fgR, fgG, fgB, 255);
+					}
+				}
+			}
+		}
+	}
+}
+
 u8 FindC64Color(u8 r, u8 g, u8 b, CDebugInterfaceC64 *debugInterface)
 {
 	//LOGD("FindC64Color: %d %d %d", r, g, b);

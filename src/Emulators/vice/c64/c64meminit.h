@@ -28,7 +28,7 @@
 #ifndef VICE_C64MEMINIT_H
 #define VICE_C64MEMINIT_H
 
-extern void c64meminit(unsigned int base);
+void c64meminit(unsigned int base);
 extern const unsigned int c64meminit_io_config[32];
 
 #endif

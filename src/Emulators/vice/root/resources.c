@@ -40,6 +40,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -57,10 +58,16 @@
 #include "vice-event.h"
 
 #ifdef VICE_DEBUG_RESOURCES
-#define DBG(x)  printf x
+#define DBG(x)  log_printf x
 #else
 #define DBG(x)
 #endif
+
+
+/** \brief  Initial size of the array holding resources
+ */
+#define NUM_ALLOCATED_RESOURCES_INIT    512
+
 
 typedef struct resource_ram_s {
     /* Resource name.  */
@@ -106,7 +113,8 @@ typedef struct resource_callback_desc_s {
 } resource_callback_desc_t;
 
 
-static unsigned int num_resources, num_allocated_resources;
+static unsigned int num_resources;
+static unsigned int num_allocated_resources;
 static resource_ram_t *resources;
 static char *machine_id = NULL;
 
@@ -125,7 +133,7 @@ static unsigned int resources_calc_hash_key(const char *name)
 {
     unsigned int key, i, shift;
 
-    DBG(("resources_calc_hash_key: '%s'\n", name ? name : "<empty/null>"));
+    DBG(("resources_calc_hash_key: '%s'", name ? name : "<empty/null>"));
 
     key = 0; shift = 0;
     for (i = 0; name[i] != '\0'; i++) {
@@ -218,13 +226,15 @@ static resource_ram_t *lookup(const char *name)
     resource_ram_t *res;
     unsigned int hashkey;
 
+    DBG(("lookup name:'%s'", name ? name : "<empty/null>"));
+
     if (name == NULL) {
         return NULL;
     }
     hashkey = resources_calc_hash_key(name);
     res = (hashTable[hashkey] >= 0) ? resources + hashTable[hashkey] : NULL;
     while (res != NULL) {
-        if (strcasecmp(res->name, name) == 0) {
+        if (util_strcasecmp(res->name, name) == 0) {
             return res;
         }
         res = (res->hash_next >= 0) ? resources + res->hash_next : NULL;
@@ -242,7 +252,7 @@ int resources_register_int(const resource_int_t *r)
     const resource_int_t *sp;
     resource_ram_t *dp;
 
-    DBG(("resources_register_int name:'%s'\n", r->name ? r->name : "<empty/null>"));
+    DBG(("resources_register_int name:'%s'", r->name ? r->name : "<empty/null>"));
 
     sp = r;
     dp = resources + num_resources;
@@ -268,7 +278,7 @@ int resources_register_int(const resource_int_t *r)
             dp = resources + num_resources;
         }
 
-        dp->name = lib_stralloc(sp->name);
+        dp->name = lib_strdup(sp->name);
         dp->type = RES_INTEGER;
         dp->factory_value = uint_to_void_ptr(sp->factory_value);
         dp->value_ptr = (void *)(sp->value_ptr);
@@ -282,7 +292,9 @@ int resources_register_int(const resource_int_t *r)
         dp->hash_next = hashTable[hashkey];
         hashTable[hashkey] = (int)(dp - resources);
 
-        num_resources++, sp++, dp++;
+        num_resources++;
+        sp++;
+        dp++;
     }
 
     return 0;
@@ -293,7 +305,7 @@ int resources_register_string(const resource_string_t *r)
     const resource_string_t *sp;
     resource_ram_t *dp;
 
-    DBG(("resources_register_string name:'%s'\n", r->name ? r->name : "<empty/null>"));
+    DBG(("resources_register_string name:'%s'", r->name ? r->name : "<empty/null>"));
 
     sp = r;
     dp = resources + num_resources;
@@ -320,7 +332,7 @@ int resources_register_string(const resource_string_t *r)
             dp = resources + num_resources;
         }
 
-        dp->name = lib_stralloc(sp->name);
+        dp->name = lib_strdup(sp->name);
         dp->type = RES_STRING;
         dp->factory_value = (resource_value_t)(sp->factory_value);
         dp->value_ptr = (void *)(sp->value_ptr);
@@ -334,7 +346,9 @@ int resources_register_string(const resource_string_t *r)
         dp->hash_next = hashTable[hashkey];
         hashTable[hashkey] = (int)(dp - resources);
 
-        num_resources++, sp++, dp++;
+        num_resources++;
+        sp++;
+        dp++;
     }
 
     return 0;
@@ -351,7 +365,7 @@ static void resources_free(void)
 }
 
 
-/** \brief  Shutown resources
+/** \brief  Shutdown resources
  */
 void resources_shutdown(void)
 {
@@ -410,7 +424,7 @@ static void resource_create_event_data(char **event_data, int *data_size,
     name_size = (int)strlen(name) + 1;
 
     if (r->type == RES_INTEGER) {
-        *data_size = name_size + sizeof(DWORD);
+        *data_size = name_size + sizeof(uint32_t);
     } else {
         *data_size = name_size + (int)strlen((char *)value) + 1;
     }
@@ -419,7 +433,7 @@ static void resource_create_event_data(char **event_data, int *data_size,
     strcpy(*event_data, name);
 
     if (r->type == RES_INTEGER) {
-        *(DWORD *)(*event_data + name_size) = vice_ptr_to_uint(value);
+        *(uint32_t *)(*event_data + name_size) = vice_ptr_to_uint(value);
     } else {
         strcpy(*event_data + name_size, (char *)value);
     }
@@ -440,12 +454,37 @@ static void resource_record_event(resource_ram_t *r,
 
 /* ------------------------------------------------------------------------- */
 
+
+/* Total resources registered per emu, using Gtk3 (2020-02-24)
+ *
+ * x128         509
+ * x64sc        471
+ * x64          469
+ * xscpu64      445
+ * xvic         364
+ * xplus4       321
+ * x64dtv       309
+ * xpet         300
+ * xcbm2        284
+ * xcbm5x0      272
+ * vsid         63
+ */
+
+
+/** \brief  Initialize resources module
+ *
+ * Allocated memory for resource objects and the hash table.
+ *
+ * \param[in]   machine machine name
+ *
+ * \return  0
+ */
 int resources_init(const char *machine)
 {
     unsigned int i;
 
-    machine_id = lib_stralloc(machine);
-    num_allocated_resources = 100;
+    machine_id = lib_strdup(machine);
+    num_allocated_resources = NUM_ALLOCATED_RESOURCES_INIT;
     num_resources = 0;
     resources = lib_malloc(num_allocated_resources * sizeof(resource_ram_t));
 
@@ -492,11 +531,15 @@ int resources_set_value(const char *name, resource_value_t value)
         return -1;
     }
 
-    if (r->event_relevant == RES_EVENT_STRICT
-        && network_get_mode() != NETWORK_IDLE) {
+    /* if netplay is not idle, and resource is tagged RES_EVENT_STRICT,
+       it can not be changed at all */
+    if ((r->event_relevant == RES_EVENT_STRICT) &&
+        (network_get_mode() != NETWORK_IDLE)) {
         return -2;
     }
 
+    /* if netplay is connected, and resource is tagged RES_EVENT_SAME,
+       record the resource change event so it will be distributed to the client */
     if (r->event_relevant == RES_EVENT_SAME && network_connected()) {
         resource_record_event(r, value);
         return 0;
@@ -555,10 +598,15 @@ int resources_set_int(const char *name, int value)
         return -1;
     }
 
-    if (r->event_relevant == RES_EVENT_STRICT && network_get_mode() != NETWORK_IDLE) {
+    /* if netplay is not idle, and resource is tagged RES_EVENT_STRICT,
+       it can not be changed at all */
+    if ((r->event_relevant == RES_EVENT_STRICT) &&
+        (network_get_mode() != NETWORK_IDLE)) {
         return -2;
     }
 
+    /* if netplay is connected, and resource is tagged RES_EVENT_SAME,
+       record the resource change event so it will be distributed to the client */
     if (r->event_relevant == RES_EVENT_SAME && network_connected()) {
         resource_record_event(r, uint_to_void_ptr(value));
         return 0;
@@ -578,10 +626,15 @@ int resources_set_string(const char *name, const char *value)
         return -1;
     }
 
-    if (r->event_relevant == RES_EVENT_STRICT && network_get_mode() != NETWORK_IDLE) {
+    /* if netplay is not idle, and resource is tagged RES_EVENT_STRICT,
+       it can not be changed at all */
+    if ((r->event_relevant == RES_EVENT_STRICT) &&
+        (network_get_mode() != NETWORK_IDLE)) {
         return -2;
     }
 
+    /* if netplay is connected, and resource is tagged RES_EVENT_SAME,
+       record the resource change event so it will be distributed to the client */
     if (r->event_relevant == RES_EVENT_SAME && network_connected()) {
         resource_record_event(r, (resource_value_t)value);
         return 0;
@@ -600,7 +653,7 @@ void resources_set_value_event(void *data, int size)
     valueptr = name + strlen(name) + 1;
     r = lookup(name);
     if (r->type == RES_INTEGER) {
-        resources_set_value_internal(r, (resource_value_t) uint_to_void_ptr(*(DWORD*)valueptr));
+        resources_set_value_internal(r, (resource_value_t) uint_to_void_ptr(*(uint32_t*)valueptr));
     } else {
         resources_set_value_internal(r, (resource_value_t)valueptr);
     }
@@ -707,9 +760,34 @@ int resources_get_value(const char *name, void *value_return)
     return 0;
 }
 
+
+/** \brief  Determine if a resource exists
+ *
+ * \param[in]   name    resource name
+ *
+ * \return  \c true if \a resource name exists
+ */
+bool resources_exists(const char *name)
+{
+    return lookup(name) == NULL ? false : true;
+}
+
+
+/** \brief  Get value for resource \a name and store in \a value_return
+ *
+ * If the resource is unknown, the return value is set to 0.
+ *
+ * \param[in]   name            resource name
+ * \param[out]  value_return    resource value target
+ *
+ * \return  0 on succes, -1 on failure
+ */
 int resources_get_int(const char *name, int *value_return)
 {
     resource_ram_t *r = lookup(name);
+
+    /* set some sane value */
+    *value_return = 0;
 
     if (r == NULL) {
         log_warning(LOG_DEFAULT,
@@ -730,9 +808,23 @@ int resources_get_int(const char *name, int *value_return)
     return 0;
 }
 
+/** \brief  Get string resource \a name and store in \a value_return
+ *
+ * If the resource \a name is unknown, \a value_return is set to NULL.
+ *
+ * \param[in]   name            resource name
+ * \param[out]  value_return    resource value target
+ *
+ * \return  0 on success, -1 on failure
+ */
 int resources_get_string(const char *name, const char **value_return)
 {
     resource_ram_t *r = lookup(name);
+
+    /* don't return an unitialized value, NULL is probably a good choice to
+     * trace bugs
+     */
+    *value_return = NULL;
 
     if (r == NULL) {
         log_warning(LOG_DEFAULT,
@@ -848,34 +940,46 @@ int resources_set_defaults(void)
 {
     unsigned int i;
 
+    log_verbose(LOG_DEFAULT, "Setting resources to default...");
+
     for (i = 0; i < num_resources; i++) {
+        DBG(("setting default for '%s'", resources[i].name));
         switch (resources[i].type) {
+            /* CAUTION: the following MUST NOT fail and NOT return early when resetting
+                        a resource fails - else we get strange side effects in the case
+                        that a default value is eg. the name of a ROM file that does
+                        not exist (and thus can not be loaded when the resource value
+                        changes). see #1948 */
             case RES_INTEGER:
                 if ((*resources[i].set_func_int)(vice_ptr_to_int(resources[i].factory_value),
                                                  resources[i].param) < 0) {
-                    log_verbose("Cannot set resource %s", resources[i].name);
-                    return -1;
+                    log_verbose(LOG_DEFAULT, "Cannot set int resource '%s' to default '%d'",
+                                resources[i].name, vice_ptr_to_int(resources[i].factory_value));
+                    /*return -1;*/
                 }
                 break;
             case RES_STRING:
                 if ((*resources[i].set_func_string)((const char *)(resources[i].factory_value),
                                                     resources[i].param) < 0) {
-                    log_verbose("Cannot set resource %s", resources[i].name);
-                    return -1;
+                    log_verbose(LOG_DEFAULT, "Cannot set string resource '%s' to default '%s'",
+                                resources[i].name, (const char *)(resources[i].factory_value));
+                    /*return -1;*/
                 }
                 break;
         }
-
+        DBG(("issue callback for '%s'", resources[i].name));
         resources_issue_callback(resources + i, 0);
     }
 
     if (resource_modified_callback != NULL) {
         resources_exec_callback_chain(resource_modified_callback, NULL);
     }
+    log_verbose(LOG_DEFAULT, "Done setting resources to default.");
 
     return 0;
 }
 
+/* set resources tagged RES_EVENT_STRICT to their event_strict_value */
 int resources_set_event_safe(void)
 {
     unsigned int i;
@@ -884,16 +988,20 @@ int resources_set_event_safe(void)
         switch (resources[i].type) {
             case RES_INTEGER:
                 if (resources[i].event_relevant == RES_EVENT_STRICT) {
+                    DBG(("seting event-safe resource value for '%s'", resources[i].name));
                     if ((*resources[i].set_func_int)(vice_ptr_to_int(resources[i].event_strict_value),
                                                      resources[i].param) < 0) {
+                        log_error(LOG_DEFAULT, "failed to set event-safe resource value for '%s'", resources[i].name);
                         return -1;
                     }
                 }
                 break;
             case RES_STRING:
                 if (resources[i].event_relevant == RES_EVENT_STRICT) {
+                    DBG(("seting event-safe resource value for '%s'", resources[i].name));
                     if ((*resources[i].set_func_string)((const char *)(resources[i].event_strict_value),
                                                         resources[i].param) < 0) {
+                        log_error(LOG_DEFAULT, "failed to set event-safe resource value for '%s'", resources[i].name);
                         return -1;
                     }
                 }
@@ -909,6 +1017,9 @@ int resources_set_event_safe(void)
     return 0;
 }
 
+/* get list of event safe resources (tagged with RES_EVENT_SAME) - these need
+   to be the same on server and client during netplay, and are sent to the client
+   by the server when netplay is initiated */
 void resources_get_event_safe_list(event_list_state_t *list)
 {
     unsigned int i;
@@ -942,7 +1053,10 @@ int resources_toggle(const char *name, int *new_value_return)
 
     value = !(*(int *)r->value_ptr);
 
-    if (r->event_relevant == RES_EVENT_STRICT && network_get_mode() != NETWORK_IDLE) {
+    /* if netplay is not idle, and resource is tagged RES_EVENT_STRICT,
+       it can not be changed at all */
+    if ((r->event_relevant == RES_EVENT_STRICT) &&
+        (network_get_mode() != NETWORK_IDLE)) {
         return -2;
     }
 
@@ -950,6 +1064,8 @@ int resources_toggle(const char *name, int *new_value_return)
         *new_value_return = value;
     }
 
+    /* if netplay is connected, and resource is tagged RES_EVENT_SAME,
+       record the resource change event so it will be distributed to the client */
     if (r->event_relevant == RES_EVENT_SAME && network_connected()) {
         resource_record_event(r, uint_to_void_ptr(value));
         return 0;
@@ -1105,7 +1221,7 @@ int resources_load(const char *fname)
         if (vice_config_file == NULL) {
             default_name = archdep_default_resource_file_name();
         } else {
-            default_name = lib_stralloc(vice_config_file);
+            default_name = lib_strdup(vice_config_file);
         }
         fname = default_name;
     }
@@ -1163,6 +1279,12 @@ int resources_load(const char *fname)
     return err ? RESERR_FILE_INVALID : 0;
 }
 
+/* restore settings to defaults, then load settings from a file */
+int resources_reset_and_load(const char *fname)
+{
+    resources_set_defaults();
+    return resources_load(fname);
+}
 
 static char *string_resource_item(int num, const char *delim)
 {
@@ -1220,7 +1342,7 @@ static int resource_item_isdefault(int num)
             if (i1 == i2) {
                 return 1;
             }
-            DBG(("%s = (int) default: \"%d\" is: \"%d\"\n", resources[num].name, i2, i1));
+            DBG(("%s = (int) default: \"%d\" is: \"%d\"", resources[num].name, i2, i1));
             break;
         case RES_STRING:
             v = *resources[num].value_ptr;
@@ -1229,7 +1351,7 @@ static int resource_item_isdefault(int num)
             if (!strcmp(s1, s2)) {
                 return 1;
             }
-            DBG(("%s = (string) default: \"%s\" is: \"%s\"\n", resources[num].name, s2, s1));
+            DBG(("%s = (string) default: \"%s\" is: \"%s\"", resources[num].name, s2, s1));
             break;
         default:
             log_error(LOG_DEFAULT, "Unknown value type for resource `%s'.", resources[num].name);
@@ -1254,7 +1376,7 @@ int resources_save(const char *fname)
             /* get default filename. this also creates the .vice directory if not present */
             default_name = archdep_default_save_resource_file_name();
         } else {
-            default_name = lib_stralloc(vice_config_file);
+            default_name = lib_strdup(vice_config_file);
         }
         fname = default_name;
     }
@@ -1376,7 +1498,8 @@ int resources_dump(const char *fname)
     FILE *out_file;
     unsigned int i;
 
-    log_message(LOG_DEFAULT, "Dumping %d resources to file `%s'.", num_resources, fname);
+    log_message(LOG_DEFAULT, "Dumping %u resources to file `%s'.",
+            num_resources, fname);
 
     out_file = fopen(fname, MODE_WRITE_TEXT);
     if (!out_file) {
@@ -1394,6 +1517,26 @@ int resources_dump(const char *fname)
 
     fclose(out_file);
     return 0;
+}
+
+/* log resources that do not have their default values */
+void resources_log_active(void)
+{
+    unsigned int i, n = 0;
+
+    for (i = 0; i < num_resources; i++) {
+        if (!resource_item_isdefault(i)) {
+            char *line = string_resource_item(i, "");
+            if (line != NULL) {
+                if (n == 0) {
+                    log_message(LOG_DEFAULT, "Resources with non default values:");
+                    n++;
+                }
+                log_message(LOG_DEFAULT, "%s", line);
+                lib_free(line);
+            }
+        }
+    }
 }
 
 int resources_register_callback(const char *name,

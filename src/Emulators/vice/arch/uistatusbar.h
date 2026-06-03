@@ -34,10 +34,10 @@
 
 extern int uistatusbar_state;
 
-extern void uistatusbar_open(void);
-extern void uistatusbar_close(void);
-extern void uistatusbar_draw(void);
+void uistatusbar_open(void);
+void uistatusbar_close(void);
+void uistatusbar_draw(void);
 
-extern int uistatusbar_init_resources(void);
+int uistatusbar_init_resources(void);
 
 #endif

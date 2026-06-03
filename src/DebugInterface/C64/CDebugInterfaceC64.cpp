@@ -65,8 +65,7 @@ int CDebugInterfaceC64::GetEmulatorType()
 
 CSlrString *CDebugInterfaceC64::GetEmulatorVersionString()
 {
-	LOGTODO("CDebugInterfaceC64::GetEmulatorVersionString");
-	return NULL;
+	return new CSlrString("C64 (unknown backend)");
 }
 
 const char *CDebugInterfaceC64::GetPlatformNameString()
@@ -77,6 +76,11 @@ const char *CDebugInterfaceC64::GetPlatformNameString()
 const char *CDebugInterfaceC64::GetPlatformNameEndpointString()
 {
 	return "c64";
+}
+
+CC64BackendCapabilities CDebugInterfaceC64::GetC64BackendCapabilities()
+{
+	return CC64BackendCapabilities();
 }
 
 float CDebugInterfaceC64::GetEmulationFPS()
@@ -512,11 +516,9 @@ void CDebugInterfaceC64::SupportsBreakpoints(bool *writeBreakpoint, bool *readBr
 
 void CDebugInterfaceC64::ClearTemporaryBreakpoint()
 {
-	if (this->GetDebugMode() == DEBUGGER_MODE_RUNNING)
-	{
+	if (symbolsDrive1541)
 		symbolsDrive1541->ClearTemporaryBreakpoint();
-	}
-	
+
 	CDebugInterface::ClearTemporaryBreakpoint();
 }
 
@@ -1175,6 +1177,9 @@ void CDebugInterfaceC64::DumpDisk1541Memory(CSlrString *path)
 
 void CDebugInterfaceC64::DumpDisk1541MemoryMarkers(CSlrString *path)
 {
+	if (!symbolsDrive1541)
+		return;
+
 	//path->DebugPrint("CViewSettingsMenu::DumpDisk1541MemoryMarkers, path=");
 	
 	char *asciiPath = path->GetStdASCII();
@@ -1296,4 +1301,3 @@ CDebuggerServerApi *CDebugInterfaceC64::GetDebuggerServerApi()
 {
 	return CDebugInterface::GetDebuggerServerApi();
 }
-

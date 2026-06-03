@@ -4,6 +4,7 @@
 #include "SYS_Defs.h"
 #include "SYS_Threading.h"
 #include "json.hpp"
+#include "CDebuggerServerProtocol.h"
 
 class CDebuggerServer : public CSlrThread
 {
@@ -12,16 +13,28 @@ public:
 
 	virtual void Start();
 	virtual void Stop();
-	
+
+	// v1 endpoint registration (legacy, still works)
 	virtual void AddEndpointFunction(const std::string& endpointName, std::function<std::vector<char> *(const std::string, const nlohmann::json, u8 *, int)> func);
+
+	// v2 endpoint registration with descriptor (preferred)
+	virtual void AddEndpointFunction(const EndpointDescriptor &desc, EndpointHandlerV1 handler);
+
 	virtual std::vector<char> *RunEndpointFunction(const std::string& endpointName, const std::string token, nlohmann::json params, u8 *binaryData, int binaryDataSize);
 	virtual std::vector<char> *PrepareResult(int status, const std::string token, nlohmann::json resultJson, u8 *binaryData, int binaryDataSize);
-	
+
+	// v2: context-aware versions
+	virtual std::vector<char> *RunEndpointFunction(const std::string& endpointName, const RequestContext &ctx, nlohmann::json params, u8 *binaryData, int binaryDataSize);
+	virtual std::vector<char> *PrepareResult(int status, const RequestContext &ctx, nlohmann::json resultJson, u8 *binaryData, int binaryDataSize);
+
 	virtual void ThreadRun(void *passData);
 
 	virtual void BroadcastEvent(const char *eventName, nlohmann::json j);
-		
+
 	virtual bool AreClientsConnected();
+
+	// Endpoint registry for discovery
+	virtual std::vector<EndpointDescriptor> GetEndpointDescriptors();
 };
 
 // 1xx: Informational

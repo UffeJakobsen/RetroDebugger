@@ -37,7 +37,7 @@
 #include "resources.h"
 #include "uimenu.h"
 #include "uipoll.h"
-#include "userport_joystick.h"
+#include "userport.h"
 
 UI_MENU_DEFINE_RADIO(JoyDevice1)
 UI_MENU_DEFINE_RADIO(JoyDevice2)
@@ -313,31 +313,31 @@ static const ui_menu_entry_t joystick_extra_joy_type_menu[] = {
     { "CGA/Protovision userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_CGA },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_CGA },
     { "DXS/HIT userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_HIT },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_HIT },
     { "Kingsoft userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_KINGSOFT },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_KINGSOFT },
     { "Starbyte userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_STARBYTE },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_STARBYTE },
     { "PET userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_PET },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_PET },
     { "Hummer userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_HUMMER },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_HUMMER },
     { "OEM userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_OEM },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_OEM },
     SDL_MENU_LIST_END
 };
 
@@ -345,19 +345,19 @@ static const ui_menu_entry_t joystick_extra_joy_type_no_hit_menu[] = {
     { "CGA/Protovision userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_CGA },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_CGA },
     { "PET userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_PET },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_PET },
     { "HUMMER userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_HUMMER },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_HUMMER },
     { "OEM userport adapter",
       MENU_ENTRY_RESOURCE_RADIO,
       radio_ExtraJoyType_callback,
-      (ui_callback_data_t)USERPORT_JOYSTICK_OEM },
+      (ui_callback_data_t)USERPORT_DEVICE_JOYSTICK_OEM },
     SDL_MENU_LIST_END
 };
 

@@ -16,36 +16,46 @@ void CDebugInterfaceNesTaskJoystickEvent::ExecuteTask()
 {
 	if (debugInterface->snapshotsManager->isStoreInputEventsEnabled)
 	{
-		// TODO: move me to CDebugInterfaceNes!
-		
-		// Note: this buffer is not cleared as it may store other events, we need to 'unpack' and replace
 		CByteBuffer *inputEventsBuffer = debugInterface->GetInputEventsBufferForCurrentCycle();
 		inputEventsBuffer->Rewind();
 
 		bool found = false;
 		while (inputEventsBuffer->IsEof() == false)
 		{
-			int bufferEventPort = inputEventsBuffer->GetI32();
-			if (bufferEventPort == port)
+			u8 eventType = inputEventsBuffer->GetU8();
+			if (eventType == DEBUGGER_EVENT_TYPE_JOYSTICK)
 			{
-				// replace
-				int len = inputEventsBuffer->length;
-				inputEventsBuffer->PutU32(axis);
-				inputEventsBuffer->PutU8(buttonState);
-				inputEventsBuffer->length = len;
-				found = true;
+				int bufferEventPort = inputEventsBuffer->GetI32();
+				if (bufferEventPort == port)
+				{
+					// replace existing event for this port
+					int len = inputEventsBuffer->length;
+					inputEventsBuffer->PutU32(axis);
+					inputEventsBuffer->PutU8(buttonState);
+					inputEventsBuffer->length = len;
+					found = true;
+				}
+				else
+				{
+					inputEventsBuffer->GetU32(); // skip axis
+					inputEventsBuffer->GetU8();  // skip buttonState
+				}
+			}
+			else if (eventType == DEBUGGER_EVENT_TYPE_KEYBOARD)
+			{
+				inputEventsBuffer->GetU32(); // skip keyCode
+				inputEventsBuffer->GetU8();  // skip buttonState
 			}
 			else
 			{
-				// skip
-				inputEventsBuffer->GetU32();
-				inputEventsBuffer->GetU8();
+				LOGError("Unknown event type: %d", eventType);
+				break;
 			}
 		}
-		
+
 		if (found == false)
 		{
-			// not found, add at the end
+			inputEventsBuffer->PutU8(DEBUGGER_EVENT_TYPE_JOYSTICK);
 			inputEventsBuffer->PutI32(port);
 			inputEventsBuffer->PutU32(axis);
 			inputEventsBuffer->PutU8(buttonState);

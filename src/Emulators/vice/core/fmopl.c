@@ -109,7 +109,7 @@ Revision History:
 
 /* sinwave entries */
 #define SIN_BITS 10
-#define SIN_LEN  (1 << SIN_BITS)
+#define SIN_LEN  (1u << SIN_BITS)
 #define SIN_MASK (SIN_LEN - 1)
 
 #define TL_RES_LEN (256)        /* 8 bits addressing (real chip) */
@@ -1793,7 +1793,7 @@ int ym3526_snapshot_read_module(snapshot_t *s)
 {
     return -1;
 #if 0
-    BYTE vmajor, vminor;
+    uint8_t vmajor, vminor;
     snapshot_module_t *m;
 
     m = snapshot_module_open(s, SNAP_MODULE_NAME, &vmajor, &vminor);

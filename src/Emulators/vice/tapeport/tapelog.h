@@ -29,8 +29,8 @@
 
 #include "vicetypes.h"
 
-extern int tapelog_resources_init(void);
-extern void tapelog_resources_shutdown(void);
-extern int tapelog_cmdline_options_init(void);
+int tapelog_resources_init(void);
+void tapelog_resources_shutdown(void);
+int tapelog_cmdline_options_init(void);
 
 #endif

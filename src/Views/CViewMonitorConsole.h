@@ -31,9 +31,15 @@ public:
 	virtual bool KeyDownRepeat(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper);
 	virtual bool KeyTextInput(const char *text); // utf text input entered
 	virtual bool DoScrollWheel(float deltaX, float deltaY);
+	virtual bool DoTap(float x, float y);
+	virtual bool DoMove(float x, float y, float distX, float distY, float diffX, float diffY);
+	virtual bool DoFinishTap(float x, float y);
+	virtual bool DoRightClick(float x, float y);
 
 	virtual void Render();
 	virtual void RenderImGui();
+	virtual bool HasContextMenuItems();
+	virtual void RenderContextMenuItems();
 
 	virtual void GuiViewConsoleExecuteCommand(char *commandText);
 	

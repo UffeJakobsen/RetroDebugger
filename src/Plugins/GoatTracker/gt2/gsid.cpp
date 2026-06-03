@@ -13,6 +13,7 @@ extern "C" {
 
 #include "gsid.h"
 #include "gsound.h"
+#include "../CGT2VoiceWaveforms.h"
 
 int clockrate;
 int samplerate;
@@ -32,6 +33,12 @@ unsigned char altsidorder[] =
 reSID::SID *sid = 0;
 SIDFP *sidfp = 0;
 
+// Per-voice output levels for GT2 mixer VU meters (updated after each clock)
+float gt2_voice_level[3] = {0, 0, 0};
+float gt2_voice_volume[3] = {1.0f, 1.0f, 1.0f};  // per-voice gain (0.0-1.0)
+float gt2_master_volume = 1.0f;                     // master output gain (0.0-1.0)
+unsigned char gt2_voice_mute[3] = {0, 0, 0};       // set by mixer to mute individual voices
+
 FILTERPARAMS filterparams =
   {0.50f, 3.3e6f, 1.0e-4f,
    1147036.4394268463f, 274228796.97550374f, 1.0066634233403395f, 16125.154840564108f,
@@ -40,6 +47,12 @@ FILTERPARAMS filterparams =
 
 extern unsigned residdelay;
 extern unsigned adparam;
+
+static void gt2_resid_voice_sample_callback(void *userData, int voice0, int voice1, int voice2, short mix)
+{
+  (void)userData;
+  c64d_gt2_capture_voice_samples(voice0, voice1, voice2, mix);
+}
 
 void sid_init(int speed, unsigned m, unsigned ntsc, unsigned interpolate, unsigned customclockrate, unsigned usefp)
 {
@@ -61,8 +74,8 @@ void sid_init(int speed, unsigned m, unsigned ntsc, unsigned interpolate, unsign
       sidfp = NULL;
     }
 
-	// TODO: send SID waveforms callback, no callback for now
-    if (!sid) sid = new reSID::SID(NULL);
+    if (!sid) sid = new reSID::SID();
+    if (sid) sid->set_voice_sample_callback(gt2_resid_voice_sample_callback, NULL);
   }
   else
   {
@@ -135,13 +148,23 @@ unsigned char sid_getorder(unsigned char index)
 
 int sid_fillbuffer(short *ptr, int samples)
 {
-//	LOGD("sid_fillbuffer");
-	
   int tdelta;
   int tdelta2;
   int result = 0;
   int total = 0;
   int c;
+
+  short *ptrStart = ptr;
+
+  // Apply per-voice gain and mute to reSID
+  if (sid)
+  {
+    for (int v = 0; v < 3; v++)
+    {
+      sid->voice_gain[v] = gt2_voice_mute[v] ? 0.0f : gt2_voice_volume[v];
+    }
+    sid->update_voice_gain();
+  }
 
   int badline = rand() % NUMSIDREGS;
 
@@ -178,6 +201,11 @@ int sid_fillbuffer(short *ptr, int samples)
     if (tdelta <= 0) return total;
   }
 
+  // Original batched render — the SID needs enough cycles per call to
+  // actually produce samples, so per-sample clocking starved it and
+  // killed audio. Per-voice oscilloscope samples are emitted from inside
+  // reSID's sample loop via set_voice_sample_callback(), so the batch size
+  // does not flatten the displayed voice waveforms.
   if (sid) result = sid->clock(tdelta, ptr, samples);
   if (sidfp) result = sidfp->clock(tdelta, ptr, samples);
   total += result;
@@ -195,6 +223,36 @@ int sid_fillbuffer(short *ptr, int samples)
     total += result;
     ptr += result;
     samples -= result;
+  }
+
+  // Read per-voice output levels for VU meters
+  if (sid)
+  {
+    for (int v = 0; v < 3; v++)
+    {
+      int voiceOut = sid->voice_output(v);
+      // Voice::output() = (wave_dac - wave_zero) * envelope_dac
+      // wave range ~2048, envelope range ~255 => max ~522240
+      float level = (float)abs(voiceOut) / 522240.0f;
+      if (level > gt2_voice_level[v])
+        gt2_voice_level[v] = level;
+      else
+        gt2_voice_level[v] *= 0.92f;  // decay
+    }
+
+    // Restore voice gain after processing
+    for (int v = 0; v < 3; v++)
+      sid->voice_gain[v] = 1.0f;
+    sid->update_voice_gain();
+  }
+
+  // Apply master volume to output buffer
+  if (gt2_master_volume < 0.999f)
+  {
+    for (int s = 0; s < total; s++)
+    {
+      ptrStart[s] = (short)(ptrStart[s] * gt2_master_volume);
+    }
   }
 
   return total;

@@ -31,15 +31,15 @@
 
 struct disk_image_s;
 
-extern void blockdev_init(void);
-extern int blockdev_resources_init(void);
-extern int blockdev_cmdline_options_init(void);
+void blockdev_init(void);
+int blockdev_resources_init(void);
+int blockdev_cmdline_options_init(void);
 
-extern int blockdev_open(const char *name, unsigned int *read_only);
-extern int blockdev_close(void);
-extern int blockdev_read_sector(BYTE *buf, unsigned int track,
+int blockdev_open(const char *name, unsigned int *read_only);
+int blockdev_close(void);
+int blockdev_read_sector(uint8_t *buf, unsigned int track,
                                 unsigned int sector);
-extern int blockdev_write_sector(const BYTE *buf, unsigned int track,
+int blockdev_write_sector(const uint8_t *buf, unsigned int track,
                                  unsigned int sector);
 
 #endif

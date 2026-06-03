@@ -5,7 +5,6 @@
 #include "CDataAdapterViceDrive1541DiskContents.h"
 
 extern "C" {
-#define DWORD u32
 disk_image_t *c64d_get_drive_disk_image(int driveId);
 gcr_t *c64d_get_drive_disk_gcr(int driveId);
 int c64d_get_drive_current_halftrack(int driveId);

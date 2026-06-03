@@ -3,11 +3,16 @@
 #endif
 
 #include "DBG_Log.h"
+#include "C64D_Version.h"
 #include "CDebuggerServerWebSockets.h"
+#include "CViewWSLog.h"
 #include "CViewC64.h"
 #include "CDebugInterface.h"
 #include "CDebuggerServerApi.h"
+#include "CGuiMain.h"
+#include "SYS_FileSystem.h"
 #include "json.hpp"
+#include <set>
 
 using namespace std;
 using namespace nlohmann;
@@ -101,14 +106,50 @@ void CDebuggerServerWebSockets::ThreadRun(void *passData)
 	
 	appLoop = app->getLoop();
 
+	// Pre-allocate hash map to avoid rehashing during bulk endpoint registration.
+	// Each platform registers ~30 endpoints, with up to 4 platforms + ~10 server-level.
+	endpointFunctions.reserve(256);
+	endpointDescriptors.reserve(256);
+
 	//
 	AddEndpointFunction("load", [this](string token, json params, unsigned char* binaryData, int binaryDataSize) -> vector<char>*
 	{
 		string fileName = params.at("path").get<string>();
+
+		if (!SYS_FileExists(fileName.c_str()))
+		{
+			json errorJson;
+			errorJson["error"] = "File not found: " + fileName;
+			return PrepareResult(HTTP_NOT_FOUND, token, errorJson, NULL, 0);
+		}
+
 		CSlrString *str = new CSlrString(StringToUtf16(string(fileName)));
-		viewC64->mainMenuHelper->LoadFile(str);
-		delete str;
-		return PrepareResult(HTTP_OK, token, json(), NULL, 0);
+
+		// LoadFile calls GL functions (e.g. image import fallback) — must run on the UI thread.
+		// BroadcastEvent is also deferred here so "media.loaded" fires only after the load actually runs.
+		struct LoadFileTask : public CUiThreadTaskCallback
+		{
+			CSlrString *path;
+			CMainMenuHelper *helper;
+			CDebuggerServerWebSockets *server;
+			string filePath;
+			LoadFileTask(CSlrString *path, CMainMenuHelper *helper, CDebuggerServerWebSockets *server, const string &filePath)
+				: path(path), helper(helper), server(server), filePath(filePath) {}
+			~LoadFileTask() { delete path; }
+			void RunUIThreadTask() override
+			{
+				helper->LoadFile(path);
+				json ev;
+				ev["path"] = filePath;
+				server->BroadcastEvent("media.loaded", ev);
+			}
+		};
+		guiMain->AddUiThreadTask(new LoadFileTask(str, viewC64->mainMenuHelper, this, fileName));
+
+		json result;
+		result["status"] = "queued";
+		result["path"] = fileName;
+		return PrepareResult(HTTP_OK, token, result, NULL, 0);
 	});
 	
 	// register endpoints for all emulators
@@ -119,12 +160,133 @@ void CDebuggerServerWebSockets::ThreadRun(void *passData)
 		webSocketsApi->RegisterEndpoints(this);
 	}
 
+	// Discovery endpoints (server-level, v2)
+	AddEndpointFunction("server/hello", [this](string token, json params, unsigned char* binaryData, int binaryDataSize) -> vector<char>*
+	{
+		json result;
+		result["protocolVersion"] = DEBUGGER_PROTOCOL_CURRENT;
+		result["serverName"] = "RetroDebugger";
+		result["serverVersion"] = RETRODEBUGGER_VERSION_STRING;
+		return PrepareResult(HTTP_OK, token, result, NULL, 0);
+	});
+
+	AddEndpointFunction("server/platforms", [this](string token, json params, unsigned char* binaryData, int binaryDataSize) -> vector<char>*
+	{
+		json result;
+		json platforms = json::array();
+		for (auto *di : viewC64->debugInterfaces)
+		{
+			json p;
+			p["name"] = di->GetPlatformNameEndpointString();
+			p["running"] = di->isRunning;
+			platforms.push_back(p);
+		}
+		result["platforms"] = platforms;
+		return PrepareResult(HTTP_OK, token, result, NULL, 0);
+	});
+
+	AddEndpointFunction("server/capabilities", [this](string token, json params, unsigned char* binaryData, int binaryDataSize) -> vector<char>*
+	{
+		json result;
+		json platforms = json::array();
+		for (auto *di : viewC64->debugInterfaces)
+		{
+			json p;
+			p["name"] = di->GetPlatformNameEndpointString();
+			p["fullName"] = di->GetPlatformNameString();
+			p["running"] = di->isRunning;
+
+			// List categories of endpoints available for this platform
+			json categories = json::array();
+			string platPrefix = string(di->GetPlatformNameEndpointString()) + "/";
+			std::set<string> catSet;
+			for (const auto &desc : endpointDescriptors)
+			{
+				if (desc.platform == di->GetPlatformNameEndpointString() && !desc.category.empty())
+					catSet.insert(desc.category);
+			}
+			for (const auto &cat : catSet)
+				categories.push_back(cat);
+			p["categories"] = categories;
+
+			// Count endpoints
+			int count = 0;
+			int stubbed = 0;
+			for (const auto &desc : endpointDescriptors)
+			{
+				if (desc.platform == di->GetPlatformNameEndpointString())
+				{
+					count++;
+					if (desc.isStubbed) stubbed++;
+				}
+			}
+			p["endpointCount"] = count;
+			p["stubbedCount"] = stubbed;
+
+			platforms.push_back(p);
+		}
+		result["platforms"] = platforms;
+		result["protocolVersion"] = DEBUGGER_PROTOCOL_CURRENT;
+		result["discoveryVersion"] = DEBUGGER_DISCOVERY_VERSION;
+		result["features"] = json::array({"platforms", "endpointDescriptors", "binaryFraming"});
+		result["serverName"] = "RetroDebugger";
+		return PrepareResult(HTTP_OK, token, result, NULL, 0);
+	});
+
+	AddEndpointFunction("server/endpoints", [this](string token, json params, unsigned char* binaryData, int binaryDataSize) -> vector<char>*
+	{
+		json result;
+		json endpoints = json::array();
+		// List all registered endpoint names
+		for (const auto &pair : endpointFunctions)
+		{
+			json ep;
+			ep["fn"] = pair.first;
+			endpoints.push_back(ep);
+		}
+		// Add descriptor details where available
+		for (const auto &desc : endpointDescriptors)
+		{
+			// Find and enrich the matching entry
+			for (auto &ep : endpoints)
+			{
+				if (ep["fn"] == desc.fn)
+				{
+					ep = desc.ToJson();
+					break;
+				}
+			}
+		}
+		result["endpoints"] = endpoints;
+		return PrepareResult(HTTP_OK, token, result, NULL, 0);
+	});
+
+	AddEndpointFunction("server/events", [this](string token, json params, unsigned char* binaryData, int binaryDataSize) -> vector<char>*
+	{
+		json result;
+		json events = json::array();
+		events.push_back({{"name", "breakpoint"}, {"description", "CPU or memory breakpoint hit"}});
+		events.push_back({{"name", "emulation.paused"}, {"description", "Emulation paused"}});
+		events.push_back({{"name", "emulation.continued"}, {"description", "Emulation resumed"}});
+		events.push_back({{"name", "emulation.reset"}, {"description", "Machine reset (hard or soft)"}});
+		events.push_back({{"name", "media.loaded"}, {"description", "File loaded into emulator"}});
+		result["events"] = events;
+		return PrepareResult(HTTP_OK, token, result, NULL, 0);
+	});
+
+	// Note: server/events/subscribe and server/events/unsubscribe are handled
+	// directly in the message handler (above) because they need the ws pointer
+	// for uWS topic management. They don't go through RunEndpointFunction.
+
 	app->ws<SocketData>("/stream", {
+		.idleTimeout = 0,              // Disable uWS idle timeout — bridge has its own 30s socket timeout
+		.sendPingsAutomatically = false, // No auto-pings when idle timeout is disabled
 		.open = [this](auto* ws)
 		{
 			numConnectedClients++;
 			LOGD("WebSocket connection opened (numConnectedClients=%d)", numConnectedClients);
 			ws->subscribe("broadcast");
+			CViewWSLog::LogConnection("connected");
 		},
 		.message = [this](auto* ws, string_view message, uWS::OpCode opCode) 
 		{
@@ -153,13 +315,61 @@ void CDebuggerServerWebSockets::ThreadRun(void *passData)
 //				cout << message << endl;
 				
 				json j = json::parse(jsonStr);
-				
+
 				string fn = j["fn"].get<string>();
 				string token;
-				
+
 				if (j.contains("token"))
 				{
 					token = j["token"].get<string>();
+				}
+
+				// Detect v2 protocol
+				if (j.contains("protocolVersion"))
+				{
+					SocketData *sd = (SocketData *)ws->getUserData();
+					int ver = j["protocolVersion"].get<int>();
+					if (sd->protocolVersion < ver)
+						sd->protocolVersion = ver;
+				}
+
+				// Intercept subscribe/unsubscribe — needs ws pointer
+				if (fn == "server/events/subscribe")
+				{
+					string eventName = j["params"].value("event", "");
+					if (!eventName.empty())
+					{
+						ws->subscribe("event:" + eventName);
+						LOGD("WebSocket client subscribed to event:%s", eventName.c_str());
+					}
+					json resp;
+					resp["status"] = HTTP_OK;
+					if (!token.empty()) resp["token"] = token;
+					resp["result"]["subscribed"] = eventName;
+					string respStr = resp.dump();
+					ws->send(respStr, uWS::TEXT);
+					return;
+				}
+				if (fn == "server/events/unsubscribe")
+				{
+					string eventName = j["params"].value("event", "");
+					if (!eventName.empty())
+					{
+						ws->unsubscribe("event:" + eventName);
+						LOGD("WebSocket client unsubscribed from event:%s", eventName.c_str());
+					}
+					json resp;
+					resp["status"] = HTTP_OK;
+					if (!token.empty()) resp["token"] = token;
+					resp["result"]["unsubscribed"] = eventName;
+					string respStr = resp.dump();
+					ws->send(respStr, uWS::TEXT);
+					return;
+				}
+
+				{
+					string paramsPreview = j["params"].dump();
+					CViewWSLog::LogRequest(fn.c_str(), paramsPreview.c_str());
 				}
 
 				vector<char> *result;
@@ -170,7 +380,7 @@ void CDebuggerServerWebSockets::ThreadRun(void *passData)
 				else
 				{
 					unsigned char* binaryData = nullptr;
-					
+
 					if (binaryDataSize > 0 && message.size() > endPos + 1)
 					{
 						binaryData = new unsigned char[binaryDataSize];
@@ -179,16 +389,26 @@ void CDebuggerServerWebSockets::ThreadRun(void *passData)
 					result = RunEndpointFunction(fn, token, j["params"], binaryData, binaryDataSize);
 					delete[] binaryData;
 				}
-				
-				string_view resultStr(result->data(), result->size());
 
-//				cout << "Result: " << resultStr << endl;
-				
-				if (!resultStr.empty())
+				if (result && !result->empty())
 				{
+					string_view resultStr(result->data(), result->size());
 					ws->send(resultStr, uWS::BINARY, (resultStr.length() > 512));
+					// Log response: parse status from result JSON
+					try
+					{
+						size_t nullPos = resultStr.find('\0');
+						string jsonPart(resultStr.data(), nullPos != string_view::npos ? nullPos : resultStr.size());
+						json rj = json::parse(jsonPart);
+						int status = rj.value("status", 0);
+						std::string bodyStr;
+						if (rj.contains("result") && !rj["result"].is_null())
+							bodyStr = rj["result"].dump();
+						CViewWSLog::LogResponse(status, fn.c_str(), (int)resultStr.size(), bodyStr.empty() ? nullptr : bodyStr.c_str());
+					}
+					catch (...) {}
 				}
-				
+
 				delete result;
 			}
 			catch (const exception &e) 
@@ -205,6 +425,7 @@ void CDebuggerServerWebSockets::ThreadRun(void *passData)
 		{
 			numConnectedClients--;
 			LOGD("WebSocket connection closed (numConnectedClients=%d)", numConnectedClients);
+			CViewWSLog::LogConnection("disconnected");
 		}
 	});
 
@@ -223,18 +444,40 @@ void CDebuggerServerWebSockets::AddEndpointFunction(const string& functionName, 
 	endpointFunctions[functionName] = func;
 }
 
+void CDebuggerServerWebSockets::AddEndpointFunction(const EndpointDescriptor &desc, EndpointHandlerV1 handler)
+{
+	endpointFunctions[desc.fn] = handler;
+	endpointDescriptors.push_back(desc);
+}
+
+vector<EndpointDescriptor> CDebuggerServerWebSockets::GetEndpointDescriptors()
+{
+	return endpointDescriptors;
+}
+
 vector<char> *CDebuggerServerWebSockets::RunEndpointFunction(const string& functionName, const string token, json params, u8 *binaryData, int binaryDataSize)
 {
 	auto it = endpointFunctions.find(functionName);
-	if (it != endpointFunctions.end()) 
+	if (it != endpointFunctions.end())
 	{
-		// Execute the lambda associated with the endpoint
-		return it->second(token, params, binaryData, binaryDataSize);
+		try
+		{
+			return it->second(token, params, binaryData, binaryDataSize);
+		}
+		catch (const std::exception &e)
+		{
+			LOGError("CDebuggerServerWebSockets::RunEndpoint: %s threw: %s", functionName.c_str(), e.what());
+			json errorJson;
+			errorJson["error"] = string("endpoint error: ") + e.what();
+			return PrepareResult(HTTP_INTERNAL_SERVER_ERROR, token, errorJson, NULL, 0);
+		}
 	}
 	else
 	{
 		LOGError("CDebuggerServerWebSockets::RunEndpoint: endpoint %s not found", functionName.c_str());
-		return new vector<char>();
+		json errorJson;
+		errorJson["error"] = string("endpoint not found: ") + functionName;
+		return PrepareResult(HTTP_NOT_FOUND, token, errorJson, NULL, 0);
 	}
 }
 
@@ -268,13 +511,45 @@ vector<char> *CDebuggerServerWebSockets::PrepareResult(int status, const string 
 	return outBuffer;
 }
 
+vector<char> *CDebuggerServerWebSockets::RunEndpointFunction(const string& functionName, const RequestContext &ctx, json params, u8 *binaryData, int binaryDataSize)
+{
+	// v2 dispatch: currently delegates to v1 handler (lambdas use token string)
+	// The endpoint gets the token from context for backward compat
+	return RunEndpointFunction(functionName, ctx.token, params, binaryData, binaryDataSize);
+}
+
+vector<char> *CDebuggerServerWebSockets::PrepareResult(int status, const RequestContext &ctx, json resultJson, u8 *binaryData, int binaryDataSize)
+{
+	LOGD("CDebuggerServerWebSockets::PrepareResult (v2 context)");
+
+	// Use the protocol helper to build the response JSON
+	json sendJson = DebuggerProtocol::MakeResponse(ctx, status, resultJson);
+
+	string sendJsonStr = sendJson.dump();
+
+	vector<char> *outBuffer = new vector<char>();
+	outBuffer->reserve(sendJsonStr.length() + binaryDataSize + 2);
+	outBuffer->insert(outBuffer->end(), sendJsonStr.begin(), sendJsonStr.end());
+
+	if (binaryData)
+	{
+		outBuffer->push_back(0);
+		outBuffer->insert(outBuffer->end(), binaryData, binaryData + binaryDataSize);
+	}
+
+	return outBuffer;
+}
+
 void CDebuggerServerWebSockets::BroadcastEvent(const char *eventName, nlohmann::json j)
 {
-	LOGD("WebSocketsDebuggerServer::BroadcastEvent");
-	
-	j["event"] = eventName;	
-	appLoop->defer([this, j]()
+	LOGD("WebSocketsDebuggerServer::BroadcastEvent: %s", eventName);
+
+	j["event"] = eventName;
+	string eventTopic = string("event:") + eventName;
+	appLoop->defer([this, j, eventTopic]()
 	{
-		app->publish("broadcast", j.dump(), uWS::OpCode::TEXT);
+		string msg = j.dump();
+		app->publish("broadcast", msg, uWS::OpCode::TEXT);     // v1 clients (all events)
+		app->publish(eventTopic, msg, uWS::OpCode::TEXT);       // v2 clients (selective)
 	});
 }

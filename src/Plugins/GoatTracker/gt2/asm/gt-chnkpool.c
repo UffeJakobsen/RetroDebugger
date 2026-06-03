@@ -28,6 +28,8 @@
 
 // chunkpool is now in exomizer-chunkpool
 
+#include "gt-abort.h"
+
 /*
 #include "gt-chnkpool.h"
 #include "gt-log.h"

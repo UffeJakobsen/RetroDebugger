@@ -39,7 +39,7 @@
 
 /* Fast IEC for C64 with burst mod */
 
-static int fast_drive_direction[DRIVE_NUM];
+static int fast_drive_direction[NUM_DISK_UNITS];
 int burst_mod;
 
 int set_burst_mod(int mode, void *param)
@@ -61,21 +61,19 @@ void c64fastiec_init(void)
 {
     unsigned int dnr;
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
         fast_drive_direction[dnr] = 1;
     }
 }
 
-void c64fastiec_fast_cpu_write(BYTE data)
+void c64fastiec_fast_cpu_write(uint8_t data)
 {
-    drive_t *drive;
     unsigned int dnr;
 
-    for (dnr = 0; dnr < DRIVE_NUM; dnr++) {
-        drive = drive_context[dnr]->drive;
-        if (drive->enable) {
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        if (drive_context[dnr]->enable) {
             drive_cpu_execute_one(drive_context[dnr], maincpu_clk);
-            switch (drive->type) {
+            switch (drive_context[dnr]->type) {
                 case DRIVE_TYPE_1570:
                 case DRIVE_TYPE_1571:
                 case DRIVE_TYPE_1571CR:
@@ -93,7 +91,7 @@ void c64fastiec_fast_cpu_write(BYTE data)
     }
 }
 
-void iec_fast_drive_write(BYTE data, unsigned int dnr)
+void iec_fast_drive_write(uint8_t data, unsigned int dnr)
 {
     if (fast_drive_direction[dnr]) {
         switch (burst_mod) {

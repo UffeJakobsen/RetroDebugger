@@ -22,6 +22,13 @@ CViewC64AllGraphicsSprites::CViewC64AllGraphicsSprites(const char *name, float p
 					 32*24, 32*24*2) //32*21)
 {
 	this->debugInterface = debugInterface;
+	this->graphicsDataAdapter = NULL;
+	this->useExternalRenderParameters = false;
+	this->renderDataWithColors = false;
+	this->renderColorD021 = 0;
+	this->renderColorD025 = 0;
+	this->renderColorD026 = 0;
+	this->renderColorD027 = 0;
 	
 	imGuiNoWindowPadding = true;
 	imGuiNoScrollbar = true;
@@ -48,16 +55,25 @@ CViewC64AllGraphicsSprites::CViewC64AllGraphicsSprites(const char *name, float p
 	fontHeight = font->GetCharHeight('@', fontScale) + 2;
 	fontSize = fontHeight;
 
-	// sprites sheet, init images for sprites
-	// 32 x 32 sprites
+	spritesImagesAllocated = false;
+
+	minZoom = 0.25f;
+	maxZoom = 60.0f;
+}
+
+void CViewC64AllGraphicsSprites::EnsureSpritesImagesAllocated()
+{
+	if (spritesImagesAllocated)
+		return;
+	spritesImagesAllocated = true;
+
 	for (int i = 0; i < (0x10000/0x40); i++)
 	{
-		// alloc image that will store sprite pixels
 		CImageData *imageData = new CImageData(32, 32, IMG_TYPE_RGBA);
 		imageData->AllocImage(false, true);
-		
+
 		spritesImageData.push_back(imageData);
-		
+
 		CSlrImage *imageSprite = new CSlrImage(true, false);
 		imageSprite->LoadImageForRebinding(imageData, RESOURCE_PRIORITY_STATIC);
 		imageSprite->resourceType = RESOURCE_TYPE_IMAGE_DYNAMIC;
@@ -66,9 +82,6 @@ CViewC64AllGraphicsSprites::CViewC64AllGraphicsSprites(const char *name, float p
 
 		spritesImages.push_back(imageSprite);
 	}
-	
-	minZoom = 0.25f;
-	maxZoom = 60.0f;
 }
 
 CViewC64AllGraphicsSprites::~CViewC64AllGraphicsSprites()
@@ -101,17 +114,36 @@ void CViewC64AllGraphicsSprites::RenderImGui()
 
 void CViewC64AllGraphicsSprites::Render()
 {
+	EnsureSpritesImagesAllocated();
+
 	float startX = renderMapPosX;
 	float startY = renderMapPosY;
 	
-	// get VIC colors
-	u8 cD021 = viewC64->colorsToShow[1];
-	u8 cD025 = viewC64->colorsToShow[5];
-	u8 cD026 = viewC64->colorsToShow[6];
-	u8 cD027 = viewC64->colorsToShow[7];
+	u8 cD021;
+	u8 cD025;
+	u8 cD026;
+	u8 cD027;
+	bool useColors;
+
+	if (useExternalRenderParameters)
+	{
+		useColors = renderDataWithColors;
+		cD021 = renderColorD021;
+		cD025 = renderColorD025;
+		cD026 = renderColorD026;
+		cD027 = renderColorD027;
+	}
+	else
+	{
+		useColors = viewC64->viewC64MemoryDataDump->renderDataWithColors;
+		cD021 = viewC64->colorsToShow[1];
+		cD025 = viewC64->colorsToShow[5];
+		cD026 = viewC64->colorsToShow[6];
+		cD027 = viewC64->colorsToShow[7];
+	}
 	
 	// render sprites
-	UpdateSprites(viewC64->viewC64MemoryDataDump->renderDataWithColors, cD021, cD025, cD026, cD027);
+	UpdateSprites(useColors, cD021, cD025, cD026, cD027);
 	
 	float px = startX;
 	float py = startY;
@@ -184,7 +216,7 @@ void CViewC64AllGraphicsSprites::UpdateSprites(bool useColors, u8 colorD021, u8 
 	std::vector<CImageData *>::iterator itImageData = spritesImageData.begin();
 	
 	int addr = 0x0000;
-	CDataAdapter *dataAdapter = viewC64->debugInterfaceC64->dataAdapterC64DirectRam;
+	CDataAdapter *dataAdapter = GetGraphicsDataAdapter();
 	
 	//	int zi = 0;
 	while(itImage != spritesImages.end())
@@ -194,33 +226,44 @@ void CViewC64AllGraphicsSprites::UpdateSprites(bool useColors, u8 colorD021, u8 
 		CSlrImage *image = *itImage;
 		CImageData *imageData = *itImageData;
 		
-		u8 spriteData[63];
-		
-		for (int i = 0; i < 63; i++)
-		{
-			u8 v;
-			dataAdapter->AdapterReadByte(addr, &v);
-			spriteData[i] = v;
-			addr++;
-		}
-		
-		if (useColors == false)
-		{
-			ConvertSpriteDataToImage(spriteData, imageData, 4);
-		}
-		else
-		{
-			ConvertColorSpriteDataToImage(spriteData, imageData, colorD021, colorD025, colorD026, colorD027,
-										  viewC64->debugInterfaceC64, 4, 255);
-		}
-		
-		addr++;
+		CopySpriteFromAdapterToImage(dataAdapter, addr, imageData, useColors,
+						colorD021, colorD025, colorD026, colorD027,
+						debugInterface, 4, 255);
+		addr += 64;
 		
 		image->ReBindImage();
 		
 		itImage++;
 		itImageData++;
 	}
+}
+
+CDataAdapter *CViewC64AllGraphicsSprites::GetGraphicsDataAdapter()
+{
+	if (graphicsDataAdapter != NULL)
+		return graphicsDataAdapter;
+
+	return debugInterface->dataAdapterC64DirectRam;
+}
+
+void CViewC64AllGraphicsSprites::SetGraphicsDataAdapter(CDataAdapter *dataAdapter)
+{
+	graphicsDataAdapter = dataAdapter;
+}
+
+void CViewC64AllGraphicsSprites::SetRenderParameters(bool useColors, u8 colorD021, u8 colorD025, u8 colorD026, u8 colorD027)
+{
+	useExternalRenderParameters = true;
+	renderDataWithColors = useColors;
+	renderColorD021 = colorD021;
+	renderColorD025 = colorD025;
+	renderColorD026 = colorD026;
+	renderColorD027 = colorD027;
+}
+
+void CViewC64AllGraphicsSprites::ResetRenderParameters()
+{
+	useExternalRenderParameters = false;
 }
  
 //@returns is consumed
@@ -464,4 +507,3 @@ void CViewC64AllGraphicsSprites::DeactivateView()
 {
 	LOGG("CViewC64AllGraphicsSprites::DeactivateView()");
 }
-

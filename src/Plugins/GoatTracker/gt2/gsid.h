@@ -31,6 +31,12 @@ extern unsigned char sidreg[NUMSIDREGS];
 extern FILTERPARAMS filterparams;
 #endif
 
+// Per-voice levels, volume, and mute flags for GT2 mixer
+extern float gt2_voice_level[3];
+extern float gt2_voice_volume[3];   // 0.0-1.0, per-voice gain applied in SID
+extern float gt2_master_volume;     // 0.0-1.0, scales final output
+extern unsigned char gt2_voice_mute[3];
+
 #ifdef __cplusplus
 }
 #endif

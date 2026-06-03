@@ -34,41 +34,36 @@ void C64VicDisplayCanvasHiresBitmap::RefreshScreen(vicii_cycle_state_t *viciiSta
 	
 	vicDisplay->GetViciiPointers(this->viciiState, &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, colors);
 	
+	// Precompute 16-entry RGBA lookup tables
+	uint32_t colorLutFg[16], colorLutBg[16];
+	for (int c = 0; c < 16; c++)
+	{
+		u8 r, g, b;
+		debugInterface->GetCBMColor(c, &r, &g, &b);
+		colorLutFg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)foregroundColorAlpha << 24);
+		colorLutBg[c] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)backgroundColorAlpha << 24);
+	}
+
+	u8 *imageData = (u8 *)imageDataScreen->resultData;
+	int imgWidth = imageDataScreen->width;
+
 	if (vicDisplay->viewVicControl && vicDisplay->viewVicControl->forceGrayscaleColors)
 	{
-		u8 bitmap;
-		
-		u8 bgColorR = 0, bgColorG = 0, bgColorB = 0;
-		u8 fgColorR = 255, fgColorG = 255, fgColorB = 255;
-		
+		uint32_t bgRGBA = (uint32_t)backgroundColorAlpha << 24;
+		uint32_t fgRGBA = 0x00FFFFFF | ((uint32_t)foregroundColorAlpha << 24);
+
 		for (int i = 0; i < 25; i++)
 		{
 			for (int j = 0; j < 40; j++)
 			{
 				for (int k = 0; k < 8; k++)
 				{
-					if (((i * 40 * 8) + (j * 8) + k) < 4096)
-					{
-						
-						bitmap = bitmap_low_ptr[(i * 40 * 8) + (j * 8) + k];
-					}
-					else
-					{
-						bitmap = bitmap_high_ptr[((i * 40 * 8) + (j * 8) + k) - 4096];
-					}
+					int bitmapOffset = (i * 40 * 8) + (j * 8) + k;
+					u8 bitmap = (bitmapOffset < 4096) ? bitmap_low_ptr[bitmapOffset] : bitmap_high_ptr[bitmapOffset - 4096];
+					uint32_t *row = (uint32_t *)(imageData + ((i*8 + k) * imgWidth + j*8) * 4);
 					for (int l = 0; l < 8; l++)
 					{
-						if (bitmap & (1 << (7 - l)))
-						{
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + l] = fgcolor;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, fgColorR, fgColorG, fgColorB, foregroundColorAlpha);
-							
-						}
-						else
-						{
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + l] = bgcolor;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, bgColorR, bgColorG, bgColorB, backgroundColorAlpha);
-						}
+						row[l] = (bitmap & (1 << (7 - l))) ? fgRGBA : bgRGBA;
 					}
 				}
 			}
@@ -76,47 +71,24 @@ void C64VicDisplayCanvasHiresBitmap::RefreshScreen(vicii_cycle_state_t *viciiSta
 	}
 	else
 	{
-		u8 bitmap;
-		
-		u8 bgcolor;
-		u8 bgColorR, bgColorG, bgColorB;
-		u8 fgcolor;
-		u8 fgColorR, fgColorG, fgColorB;
-		
 		for (int i = 0; i < 25; i++)
 		{
 			for (int j = 0; j < 40; j++)
 			{
-				bgcolor = screen_ptr[(i * 40) + j] & 0x0F;
-				fgcolor = (screen_ptr[(i * 40) + j] & 0xF0) >> 4;
-				
-				debugInterface->GetCBMColor(bgcolor, &bgColorR, &bgColorG, &bgColorB);
-				debugInterface->GetCBMColor(fgcolor, &fgColorR, &fgColorG, &fgColorB);
-				
+				u8 bgcolor = screen_ptr[(i * 40) + j] & 0x0F;
+				u8 fgcolor = (screen_ptr[(i * 40) + j] & 0xF0) >> 4;
+
+				uint32_t bgRGBA = colorLutBg[bgcolor];
+				uint32_t fgRGBA = colorLutFg[fgcolor];
+
 				for (int k = 0; k < 8; k++)
 				{
-					if (((i * 40 * 8) + (j * 8) + k) < 4096)
-					{
-						
-						bitmap = bitmap_low_ptr[(i * 40 * 8) + (j * 8) + k];
-					}
-					else
-					{
-						bitmap = bitmap_high_ptr[((i * 40 * 8) + (j * 8) + k) - 4096];
-					}
+					int bitmapOffset = (i * 40 * 8) + (j * 8) + k;
+					u8 bitmap = (bitmapOffset < 4096) ? bitmap_low_ptr[bitmapOffset] : bitmap_high_ptr[bitmapOffset - 4096];
+					uint32_t *row = (uint32_t *)(imageData + ((i*8 + k) * imgWidth + j*8) * 4);
 					for (int l = 0; l < 8; l++)
 					{
-						if (bitmap & (1 << (7 - l)))
-						{
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + l] = fgcolor;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, fgColorR, fgColorG, fgColorB, foregroundColorAlpha);
-							
-						}
-						else
-						{
-							//data->colormap[(i * 320 * 8) + (j * 8) + (k * 320) + l] = bgcolor;
-							imageDataScreen->SetPixelResultRGBA(j*8 + l, i*8 + k, bgColorR, bgColorG, bgColorB, backgroundColorAlpha);
-						}
+						row[l] = (bitmap & (1 << (7 - l))) ? fgRGBA : bgRGBA;
 					}
 				}
 			}
@@ -573,15 +545,27 @@ void C64VicDisplayCanvasHiresBitmap::PutBitPixelHiresBitmapRaster(int x, int y, 
 
 u8 C64VicDisplayCanvasHiresBitmap::GetColorAtPixel(int x, int y)
 {
-	// get pixel
 	u8 pixelBitColor = this->GetBitPixelHiresBitmap(x, y);
-	C64CharHires *bitChar = this->GetBitCharHiresBitmap(x, y);
-	
-	u8 color = bitChar->colors[pixelBitColor];
-	
-	delete bitChar;
-	
-	return color;
+
+	// Inline color lookup from screen RAM to avoid heap allocation
+	int charColumn = x / 8;
+	int charRow = y / 8;
+
+	u8 *screen_ptr;
+	u8 *color_ram_ptr;
+	u8 *chargen_ptr;
+	u8 *bitmap_low_ptr;
+	u8 *bitmap_high_ptr;
+	u8 d020colors[0x0F];
+
+	vicDisplay->GetViciiPointers(&(viewC64->viciiStateToShow), &screen_ptr, &color_ram_ptr, &chargen_ptr, &bitmap_low_ptr, &bitmap_high_ptr, d020colors);
+
+	u8 screenByte = screen_ptr[(charRow * 40) + charColumn];
+	u8 colors[2];
+	colors[0] = screenByte & 0x0F;
+	colors[1] = (screenByte >> 4) & 0x0F;
+
+	return colors[pixelBitColor];
 }
 
 //

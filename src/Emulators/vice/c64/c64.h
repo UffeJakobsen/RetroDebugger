@@ -77,14 +77,17 @@
          8500
 */
 #define C64_CPU6510_DATA_PORT_FALL_OFF_CYCLES 350000
+/* bits 3,4,5 are not connected on SX-64 board. apparently they take a bit longer */
+#define SX64_CPU6510_DATA_PORT_FALL_OFF_CYCLES 1500000
 /*
    cpuports.prg from the lorenz testsuite will fail when the falloff takes less
-   than 5984 cycles. he explicitly delays by ~1280 cycles and mentions capacitance, 
+   than 5984 cycles. he explicitly delays by ~1280 cycles and mentions capacitance,
    so he probably even was aware of what happens.
  */
 
 /* $01 bits 6 and 7 fall-off cycles (1->0), average is about 1500 msec for a 8500 */
 #define C64_CPU8500_DATA_PORT_FALL_OFF_CYCLES 1500000
+
 
 struct cia_context_s;
 struct printer_context_s;
@@ -96,5 +99,8 @@ typedef struct machine_context_s {
 } machine_context_t;
 
 extern machine_context_t machine_context;
+
+void c64_cia2_enable(int val);
+int c64_cia2_get_active_state(void);
 
 #endif

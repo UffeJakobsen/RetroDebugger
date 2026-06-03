@@ -27,11 +27,9 @@
 #ifndef VICE_USERPORT_DIAG_586220_HARNESS_H
 #define VICE_USERPORT_DIAG_586220_HARNESS_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int userport_diag_586220_harness_enable;
-
-extern int userport_diag_586220_harness_resources_init(void);
-extern int userport_diag_586220_harness_cmdline_options_init(void);
+int userport_diag_586220_harness_resources_init(void);
+int userport_diag_586220_harness_cmdline_options_init(void);
 
 #endif

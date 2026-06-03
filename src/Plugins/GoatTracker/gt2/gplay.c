@@ -45,9 +45,39 @@ unsigned char masterfader = 0x0f;
 int psnum = 0;
 int songinit = 0;
 int lastsonginit = 0;
+int gt2LoopCurrentPattern = 0;
 int startpattpos = 0;
 
 void sequencer(int c, CHN *cptr);
+
+// Rebuild the arpnotes[] array from the base note and per-column arp state.
+// The base note is included when gate is on (channel is sounding).
+// cptr->note holds the current note index (0-based, already - FIRSTNOTE).
+void rebuildarp(CHN *cptr)
+{
+  int count = 0;
+
+  // Base note: include if gate is on (0xff) and a note has been set
+  if (cptr->gate == 0xff && (cptr->note || cptr->newnote))
+  {
+    // Use the latest known note index
+    unsigned char basenote = cptr->note;
+    if (cptr->newnote)
+      basenote = cptr->newnote - FIRSTNOTE;
+    cptr->arpnotes[count++] = basenote;
+  }
+
+  // Arp columns: add active notes (already stored as 0-based indices)
+  for (int a = 0; a < numarpcolumns; a++)
+  {
+    if (cptr->arpcolnotes[a])
+      cptr->arpnotes[count++] = cptr->arpcolnotes[a];
+  }
+
+  cptr->arpcount = count;
+  if (cptr->arppos >= count && count > 0)
+    cptr->arppos = 0;
+}
 
 void initchannels(void)
 {
@@ -96,6 +126,98 @@ void initsongpos(int num, int mode, int pattpos)
   psnum = num;
   songinit = mode;
   startpattpos = pattpos;
+  gtsound_flush();
+}
+
+void triggerpatternrow(int pattpos)
+{
+  int c;
+
+  if (pattpos < 0)
+    pattpos = 0;
+
+  gtsound_suspend();
+  songinit = PLAY_STOPPED;
+  followplay = 0;
+
+  for (c = 0; c < MAX_CHN; c++)
+  {
+    CHN *cptr = &chn[c];
+    int pattnum = epnum[c];
+    int pattptr;
+    int rowindex;
+    unsigned char newnote;
+
+    cptr->pattnum = pattnum;
+    cptr->advance = 0;
+    cptr->pattptr = 0x7fffffff;
+
+    if ((pattpos > pattlen[pattnum]) || (pattpos > MAX_PATTROWS))
+      continue;
+
+    pattptr = pattpos * 4;
+    newnote = pattern[pattnum][pattptr];
+    if (newnote == ENDPATT)
+      continue;
+
+    rowindex = pattptr / 4;
+    if (pattern[pattnum][pattptr+1])
+      cptr->instr = pattern[pattnum][pattptr+1];
+    cptr->newcommand = pattern[pattnum][pattptr+2];
+    cptr->newcmddata = pattern[pattnum][pattptr+3];
+
+    for (int a = 0; a < numarpcolumns; a++)
+    {
+      unsigned char arpnote = arpdata[pattnum][c][rowindex][a];
+      if (arpnote == KEYOFF)
+        cptr->arpcolnotes[a] = 0;
+      else if (arpnote >= FIRSTNOTE && arpnote <= LASTNOTE)
+        cptr->arpcolnotes[a] = (arpnote + cptr->trans) - FIRSTNOTE;
+    }
+
+    if (newnote == KEYOFF)
+    {
+      cptr->note = 0;
+      cptr->newnote = 0;
+      rebuildarp(cptr);
+      if (cptr->arpcount == 0)
+        cptr->gate = 0xfe;
+    }
+    if (newnote == KEYON)
+      cptr->gate = 0xff;
+    if (newnote <= LASTNOTE)
+    {
+      cptr->newnote = newnote+cptr->trans;
+      if ((cptr->newcommand) != CMD_TONEPORTA)
+      {
+        if (cptr->arpcount >= 2)
+        {
+          rebuildarp(cptr);
+        }
+        else if (!(ginstr[cptr->instr].gatetimer & 0x40))
+        {
+          cptr->gate = 0xfe;
+          if (!(ginstr[cptr->instr].gatetimer & 0x80))
+          {
+            sidreg[0x5+7*c] = adparam>>8;
+            sidreg[0x6+7*c] = adparam&0xff;
+          }
+        }
+      }
+    }
+
+    rebuildarp(cptr);
+    // Mirror playtestnote()'s tick / gatetimer setup so the hard-restart
+    // release has time to drain the SID envelope before the next gate-on.
+    // With tick=1 the trigger flipped the gate back on after a single tick
+    // even when the instrument's gatetimer asked for more — long-release
+    // instruments wound up audibly cutting off mid-decay and subsequent
+    // ENTER presses produced silence as the envelope hadn't actually
+    // restarted.
+    cptr->tick      = (ginstr[cptr->instr].gatetimer & 0x3f) + 1;
+    cptr->gatetimer =  ginstr[cptr->instr].gatetimer & 0x3f;
+  }
+
   gtsound_flush();
 }
 
@@ -904,6 +1026,7 @@ void playroutine(void)
       GETNEWNOTES:
       {
         unsigned char newnote;
+        int rowindex = cptr->pattptr / 4;
 
         newnote = pattern[cptr->pattnum][cptr->pattptr];
         if (pattern[cptr->pattnum][cptr->pattptr+1])
@@ -912,10 +1035,28 @@ void playroutine(void)
         cptr->newcmddata = pattern[cptr->pattnum][cptr->pattptr+3];
         cptr->pattptr += 4;
         if (pattern[cptr->pattnum][cptr->pattptr] == ENDPATT)
-          cptr->pattptr = 0x7fffffff;
+          cptr->pattptr = gt2LoopCurrentPattern ? 0 : 0x7fffffff;
+
+        // Read arp columns for this row
+        for (int a = 0; a < numarpcolumns; a++)
+        {
+          unsigned char arpnote = arpdata[cptr->pattnum][c][rowindex][a];
+          if (arpnote == KEYOFF)
+            cptr->arpcolnotes[a] = 0;
+          else if (arpnote >= FIRSTNOTE && arpnote <= LASTNOTE)
+            cptr->arpcolnotes[a] = (arpnote + cptr->trans) - FIRSTNOTE;
+        }
 
         if (newnote == KEYOFF)
-          cptr->gate = 0xfe;
+        {
+          cptr->note = 0;       // Remove base note from arp cycle
+          cptr->newnote = 0;
+          // Rebuild to see if arp notes remain
+          rebuildarp(cptr);
+          if (cptr->arpcount == 0)
+            cptr->gate = 0xfe;  // No notes left — release
+          // else: arp continues with remaining notes, gate stays on
+        }
         if (newnote == KEYON)
           cptr->gate = 0xff;
         if (newnote <= LASTNOTE)
@@ -923,7 +1064,12 @@ void playroutine(void)
           cptr->newnote = newnote+cptr->trans;
           if ((cptr->newcommand) != CMD_TONEPORTA)
           {
-            if (!(ginstr[cptr->instr].gatetimer & 0x40))
+            // Skip hard restart if arp is active (channel already sounding)
+            if (cptr->arpcount >= 2)
+            {
+              rebuildarp(cptr);
+            }
+            else if (!(ginstr[cptr->instr].gatetimer & 0x40))
             {
               cptr->gate = 0xfe;
               if (!(ginstr[cptr->instr].gatetimer & 0x80))
@@ -934,8 +1080,77 @@ void playroutine(void)
             }
           }
         }
+
+        // Rebuild arp note set after all columns processed
+        rebuildarp(cptr);
+
+        // NOTE: Do NOT override gate here. Let NEXTCHN handle it.
+        // NEXTCHN's instrument trigger checks gate != 0xff to know if
+        // the channel needs instrument loading. If we set gate=0xff here,
+        // NEXTCHN skips the trigger and ADSR/waveform are never loaded.
       }
       NEXTCHN:
+      // If gate is off and no new note pending, this is a KEYOFF (not HR).
+      // Clear base note so rebuildarp excludes it from arp cycle.
+      // (HR also sets gate=0xfe, but HR always has newnote set.)
+      if (cptr->gate == 0xfe && !cptr->newnote)
+        cptr->note = 0;
+
+      // Rebuild arp state every tick (cheap, ensures consistency
+      // when notes enter via playtestnote or other paths)
+      rebuildarp(cptr);
+
+      // If arp notes exist but channel is silent, trigger instrument
+      if (cptr->arpcount > 0 && cptr->gate != 0xff)
+      {
+        iptr = &ginstr[cptr->instr];
+        cptr->gate = 0xff;
+        if (iptr->firstwave && iptr->firstwave < 0xfe)
+          cptr->wave = iptr->firstwave;
+        sidreg[0x5+7*c] = iptr->ad;
+        sidreg[0x6+7*c] = iptr->sr;
+        if (iptr->ptr[WTBL])
+          cptr->ptr[WTBL] = iptr->ptr[WTBL];
+        if (iptr->ptr[PTBL])
+        {
+          cptr->ptr[PTBL] = iptr->ptr[PTBL];
+          cptr->pulsetime = 0;
+        }
+      }
+
+      // If all arp notes gone and no base note, gate off
+      if (cptr->arpcount == 0 && !cptr->newnote && !cptr->note)
+        cptr->gate = 0xfe;
+
+      // Arp cycling: if multiple notes active, override frequency
+      if (cptr->arpcount >= 2)
+      {
+        unsigned char arpnote = cptr->arpnotes[cptr->arppos];
+        cptr->freq = freqtbllo[arpnote] | (freqtblhi[arpnote] << 8);
+        cptr->arppos++;
+        if (cptr->arppos >= cptr->arpcount)
+          cptr->arppos = 0;
+      }
+      else if (cptr->arpcount == 1)
+      {
+        // Single note in arpnotes[] — write freq directly.
+        //
+        // This branch fires for ANY sounding note: a plain non-arp note
+        // (rebuildarp puts the base into arpnotes[0] when gate==0xff)
+        // and a sustaining arp-col after KEYOFF on the base. Writing
+        // freq from here is the C player's authoritative behavior; the
+        // wavetable path is one frame later and not reliable for every
+        // instrument config (empty WTBL, zero first row, etc.).
+        //
+        // Phase 7E earlier suppressed this write when gate==0xff to
+        // match the 6502 player tick-for-tick, but the design direction
+        // is the opposite: the 6502 player should be brought up to the
+        // C reference, not the C player dragged down. Restoring the
+        // unconditional override keeps the in-editor preview sounding
+        // the same as it did in production before that suppression.
+        cptr->freq = freqtbllo[cptr->arpnotes[0]] | (freqtblhi[cptr->arpnotes[0]] << 8);
+      }
+
       if (cptr->mute)
         sidreg[0x4+7*c] = cptr->wave = 0x08;
       else

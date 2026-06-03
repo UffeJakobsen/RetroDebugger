@@ -71,6 +71,11 @@ public:
 	std::vector<CImageData *> *spritesImageData;
 	std::vector<CSlrImage *> *spritesImages;
 
+	// Sprite dirty-tracking for texture rebind optimization
+	uint8 prevSpriteData[8][63];
+	uint8 prevSpriteColorRegs[11]; // D021, D025, D026, D027-D02E
+	bool spriteDataInitialized;
+
 	bool isVertical;
 	bool showSprites;
 	

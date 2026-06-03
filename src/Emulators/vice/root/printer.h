@@ -30,15 +30,15 @@
 #include "vicetypes.h"
 
 /* Generic interface.  */
-extern int printer_resources_init(void);
-extern int printer_userport_resources_init(void);
-extern void printer_resources_shutdown(void);
-extern int printer_cmdline_options_init(void);
-extern int printer_userport_cmdline_options_init(void);
-extern void printer_init(void);
-extern void printer_reset(void);
-extern void printer_formfeed(unsigned int unit);
-extern void printer_shutdown(void);
+int printer_resources_init(void);
+int printer_userport_resources_init(void);
+void printer_resources_shutdown(void);
+int printer_cmdline_options_init(void);
+int printer_userport_cmdline_options_init(void);
+void printer_init(void);
+void printer_reset(void);
+void printer_formfeed(unsigned int unit);
+void printer_shutdown(void);
 
 /* Serial interface.  */
 #define PRINTER_IEC_NUM 2
@@ -47,15 +47,15 @@ extern void printer_shutdown(void);
 #define PRINTER_DEVICE_FS   1
 #define PRINTER_DEVICE_REAL 2
 
-extern int printer_serial_init_resources(void);
-extern int printer_serial_init_cmdline_options(void);
-extern void printer_serial_init(void);
-extern int printer_serial_close(unsigned int unit);
-extern int printer_serial_late_init(void);
-extern void printer_serial_shutdown(void);
+int printer_serial_init_resources(void);
+int printer_serial_init_cmdline_options(void);
+void printer_serial_init(void);
+int printer_serial_close(unsigned int unit);
+int printer_serial_late_init(void);
+void printer_serial_shutdown(void);
 
 /* Userport interface.  */
-extern int printer_userport_init_resources(void);
-extern int printer_userport_init_cmdline_options(void);
+int printer_userport_init_resources(void);
+int printer_userport_init_cmdline_options(void);
 
 #endif

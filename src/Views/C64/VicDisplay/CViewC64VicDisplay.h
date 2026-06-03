@@ -232,6 +232,10 @@ public:
 	//
 	bool showBadLines;
 	bool showBreakpointsLines;
+
+	// right-click marker-line color editor popup
+	bool requestOpenColorPopup;
+	void RenderColorEditPopup();
 	
 	//
 	bool showRasterCursor;

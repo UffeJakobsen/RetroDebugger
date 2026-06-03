@@ -101,6 +101,7 @@ public:
 	std::map<u64, CStoredInputEvent *> inputEventsByCycle;
 	std::list<CStoredInputEvent *> inputEventsToReuse;
 	CStoredInputEvent *nextInputEvent;
+	u64 lastReplayedCycle;  // tracks which events have been replayed (non-destructive)
 
 	virtual bool CheckSnapshotInterval();
 	
@@ -151,11 +152,12 @@ public:
 	// should we replay input events at current cycle?
 	bool isReplayInputEventsEnabled;
 	
-	// should we clear (overwrite) input events at current cycle?
-	bool isOverwriteInputEventsEnabled;
-	
 	CByteBuffer *StoreNewInputEventsSnapshotAtCurrentCycle();
 	bool CheckInputEventsAtCurrentCycle();
+	void TruncateInputEventsAfterCycle(u64 cycle);
+
+	bool SaveInputEventsToFile(const char *filePath);
+	bool LoadInputEventsFromFile(const char *filePath);
 	
 	//
 //	volatile bool skipSavingSnapshots;

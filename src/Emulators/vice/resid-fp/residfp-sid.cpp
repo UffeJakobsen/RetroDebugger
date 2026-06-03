@@ -784,6 +784,10 @@ int SIDFP::clock_interpolate(cycle_count& delta_t, short* buf, int n,
   int s = 0;
   int i;
 
+  // Guard against concurrent set_sampling_parameters() reallocating sample[]
+  if (!sample)
+    return s;
+
   for (;;) {
     float next_sample_offset = sample_offset + cycles_per_sample;
     int delta_t_sample = static_cast<int>(next_sample_offset);
@@ -872,6 +876,13 @@ int SIDFP::clock_resample_interpolate(cycle_count& delta_t, short* buf, int n,
                                       int interleave)
 {
   int s = 0;
+
+  // Guard against concurrent set_sampling_parameters() which may
+  // delete+reallocate fir/sample while we are running on the emulation thread.
+  if (!fir || !sample)
+  {
+    return s;
+  }
 
   for (;;) {
     float next_sample_offset = sample_offset + cycles_per_sample;

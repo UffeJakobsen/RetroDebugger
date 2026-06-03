@@ -6,6 +6,7 @@ extern "C" {
 #include "montypes.h"
 #include "attach.h"
 #include "keyboard.h"
+#include "joystick.h"
 #include "drivecpu.h"
 #include "machine.h"
 #include "vsync.h"
@@ -32,6 +33,8 @@ extern "C" {
 
 #include "RES_ResourceManager.h"
 #include "CDebugInterfaceVice.h"
+#include "CDebugInterfaceViceTasks.h"
+#include "DebuggerDefs.h"
 #include "CDebuggerApiVice.h"
 #include "CDebugMemory.h"
 #include "CByteBuffer.h"
@@ -70,6 +73,7 @@ extern "C" {
 extern "C" {
 void vsync_suspend_speed_eval(void);
 void c64d_reset_sound_clk();
+void c64d_reset_sound_sync();
 void sound_suspend(void);
 void sound_resume(void);
 int c64d_sound_run_sound_when_paused(void);
@@ -100,6 +104,7 @@ CDebugInterfaceVice::CDebugInterfaceVice(CViewC64 *viewC64, uint8 *c64memory, bo
 	CreateScreenData();
 
 	audioChannel = NULL;
+	processPausedVSync.store(true, std::memory_order_release);
 	snapshotsManager = new CSnapshotsManager(this);
 
 	for (int sidNum = 0; sidNum < C64_MAX_NUM_SIDS; sidNum++)
@@ -314,6 +319,36 @@ CSlrString *CDebugInterfaceVice::GetEmulatorVersionString()
 	return versionString;
 }
 
+CC64BackendCapabilities CDebugInterfaceVice::GetC64BackendCapabilities()
+{
+	CC64BackendCapabilities capabilities;
+	capabilities.isDefaultC64Backend = true;
+	capabilities.supportsScreenMode = true;
+	capabilities.supportsTraceMode = true;
+	capabilities.screenAndTraceAreMutuallyExclusive = false;
+	capabilities.screenStream = C64CAP_DIRECT;
+	capabilities.mappedMemoryRead = C64CAP_DIRECT;
+	capabilities.mappedMemoryWrite = C64CAP_DIRECT;
+	capabilities.directRamRead = C64CAP_DIRECT;
+	capabilities.directRamWrite = C64CAP_DIRECT;
+	capabilities.cpuRegistersRead = C64CAP_DIRECT;
+	capabilities.cpuRegistersWrite = C64CAP_DIRECT;
+	capabilities.currentPcTracking = C64CAP_DIRECT;
+	capabilities.breakpointsPC = C64CAP_DIRECT;
+	capabilities.breakpointsRead = C64CAP_DIRECT;
+	capabilities.breakpointsWrite = C64CAP_DIRECT;
+	capabilities.stepInstruction = C64CAP_DIRECT;
+	capabilities.stepCycle = C64CAP_DIRECT;
+	capabilities.nativeMonitor = C64CAP_HELPER;
+	capabilities.snapshots = C64CAP_HELPER;
+	capabilities.timeline = C64CAP_HELPER;
+	capabilities.keyboardTextInput = C64CAP_HELPER;
+	capabilities.keyboardMatrixInput = C64CAP_DIRECT;
+	capabilities.joystickInput = C64CAP_DIRECT;
+	capabilities.mouseInput = C64CAP_DIRECT;
+	return capabilities;
+}
+
 #if defined(WIN32)
 extern "C" {
 	int uilib_cpu_is_smp(void);
@@ -368,8 +403,10 @@ void CDebugInterfaceVice::SetSidDataHistorySteps(int numSteps)
 
 void CDebugInterfaceVice::UpdateSidDataHistory()
 {
+	bool shouldNotifyTracker = false;
+
 	mutexSidDataHistory->Lock();
-	
+
 	CSidData *sidData;
 	if (sidDataHistory.size() > c64SettingsSidDataHistoryMaxSize)
 	{
@@ -380,7 +417,7 @@ void CDebugInterfaceVice::UpdateSidDataHistory()
 	{
 		sidData = new CSidData();
 	}
-	
+
 	if (sidDataToRestore)
 	{
 		sidData->CopyFrom(sidDataToRestore);
@@ -389,19 +426,23 @@ void CDebugInterfaceVice::UpdateSidDataHistory()
 	{
 		sidData->PeekFromSids();
 	}
-	
+
 	sidDataHistory.push_front(sidData);
-	
+
 	sidDataHistoryCurrentStep = sidDataHistoryCurrentStep + 1;
-	
+
 	if (sidDataHistoryCurrentStep >= sidDataHistorySteps)
 	{
 		sidDataHistoryCurrentStep = 0;
-		
-		// TODO: make a proper callback for this:
-		viewC64->viewC64SidTrackerHistory->VSyncStepsAdded();
+		shouldNotifyTracker = true;
 	}
 	mutexSidDataHistory->Unlock();
+
+	// Callback outside the lock
+	if (shouldNotifyTracker)
+	{
+		viewC64->viewC64SidTrackerHistory->VSyncStepsAdded();
+	}
 }
 
 extern "C" {
@@ -423,7 +464,18 @@ void CDebugInterfaceVice::DoFrame()
 
 void CDebugInterfaceVice::RefreshSync()
 {
-	vsync_sync_reset();
+	c64d_reset_sound_sync();
+	c64d_vsync_reset_timing();
+}
+
+void CDebugInterfaceVice::SetPausedVSyncProcessing(bool isEnabled)
+{
+	processPausedVSync.store(isEnabled, std::memory_order_release);
+}
+
+bool CDebugInterfaceVice::ShouldProcessPausedVSync()
+{
+	return processPausedVSync.load(std::memory_order_acquire);
 }
 
 void CDebugInterfaceVice::RestartAudio()
@@ -438,10 +490,16 @@ CThreadViceDriveFlush::CThreadViceDriveFlush(CDebugInterfaceVice *debugInterface
 	this->flushCheckIntervalInMS = flushCheckIntervalInMS;
 }
 
+// Engine-wide shutdown flag (defined in MTEngineSDL/Render/VID_Main.cpp).
+// Polled so the drive-flush worker stops touching VICE/drive state once the
+// app starts tearing down — there is no clean thread-stop (SYS_KillThread is
+// a no-op) and the loop otherwise runs right up until _exit(0).
+extern volatile bool mtQuitApplication;
+
 void CThreadViceDriveFlush::ThreadRun(void *data)
 {
 //	LOGD("CViceDriveFlushThread started");
-	while(true)
+	while (mtQuitApplication == false)
 	{
 		if (isRunning)
 		{
@@ -1084,16 +1142,34 @@ void CDebugInterfaceVice::ClearDebugMarkers()
 
 void CDebugInterfaceVice::ResetSoft()
 {
+	if (isRunning && GetDebugMode() == DEBUGGER_MODE_RUNNING)
+	{
+		CDebugInterfaceViceTaskReset *task = new CDebugInterfaceViceTaskReset(this, false);
+		AddCpuDebugInterruptTask(task);
+		c64d_vice_input_tasks_flag = 1;
+		return;
+	}
+
+	ResetSoftSynced();
+}
+
+void CDebugInterfaceVice::ResetSoftSynced()
+{
 	vsync_suspend_speed_eval();
-	
+
 	keyboard_clear_keymatrix();
 
-	machine_trigger_reset(MACHINE_RESET_MODE_SOFT);
+	machine_trigger_reset(MACHINE_RESET_MODE_RESET_CPU);
 	this->ResetEmulationFrameCounter();
 	c64d_maincpu_clk = 6;
 
 	c64d_update_c64_model();
 
+	// Clear any stale temporary breakpoints left over from step-over operations
+	this->ClearTemporaryBreakpoint();
+
+	// Only unpause for CPU JAM - for normal resets the user may want to
+	// debug the reset sequence and should remain paused at the first instruction
 	if (c64d_is_cpu_in_jam_state == 1)
 	{
 		this->SetDebugMode(DEBUGGER_MODE_RUNNING);
@@ -1103,19 +1179,37 @@ void CDebugInterfaceVice::ResetSoft()
 
 void CDebugInterfaceVice::ResetHard()
 {
+	if (isRunning && GetDebugMode() == DEBUGGER_MODE_RUNNING)
+	{
+		CDebugInterfaceViceTaskReset *task = new CDebugInterfaceViceTaskReset(this, true);
+		AddCpuDebugInterruptTask(task);
+		c64d_vice_input_tasks_flag = 1;
+		return;
+	}
+
+	ResetHardSynced();
+}
+
+void CDebugInterfaceVice::ResetHardSynced()
+{
 	LOGD("CDebugInterfaceVice::ResetHard");
 	vsync_suspend_speed_eval();
-	
+
 	keyboard_clear_keymatrix();
 
-	machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+	machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
 	this->ResetEmulationFrameCounter();
 	this->ClearHistory();
-	
+
 	c64d_maincpu_clk = 6;
 
 	c64d_update_c64_model();
 
+	// Clear any stale temporary breakpoints left over from step-over operations
+	this->ClearTemporaryBreakpoint();
+
+	// Only unpause for CPU JAM - for normal resets the user may want to
+	// debug the reset sequence and should remain paused at the first instruction
 	if (c64d_is_cpu_in_jam_state == 1)
 	{
 		this->SetDebugMode(DEBUGGER_MODE_RUNNING);
@@ -1131,8 +1225,8 @@ void CDebugInterfaceVice::DiskDriveReset()
 }
 
 extern "C" {
-	unsigned int c64d_get_vice_maincpu_clk();
-	unsigned int c64d_get_vice_maincpu_current_instruction_clk();
+	CLOCK c64d_get_vice_maincpu_clk();
+	CLOCK c64d_get_vice_maincpu_current_instruction_clk();
 	void c64d_refresh_screen_no_callback();
 }
 
@@ -1151,11 +1245,11 @@ u64 CDebugInterfaceVice::GetPreviousCpuInstructionCycleCounter()
 	u64 viceMainCpuClk = c64d_get_vice_maincpu_clk();
 	u64 previousInstructionClk = c64d_maincpu_previous_instruction_clk;
 	u64 previous2InstructionClk = c64d_maincpu_previous2_instruction_clk;
-	LOGD(">>>>>>>>>................ previous_inst_clk=%d previous2InstructionClk=%d | mainclk=%d", previousInstructionClk, previous2InstructionClk, viceMainCpuClk);
+	LOGD(">>>>>>>>>................ previous_inst_clk=%llu previous2InstructionClk=%llu | mainclk=%llu", (unsigned long long)previousInstructionClk, (unsigned long long)previous2InstructionClk, (unsigned long long)viceMainCpuClk);
 	
 	if (previousInstructionClk == viceMainCpuClk)
 	{
-		LOGWarning("previousInstructionClk=%d == viceMainCpuClk=%d, previousInstructionClk will be previous2InstructionClk=%d", previousInstructionClk, viceMainCpuClk, previous2InstructionClk);
+		LOGWarning("previousInstructionClk=%llu == viceMainCpuClk=%llu, previousInstructionClk will be previous2InstructionClk=%llu", (unsigned long long)previousInstructionClk, (unsigned long long)viceMainCpuClk, (unsigned long long)previous2InstructionClk);
 		
 		// snapshot was recently restored and debug pause was moved forward or we have no data (i.e. snapshot restored etc)
 		previousInstructionClk = previous2InstructionClk;
@@ -1170,7 +1264,7 @@ void CDebugInterfaceVice::ResetMainCpuDebugCycleCounter()
 }
 
 extern "C" {
-	unsigned int c64d_get_vice_maincpu_clk();
+	CLOCK c64d_get_vice_maincpu_clk();
 };
 
 u64 CDebugInterfaceVice::GetMainCpuDebugCycleCounter()
@@ -1180,6 +1274,7 @@ u64 CDebugInterfaceVice::GetMainCpuDebugCycleCounter()
 
 extern "C" {
 	void c64d_refresh_screen_no_callback();
+	void c64d_refresh_screen_paused();
 }
 
 void CDebugInterfaceVice::ResetEmulationFrameCounter()
@@ -1195,6 +1290,14 @@ unsigned int CDebugInterfaceVice::GetEmulationFrameNumber()
 
 void CDebugInterfaceVice::RefreshScreenNoCallback()
 {
+	if (isSteppingMode.load(std::memory_order_acquire))
+	{
+		// When paused/stepping, do a full-frame refresh + publish.
+		// Needed for snapshot restore which changes the entire VIC state.
+		c64d_refresh_screen_paused();
+		return;
+	}
+
 	c64d_refresh_screen_no_callback();
 }
 
@@ -1209,14 +1312,15 @@ bool CDebugInterfaceVice::KeyboardDown(uint32 mtKeyCode)
 	{
 		CDebuggerEmulatorPlugin *plugin = *it;
 		mtKeyCode = plugin->KeyDown(mtKeyCode);
-		
+
 		if (mtKeyCode == 0)
 			return false;
 	}
-	
-	if (keyboard_key_pressed((unsigned long)mtKeyCode) == 1)
-		return true;
-	
+
+	CDebugInterfaceViceTaskKeyboardEvent *task =
+		new CDebugInterfaceViceTaskKeyboardEvent(this, DEBUGGER_EVENT_BUTTON_DOWN, mtKeyCode);
+	AddCpuDebugInterruptTask(task);
+	c64d_vice_input_tasks_flag = 1;
 	return false;
 }
 
@@ -1226,27 +1330,75 @@ bool CDebugInterfaceVice::KeyboardUp(uint32 mtKeyCode)
 	{
 		CDebuggerEmulatorPlugin *plugin = *it;
 		mtKeyCode = plugin->KeyUp(mtKeyCode);
-		
+
 		if (mtKeyCode == 0)
 			return false;
 	}
-	
-	if (keyboard_key_released((unsigned long)mtKeyCode) == 1)
-		return true;
-	
+
+	CDebugInterfaceViceTaskKeyboardEvent *task =
+		new CDebugInterfaceViceTaskKeyboardEvent(this, DEBUGGER_EVENT_BUTTON_UP, mtKeyCode);
+	AddCpuDebugInterruptTask(task);
+	c64d_vice_input_tasks_flag = 1;
 	return false;
 }
 
 void CDebugInterfaceVice::JoystickDown(int port, uint32 axis)
 {
-//	LOGD("CDebugInterfaceVice::JoystickDown %d %d", port, axis);
-	c64d_joystick_key_down(axis, port+1);
+	CDebugInterfaceViceTaskJoystickEvent *task =
+		new CDebugInterfaceViceTaskJoystickEvent(this, DEBUGGER_EVENT_BUTTON_DOWN, port, axis);
+	AddCpuDebugInterruptTask(task);
+	c64d_vice_input_tasks_flag = 1;
 }
 
 void CDebugInterfaceVice::JoystickUp(int port, uint32 axis)
 {
-//	LOGD("CDebugInterfaceVice::JoystickUp %d %d", port, axis);
-	c64d_joystick_key_up(axis, port+1);
+	CDebugInterfaceViceTaskJoystickEvent *task =
+		new CDebugInterfaceViceTaskJoystickEvent(this, DEBUGGER_EVENT_BUTTON_UP, port, axis);
+	AddCpuDebugInterruptTask(task);
+	c64d_vice_input_tasks_flag = 1;
+}
+
+void CDebugInterfaceVice::ReplayInputEventsFromSnapshotsManager(CByteBuffer *inputEventsBuffer)
+{
+	LOGD("CDebugInterfaceVice::ReplayInputEventsFromSnapshotsManager");
+
+	while (inputEventsBuffer->IsEof() == false)
+	{
+		u8 eventType = inputEventsBuffer->GetU8();
+
+		if (eventType == DEBUGGER_EVENT_TYPE_JOYSTICK)
+		{
+			int port = inputEventsBuffer->GetI32();
+			u32 axis = inputEventsBuffer->GetU32();
+			u8 buttonState = inputEventsBuffer->GetU8();
+
+			if (buttonState == DEBUGGER_EVENT_BUTTON_DOWN)
+				c64d_joystick_key_down(axis, port);
+			else
+				c64d_joystick_key_up(axis, port);
+		}
+		else if (eventType == DEBUGGER_EVENT_TYPE_KEYBOARD)
+		{
+			u32 keyCode = inputEventsBuffer->GetU32();
+			u8 buttonState = inputEventsBuffer->GetU8();
+
+			if (buttonState == DEBUGGER_EVENT_BUTTON_DOWN)
+				keyboard_key_pressed((signed long)keyCode);
+			else
+				keyboard_key_released((signed long)keyCode);
+		}
+		else
+		{
+			LOGError("CDebugInterfaceVice::ReplayInputEventsFromSnapshotsManager: unknown event type %d", eventType);
+			break;
+		}
+	}
+}
+
+uint32 CDebugInterfaceVice::GetJoystickState(int port)
+{
+	// port is 0-based matching VICE JOYPORT_1=0, JOYPORT_2=1
+	return (uint32)(get_joystick_value(port) & 0x1F);
 }
 
 extern "C" {
@@ -1348,11 +1500,17 @@ extern "C" {
 	void c64d_get_drivecpu_regs(int driveNum, uint8 *a, uint8 *x, uint8 *y, uint8 *p, uint8 *sp, uint16 *pc);
 }
 
+void CDebugInterfaceVice::GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S)
+{
+	u8 instructionCycle;
+	c64d_get_maincpu_regs(A, X, Y, P, S, PC, &instructionCycle);
+}
+
 void CDebugInterfaceVice::GetC64CpuState(C64StateCPU *state)
 {
 	c64d_get_maincpu_regs(&(state->a), &(state->x), &(state->y), &(state->processorFlags), &(state->sp), &(state->pc),
 						  &(state->instructionCycle));
-	
+
 	state->lastValidPC = state->pc;
 }
 
@@ -1390,7 +1548,7 @@ void CDebugInterfaceVice::InsertD64(CSlrString *path)
 	
 	SYS_FixFileNameSlashes(asciiPath);
 
-	int rc = file_system_attach_disk(8, asciiPath);
+	int rc = file_system_attach_disk(8, 0, asciiPath);
 	
 	if (rc == -1)
 	{
@@ -1407,7 +1565,7 @@ void CDebugInterfaceVice::InsertD64(CSlrString *path)
 
 void CDebugInterfaceVice::DetachDriveDisk()
 {
-	file_system_detach_disk(8);
+	file_system_detach_disk(8, 0);
 	((CDataAdapterViceDrive1541DiskContents*)debugInterfaceVice->dataAdapterDrive1541DiskContents)->DiskDetached();
 }
 
@@ -1422,7 +1580,13 @@ extern "C" {
 void CDebugInterfaceVice::SetReuEnabled(bool isEnabled)
 {
 	LOGD("CDebugInterfaceVice::SetReuEnabled: %s", STRBOOL(isEnabled));
+	// Lock against the emulation thread: disabling the REU calls reu_deactivate(),
+	// which frees reu_ram. Without this lock a concurrent REU DMA on the emulation
+	// thread (reu_dma_start -> read_from_reu) reads freed memory and crashes.
+	// Same guard as SetReuSize(), which performs the same free/realloc of reu_ram.
+	snapshotsManager->LockMutex();
 	set_reu_enabled((isEnabled ? 1:0), NULL);
+	snapshotsManager->UnlockMutex();
 }
 
 void CDebugInterfaceVice::SetReuSize(int reuSize)
@@ -1530,7 +1694,7 @@ void CDebugInterfaceVice::GetSidTypes(std::vector<const char *> *sidTypes)
 }
 
 int c64_change_sid_type_value_to_set = 0;
-static void c64_change_sid_type_trap(WORD addr, void *v)
+static void c64_change_sid_type_trap(uint16_t addr, void *v)
 {
 	gSoundEngine->LockMutex("c64_change_sid_type_trap");
 	
@@ -1786,30 +1950,38 @@ void CDebugInterfaceVice::GetC64ModelTypes(std::vector<const char *> *modelTypeN
 }
 int c64_change_model_type;
 
-static void c64_change_model_trap(WORD addr, void *v)
+static void c64_change_model_trap(uint16_t addr, void *v)
 {
 	guiMain->LockMutex();
 	debugInterfaceVice->LockRenderScreenMutex();
-	
+
 	LOGD("c64_change_model_trap: model=%d", c64_change_model_type);
-	
+
 	//c64_change_model_type = 0;
-	
+
 	c64model_set(c64_change_model_type);
-	
+
 	debugInterfaceVice->modelType = c64_change_model_type;
-	
+
 	c64d_update_c64_machine_from_model_type(c64_change_model_type);
 	c64d_update_c64_screen_height_from_model_type(c64_change_model_type);
-	
+
 	c64d_clear_screen();
-	
-	SYS_Sleep(100);
-	
-	c64d_clear_screen();
-	
+
 	debugInterfaceVice->UnlockRenderScreenMutex();
-	
+	guiMain->UnlockMutex();
+
+	// Pure settle wait — must not hold guiMain/renderScreenMutex here, otherwise
+	// the render thread (and every thread needing the GUI mutex) stalls 100ms.
+	SYS_Sleep(100);
+
+	guiMain->LockMutex();
+	debugInterfaceVice->LockRenderScreenMutex();
+
+	c64d_clear_screen();
+
+	debugInterfaceVice->UnlockRenderScreenMutex();
+
 	debugInterfaceVice->ResetEmulationFrameCounter();
 
 	guiMain->UnlockMutex();
@@ -1878,8 +2050,8 @@ void CDebugInterfaceVice::SetVSPBugEmulation(bool isVSPBugEmulation)
 extern "C" {
 	void c64d_mem_write_c64(unsigned int addr, unsigned char value);
 	void c64d_mem_write_c64_no_mark(unsigned int addr, unsigned char value);
-	void c64d_mem_ram_write_c64(WORD addr, BYTE value);
-	void c64d_mem_ram_fill_c64(WORD addr, WORD size, BYTE value);
+	void c64d_mem_ram_write_c64(uint16_t addr, uint8_t value);
+	void c64d_mem_ram_fill_c64(uint16_t addr, uint16_t size, uint8_t value);
 }
 
 void CDebugInterfaceVice::SetByteC64(uint16 addr, uint8 val)
@@ -1895,14 +2067,14 @@ void CDebugInterfaceVice::SetByteToRamC64(uint16 addr, uint8 val)
 ///////
 
 extern "C" {
-	//BYTE mem_bank_peek(int bank, WORD addr, void *context); // can't be used, because reading affects/changes state
-	BYTE c64d_peek_c64(WORD addr);
-	BYTE c64d_peek_c64_for_cycle(WORD addr, BYTE memory0001, BYTE exrom_state, BYTE game_state);
-	BYTE c64d_mem_ram_read_c64(WORD addr);
-	void c64d_peek_memory_c64(BYTE *buffer, int addrStart, int addrEnd);
-	void c64d_copy_ram_memory_c64(BYTE *buffer, int addrStart, int addrEnd);
-	void c64d_copy_whole_mem_ram_c64(BYTE *destBuf);
-	void c64d_peek_whole_map_c64(BYTE *memoryBuffer);
+	//uint8_t mem_bank_peek(int bank, uint16_t addr, void *context); // can't be used, because reading affects/changes state
+	uint8_t c64d_peek_c64(uint16_t addr);
+	uint8_t c64d_peek_c64_for_cycle(uint16_t addr, uint8_t memory0001, uint8_t exrom_state, uint8_t game_state);
+	uint8_t c64d_mem_ram_read_c64(uint16_t addr);
+	void c64d_peek_memory_c64(uint8_t *buffer, int addrStart, int addrEnd);
+	void c64d_copy_ram_memory_c64(uint8_t *buffer, int addrStart, int addrEnd);
+	void c64d_copy_whole_mem_ram_c64(uint8_t *destBuf);
+	void c64d_peek_whole_map_c64(uint8_t *memoryBuffer);
 }
 
 /***********/
@@ -1946,24 +2118,24 @@ void CDebugInterfaceVice::SetVicRegister(uint8 registerNum, uint8 value)
 
 u8 CDebugInterfaceVice::GetVicRegister(uint8 registerNum)
 {
-	BYTE v = vicii_peek(registerNum);
+	uint8_t v = vicii_peek(registerNum);
 	return v;
 }
 
 //
 extern "C" {
 	cia_context_t *c64d_get_cia_context(int ciaId);
-	BYTE c64d_ciacore_peek(cia_context_t *cia_context, WORD addr);
-	void ciacore_store(cia_context_t *cia_context, WORD addr, BYTE value);
+	uint8_t c64d_ciacore_peek(cia_context_t *cia_context, uint16_t addr);
+	void ciacore_store(cia_context_t *cia_context, uint16_t addr, uint8_t value);
 }
 
 struct SetCiaRegisterData {
 	uint8 ciaId;
-	WORD registerNum;
-	BYTE value;
+	uint16_t registerNum;
+	uint8_t value;
 };
 
-static void c64_set_cia_register_trap(WORD addr, void *v)
+static void c64_set_cia_register_trap(uint16_t addr, void *v)
 {
 	guiMain->LockMutex();
 	debugInterfaceVice->LockMutex();
@@ -2013,17 +2185,17 @@ u8 CDebugInterfaceVice::GetCiaRegister(uint8 ciaId, uint8 registerNum)
 }
 
 extern "C" {
-	BYTE sid_peek_chip(WORD addr, int chipno);
-	void sid_store_chip(WORD addr, BYTE value, int chipno);
+	uint8_t sid_peek_chip(uint16_t addr, int chipno);
+	void sid_store_chip(uint16_t addr, uint8_t value, int chipno);
 }
 
 struct SetSidRegisterData {
-	WORD registerNum;
-	BYTE value;
+	uint16_t registerNum;
+	uint8_t value;
 	int sidId;
 };
 
-static void c64_set_sid_register_trap(WORD addr, void *v)
+static void c64_set_sid_register_trap(uint16_t addr, void *v)
 {
 	guiMain->LockMutex();
 	debugInterfaceVice->LockMutex();
@@ -2096,10 +2268,10 @@ u8 CDebugInterfaceVice::GetSidRegister(uint8 sidId, uint8 registerNum)
 }
 
 extern "C" {
-	void via1d1541_store(drive_context_t *ctxptr, WORD addr, BYTE data);
-	BYTE c64d_via1d1541_peek(drive_context_t *ctxptr, WORD addr);
-	void via2d_store(drive_context_t *ctxptr, WORD addr, BYTE data);
-	BYTE c64d_via2d_peek(drive_context_t *ctxptr, WORD addr);
+	void via1d1541_store(drive_context_t *ctxptr, uint16_t addr, uint8_t data);
+	uint8_t c64d_via1d1541_peek(drive_context_t *ctxptr, uint16_t addr);
+	void via2d_store(drive_context_t *ctxptr, uint16_t addr, uint8_t data);
+	uint8_t c64d_via2d_peek(drive_context_t *ctxptr, uint16_t addr);
 }
 void CDebugInterfaceVice::SetViaRegister(uint8 driveId, uint8 viaId, uint8 registerNum, uint8 value)
 {
@@ -2134,7 +2306,7 @@ void CDebugInterfaceVice::MakeJmpC64(uint16 addr)
 {
 	LOGD("CDebugInterfaceVice::MakeJmpC64: %04x", addr);
 	
-	if (c64d_debug_mode == DEBUGGER_MODE_PAUSED)
+	if (c64d_debug_mode.load(std::memory_order_acquire) == DEBUGGER_MODE_PAUSED)
 	{
 		c64d_set_c64_pc(addr);
 		c64d_set_debug_mode(DEBUGGER_MODE_PAUSED);
@@ -2308,8 +2480,8 @@ void CDebugInterfaceVice::SetByteToRam1541(uint16 addr, uint8 val)
 extern "C" {
 	uint8 c64d_peek_drive(int driveNum, uint16 addr);
 	uint8 c64d_mem_ram_read_drive(int driveNum, uint16 addr);
-	void c64d_peek_memory_drive(int driveNum, BYTE *buffer, int addrStart, int addrEnd);
-	void c64d_copy_ram_memory_drive(int driveNum, BYTE *buffer, int addrStart, int addrEnd);
+	void c64d_peek_memory_drive(int driveNum, uint8_t *buffer, int addrStart, int addrEnd);
+	void c64d_copy_ram_memory_drive(int driveNum, uint8_t *buffer, int addrStart, int addrEnd);
 	void c64d_peek_whole_map_drive(int driveNum, uint8 *memoryBuffer);
 	void c64d_copy_mem_ram_drive(int driveNum, uint8 *memoryBuffer);
 }
@@ -2326,7 +2498,7 @@ uint8 CDebugInterfaceVice::GetByteFromRam1541(uint16 addr)
 
 void CDebugInterfaceVice::MakeJmp1541(uint16 addr)
 {
-	if (c64d_debug_mode == DEBUGGER_MODE_PAUSED)
+	if (c64d_debug_mode.load(std::memory_order_acquire) == DEBUGGER_MODE_PAUSED)
 	{
 		c64d_set_drive_pc(0, addr);
 		//c64d_set_debug_mode(DEBUGGER_MODE_RUN_ONE_INSTRUCTION);
@@ -2431,31 +2603,33 @@ void CDebugInterfaceVice::GetFloatCBMColor(uint8 colorNum, float *r, float *g, f
 void CDebugInterfaceVice::SetDebugMode(uint8 debugMode)
 {
 	LOGD("CDebugInterfaceVice::SetDebugMode: %d (cycle=%d)", debugMode, GetMainCpuCycleCounter());
-	
+
 	c64d_set_debug_mode(debugMode);
-	
+
+	// Must call base class to set isSteppingMode and notify pause CV
+	CDebugInterface::SetDebugMode(debugMode);
 }
 
 uint8 CDebugInterfaceVice::GetDebugMode()
 {
-	return c64d_debug_mode;
+	return c64d_debug_mode.load(std::memory_order_acquire);
 }
 
 // tape
 extern "C" {
 	int tape_image_attach(unsigned int unit, const char *name);
 	int tape_image_detach(unsigned int unit);
-	void datasette_control(int command);
+	void datasette_control(int port, int command);
 }
 
-static void tape_attach_trap(WORD addr, void *v)
+static void tape_attach_trap(uint16_t addr, void *v)
 {
 	char *filePath = (char*)v;
 	tape_image_attach(1, filePath);
 	delete [] filePath;
 }
 
-static void tape_detach_trap(WORD addr, void *v)
+static void tape_detach_trap(uint16_t addr, void *v)
 {
 	tape_image_detach(1);
 }
@@ -2479,32 +2653,32 @@ void CDebugInterfaceVice::DetachTape()
 
 void CDebugInterfaceVice::DatasettePlay()
 {
-	datasette_control(DATASETTE_CONTROL_START);
+	datasette_control(0, DATASETTE_CONTROL_START);
 }
 
 void CDebugInterfaceVice::DatasetteStop()
 {
-	datasette_control(DATASETTE_CONTROL_STOP);
+	datasette_control(0, DATASETTE_CONTROL_STOP);
 }
 
 void CDebugInterfaceVice::DatasetteForward()
 {
-	datasette_control(DATASETTE_CONTROL_FORWARD);
+	datasette_control(0, DATASETTE_CONTROL_FORWARD);
 }
 
 void CDebugInterfaceVice::DatasetteRewind()
 {
-	datasette_control(DATASETTE_CONTROL_REWIND);
+	datasette_control(0, DATASETTE_CONTROL_REWIND);
 }
 
 void CDebugInterfaceVice::DatasetteRecord()
 {
-	datasette_control(DATASETTE_CONTROL_RECORD);
+	datasette_control(0, DATASETTE_CONTROL_RECORD);
 }
 
 void CDebugInterfaceVice::DatasetteReset()
 {
-	datasette_control(DATASETTE_CONTROL_RESET);
+	datasette_control(0, DATASETTE_CONTROL_RESET);
 }
 
 void CDebugInterfaceVice::DatasetteSetSpeedTuning(int speedTuning)
@@ -2536,7 +2710,7 @@ extern "C" {
 	void cartridge_trigger_freeze(void);
 }
 
-static void cartridge_attach_trap(WORD addr, void *v)
+static void cartridge_attach_trap(uint16_t addr, void *v)
 {
 	char *filePath = (char*)v;
 	cartridge_attach_image(0, filePath);
@@ -2546,11 +2720,11 @@ static void cartridge_attach_trap(WORD addr, void *v)
 	debugInterfaceVice->ResetEmulationFrameCounter();
 }
 
-static void cartridge_detach_trap(WORD addr, void *v)
+static void cartridge_detach_trap(uint16_t addr, void *v)
 {
 	// -1 means all slots
 	cartridge_detach_image(-1);
-	machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+	machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
 	debugInterfaceVice->ResetEmulationFrameCounter();
 	c64d_maincpu_clk = 6;
 }
@@ -2599,7 +2773,7 @@ void CDebugInterfaceVice::CartridgeFreezeButtonPressed()
 }
 
 extern "C" {
-	void c64d_get_exrom_game(BYTE *exrom, BYTE *game);
+	void c64d_get_exrom_game(uint8_t *exrom, uint8_t *game);
 }
 
 void CDebugInterfaceVice::GetC64CartridgeState(C64StateCartridge *cartridgeState)
@@ -2607,17 +2781,17 @@ void CDebugInterfaceVice::GetC64CartridgeState(C64StateCartridge *cartridgeState
 	c64d_get_exrom_game(&(cartridgeState->exrom), &(cartridgeState)->game);
 }
 
-static void trap_detach_everything(WORD addr, void *v)
+static void trap_detach_everything(uint16_t addr, void *v)
 {
 	// -1 means all slots
 	cartridge_detach_image(-1);
-	machine_trigger_reset(MACHINE_RESET_MODE_HARD);
+	machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
 	debugInterfaceVice->ResetEmulationFrameCounter();
 	c64d_maincpu_clk = 6;
 
 	tape_image_detach(1);
 	
-	file_system_detach_disk(8);
+	file_system_detach_disk(8, 0);
 	
 	((CDataAdapterViceDrive1541DiskContents*)debugInterfaceVice->dataAdapterDrive1541DiskContents)->DiskDetached();
 }
@@ -2737,7 +2911,7 @@ void c64d_update_c64_screen_height_from_model_type(int modelType)
 }
 
 
-static void load_snapshot_trap(WORD addr, void *v)
+static void load_snapshot_trap(uint16_t addr, void *v)
 {
 	LOGD("load_snapshot_trap");
 	
@@ -2818,16 +2992,16 @@ bool CDebugInterfaceVice::LoadFullSnapshot(char *filePath)
 	debugInterfaceVice->numEmulationFPS = 1;
 
 	interrupt_maincpu_trigger_trap(load_snapshot_trap, buf);
-	
-	if (c64d_debug_mode == DEBUGGER_MODE_PAUSED)
+
+	if (c64d_debug_mode.load(std::memory_order_acquire) == DEBUGGER_MODE_PAUSED)
 	{
 		c64d_set_debug_mode(DEBUGGER_MODE_RUN_ONE_INSTRUCTION);
 	}
-	
+
 	return true;
 }
 
-static void save_snapshot_trap(WORD addr, void *v)
+static void save_snapshot_trap(uint16_t addr, void *v)
 {
 	LOGD("save_snapshot_trap");
 	
@@ -2859,8 +3033,8 @@ void CDebugInterfaceVice::SaveFullSnapshot(char *filePath)
 		strcpy(buf, filePath);
 		interrupt_maincpu_trigger_trap(save_snapshot_trap, buf);
 	}
-	
-	if (c64d_debug_mode == DEBUGGER_MODE_PAUSED)
+
+	if (c64d_debug_mode.load(std::memory_order_acquire) == DEBUGGER_MODE_PAUSED)
 	{
 		c64d_set_debug_mode(DEBUGGER_MODE_RUN_ONE_INSTRUCTION);
 	}
@@ -3115,11 +3289,12 @@ CSlrString *CDebugInterfaceVice::GetCodeMonitorPrompt()
 	return str;
 }
 
-extern "C" {
-	char *lib_stralloc(const char *str);
-}
+// lib_strdup is declared by vice/root/lib.h which is already transitively
+// included above. Forward-declaring it here breaks under LIB_DEBUG_PINPOINT,
+// because the lib.h header turns lib_strdup into a macro that rewrites the
+// declaration into an arity-mismatched lib_strdup_pinpoint signature.
 
-static void execute_monitor_command_trap(WORD addr, void *v)
+static void execute_monitor_command_trap(uint16_t addr, void *v)
 {
 	char *monitorCmdStr = (char*)v;
 	int exit_mon = monitor_process(monitorCmdStr);
@@ -3145,7 +3320,7 @@ bool CDebugInterfaceVice::ExecuteCodeMonitorCommand(CSlrString *commandStr)
 	commandStr->ConvertToLowerCase();
 
 	char *cmdStr = commandStr->GetStdASCII();
-	char *monitorCmdStr = lib_stralloc(cmdStr);
+	char *monitorCmdStr = lib_strdup(cmdStr);
 	delete [] cmdStr;
 
 //	// we need to move to next instruction on these commands
@@ -3322,7 +3497,7 @@ void CDebugInterfaceVice::ScanFolderForRoms(const char *folderPath)
 extern "C" {
 	void c64d_trigger_update_roms();
 
-	void _c64d_update_roms_trap(WORD addr, void *data)
+	void _c64d_update_roms_trap(uint16_t addr, void *data)
 	{
 		LOGD("_c64d_update_roms_trap");
 		debugInterfaceVice->UpdateRomsTrap();
@@ -3376,11 +3551,11 @@ void CDebugInterfaceVice::UpdateRoms()
 }
 
 extern "C" {
-extern BYTE c64memrom_kernal64_rom[C64_KERNAL_ROM_SIZE];
-extern BYTE c64memrom_basic64_rom[C64_BASIC_ROM_SIZE];
-extern BYTE mem_chargen_rom[C64_CHARGEN_ROM_SIZE];
-extern BYTE drive_rom1541_embedded[DRIVE_ROM1541_SIZE];
-extern BYTE drive_rom1541ii_embedded[DRIVE_ROM1541II_SIZE];
+extern uint8_t c64memrom_kernal64_rom[C64_KERNAL_ROM_SIZE];
+extern uint8_t c64memrom_basic64_rom[C64_BASIC_ROM_SIZE];
+extern uint8_t mem_chargen_rom[C64_CHARGEN_ROM_SIZE];
+extern uint8_t drive_rom1541_embedded[DRIVE_ROM1541_SIZE];
+extern uint8_t drive_rom1541ii_embedded[DRIVE_ROM1541II_SIZE];
 }
 
 void CDebugInterfaceVice::DumpRomsToFolder(const char *folderPath)
@@ -3496,7 +3671,7 @@ CPool CSidData::poolSidData(6000, sizeof(CSidData));
 
 CSidData::CSidData()
 {
-	for (int i = 0; i < SOUND_SIDS_MAX; i++)
+	for (int i = 0; i < C64D_SID_DATA_MAX_SIDS; i++)
 	{
 		for (int reg = 0; reg < C64_NUM_SID_REGISTERS; reg++)
 		{
@@ -3507,7 +3682,7 @@ CSidData::CSidData()
 }
 
 extern "C" {
-void c64d_store_sid_data(BYTE *sidDataStore, int sidNum);
+void c64d_store_sid_data(uint8_t *sidDataStore, int sidNum);
 }
 
 void CSidData::PeekFromSids()
@@ -3540,7 +3715,7 @@ void CSidData::RestoreSids()
 
 void CSidData::CopyFrom(CSidData *sidData)
 {
-	for (int sidNum = 0; sidNum < SOUND_SIDS_MAX; sidNum++)
+	for (int sidNum = 0; sidNum < C64D_SID_DATA_MAX_SIDS; sidNum++)
 	{
 		for (int regNum = 0; regNum < C64_NUM_SID_REGISTERS; regNum++)
 		{
@@ -3551,7 +3726,7 @@ void CSidData::CopyFrom(CSidData *sidData)
 
 void CSidData::Serialize(CByteBuffer *byteBuffer)
 {
-	for (int sidNum = 0; sidNum < SOUND_SIDS_MAX; sidNum++)
+	for (int sidNum = 0; sidNum < C64D_SID_DATA_MAX_SIDS; sidNum++)
 	{
 		for (int regNum = 0; regNum < C64_NUM_SID_REGISTERS; regNum++)
 		{
@@ -3562,13 +3737,13 @@ void CSidData::Serialize(CByteBuffer *byteBuffer)
 
 bool CSidData::Deserialize(CByteBuffer *byteBuffer)
 {
-	for (int sidNum = 0; sidNum < SOUND_SIDS_MAX; sidNum++)
+	for (int sidNum = 0; sidNum < C64D_SID_DATA_MAX_SIDS; sidNum++)
 	{
 		for (int regNum = 0; regNum < C64_NUM_SID_REGISTERS; regNum++)
 		{
 			if (byteBuffer->IsEof())
 				return false;
-			
+
 			u8 v = byteBuffer->GetU8();
 			sidRegs[sidNum][regNum] = v;
 		}
@@ -3584,7 +3759,7 @@ bool CSidData::SaveRegs(const char *fileName)
 		return false;
 	}
 	
-	fwrite(sidRegs, 1, SOUND_SIDS_MAX*C64_NUM_SID_REGISTERS, fp);
+	fwrite(sidRegs, 1, C64D_SID_DATA_MAX_SIDS*C64_NUM_SID_REGISTERS, fp);
 	fclose(fp);
 	return true;
 }
@@ -3596,7 +3771,7 @@ bool CSidData::LoadRegs(const char *fileName)
 	{
 		return false;
 	}
-	fread(sidRegs, 1, SOUND_SIDS_MAX*C64_NUM_SID_REGISTERS, fp);
+	fread(sidRegs, 1, C64D_SID_DATA_MAX_SIDS*C64_NUM_SID_REGISTERS, fp);
 	fclose(fp);
 	return true;
 }
@@ -3719,4 +3894,3 @@ void ViceKeyMapInitDefault()
 //	 7    R/S  Q   C= SPC  2  CTL  <-  1
 
 }
-

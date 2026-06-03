@@ -33,6 +33,7 @@
 #include "gt-pc.h"
 
 #include <stdlib.h>
+#include "gt-abort.h"
 
 
 static struct chunkpool s_atom_pool[1];
@@ -672,6 +673,17 @@ void symbol_dump_resolved(int level, const char *symbol)
     }
 }
 
+int assemble_get_symbol(const char *symbol, int *out)
+{
+    struct expr *e = NULL;
+    const char *p = find_symref(symbol, &e);
+    if (p != NULL || e == NULL) return -1;
+    if (out) *out = (int)resolve_expr(e);
+    return 0;
+}
+
+void (*gt2_post_output_hook)(void) = NULL;
+
 void output_atoms(struct membuf *out, struct vec *atoms)
 {
     struct vec_iterator i[1];
@@ -719,8 +731,8 @@ void output_atoms(struct membuf *out, struct vec *atoms)
             value = resolve_expr(atom->u.op.arg);
             if(!is_valid_i8(value))
             {
-                LOG(LOG_ERROR, ("value %d out of range for op $%02X @%p\n",
-                                value, atom->u.op.code, atom));
+                LOG(LOG_ERROR, ("value %d out of range for op $%02X (output PC=$%04X)\n",
+                                value, atom->u.op.code, membuf_memlen(out)));
                 exit(1);
             }
             LOG(LOG_DEBUG, ("output: $%02X $%02X\n",

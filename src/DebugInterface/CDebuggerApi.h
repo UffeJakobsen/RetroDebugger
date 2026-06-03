@@ -7,6 +7,7 @@
 #include "CDebugInterface.h"
 #include "SYS_Threading.h"
 #include "CImageData.h"
+#include <string>
 
 class CGuiView;
 class CDebugInterface;
@@ -142,6 +143,16 @@ public:
 
 	//
 	virtual nlohmann::json GetCpuStatusJson();
+
+	// MCP analysis tools
+	nlohmann::json DisassembleMemory(int startAddr, int instructionCount, bool includeBytes, bool includeLabels);
+	nlohmann::json AssembleCode(int startAddr, const std::string &code);
+	nlohmann::json GetCodeMap(int startAddr, int endAddr);
+	nlohmann::json SearchOpcodePattern(const std::string &pattern, int startAddr, int endAddr, bool executedOnly);
+
+private:
+	// Helper: format one disassembled instruction as text line
+	std::string FormatDisassemblyLine(u16 addr, u8 op, u8 lo, u8 hi, bool includeBytes, bool includeLabels, bool isExecuted);
 };
 
 #endif

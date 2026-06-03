@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gt-abort.h"
 
 
 void membuf_init(struct membuf *sb)

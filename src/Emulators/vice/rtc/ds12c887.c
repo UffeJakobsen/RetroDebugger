@@ -155,7 +155,7 @@
  *                     when set to a 1, permits the Alarm Flag (AF) bit in register 12
  *                     to assert IRQ. An alarm interrupt occurs for each second that
  *                     the 3 time bytes equal the 3 alarm bytes including a
- *                     “don’t care” alarm code of binary 11XXXXXX. When the AIE bit is
+ *                     ï¿½donï¿½t careï¿½ alarm code of binary 11XXXXXX. When the AIE bit is
  *                     set to 0, the AF bit does not initiate the IRQ signal. The
  *                     internal functions of the DS12C887 not affect the AIE bit.
  *               bit 4 The Update Ended Interrupt Enable (UIE) bit is a read/write bit
@@ -212,6 +212,10 @@
    - C64/C128/VIC20 DS12C887 RTC cartridge
  */
 
+/* TODO: day of week is not an independent variable; it is derived from the
+   date. Other modules have corrected this, but it hasn't been done here
+   as there is no tester. */
+
 /* ---------------------------------------------------------------------------------------------------- */
 
 void ds12c887_reset(rtc_ds12c887_t *context)
@@ -241,7 +245,7 @@ rtc_ds12c887_t *ds12c887_init(char *device)
 
     retval->bcd = 1;
     retval->ctrl_regs[0] = 0x20;
-    retval->device = lib_stralloc(device);
+    retval->device = lib_strdup(device);
 
     return retval;
 }
@@ -252,7 +256,7 @@ void ds12c887_destroy(rtc_ds12c887_t *context, int save)
         if (memcmp(context->ram, context->old_ram, DS12C887_RAM_SIZE) ||
             memcmp(context->clock_regs, context->old_clock_regs, DS12C887_REG_SIZE) ||
             context->offset != context->old_offset) {
-            rtc_save_context(context->ram, DS12C887_RAM_SIZE, context->clock_regs, DS12C887_REG_SIZE, context->device, context->offset);
+            rtc_save_context(context->ram, DS12C887_RAM_SIZE, context->clock_regs, DS12C887_REG_SIZE, context->device, context->offset, 0);
         }
     }
     lib_free(context->ram);
@@ -263,10 +267,10 @@ void ds12c887_destroy(rtc_ds12c887_t *context, int save)
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-static BYTE ds12c887_get_clock(rtc_ds12c887_t *context, BYTE address, time_t latch)
+static uint8_t ds12c887_get_clock(rtc_ds12c887_t *context, uint8_t address, time_t latch)
 {
-    BYTE retval;
-    BYTE hour;
+    uint8_t retval;
+    uint8_t hour;
 
     switch (address) {
         case DS12C887_REG_SECONDS:
@@ -355,10 +359,10 @@ static BYTE ds12c887_get_clock(rtc_ds12c887_t *context, BYTE address, time_t lat
     return retval;
 }
 
-static void ds12c887_write_clock_byte(rtc_ds12c887_t *context, BYTE address, BYTE data)
+static void ds12c887_write_clock_byte(rtc_ds12c887_t *context, uint8_t address, uint8_t data)
 {
     int val;
-    BYTE temp;
+    uint8_t temp;
 
     switch (address) {
         case DS12C887_REG_SECONDS:
@@ -482,7 +486,7 @@ static void ds12c887_write_latched_clock_regs(rtc_ds12c887_t *context)
 
     for (i = 0; i < 10; i++) {
         if (context->clock_regs_changed[i]) {
-            ds12c887_write_clock_byte(context, (BYTE)i, context->clock_regs[i]);
+            ds12c887_write_clock_byte(context, (uint8_t)i, context->clock_regs[i]);
         }
     }
     if (context->clock_regs_changed[10]) {
@@ -496,8 +500,8 @@ static void ds12c887_write_latched_clock_regs(rtc_ds12c887_t *context)
  * it returns a 1 if an IRQ was generated */
 int ds12c887_update_flags(rtc_ds12c887_t *context)
 {
-    BYTE current;
-    BYTE alarm;
+    uint8_t current;
+    uint8_t alarm;
     time_t latch;
     int match = 1;
     int irq_return = 0;
@@ -625,12 +629,12 @@ int ds12c887_update_flags(rtc_ds12c887_t *context)
 
 /* ---------------------------------------------------------------------------------------------------- */
 
-void ds12c887_store_address(rtc_ds12c887_t *context, BYTE address)
+void ds12c887_store_address(rtc_ds12c887_t *context, uint8_t address)
 {
     context->reg = address & 0x7f;
 }
 
-void ds12c887_store_data(rtc_ds12c887_t *context, BYTE data)
+void ds12c887_store_data(rtc_ds12c887_t *context, uint8_t data)
 {
     int i;
 
@@ -661,6 +665,7 @@ void ds12c887_store_data(rtc_ds12c887_t *context, BYTE data)
             } else {
                 ds12c887_write_clock_byte(context, context->reg, data);
             }
+            break;
         case DS12C887_REG_CTRL_A:
             data &= 0x7f;
             if ((data & 0x70) != 0x20) {
@@ -713,9 +718,9 @@ void ds12c887_store_data(rtc_ds12c887_t *context, BYTE data)
     }
 }
 
-BYTE ds12c887_read(rtc_ds12c887_t *context)
+uint8_t ds12c887_read(rtc_ds12c887_t *context)
 {
-    BYTE retval;
+    uint8_t retval;
     time_t latch;
 
     if (context->clock_halt || context->set) {
@@ -765,9 +770,9 @@ BYTE ds12c887_read(rtc_ds12c887_t *context)
     return retval;
 }
 
-static BYTE ds12c887_read_regs(rtc_ds12c887_t *context, int address)
+static uint8_t ds12c887_read_regs(rtc_ds12c887_t *context, int address)
 {
-    BYTE retval;
+    uint8_t retval;
     time_t latch;
 
     if (context->clock_halt || context->set) {
@@ -792,7 +797,7 @@ static BYTE ds12c887_read_regs(rtc_ds12c887_t *context, int address)
         case DS12C887_REG_MONTHS:
         case DS12C887_REG_YEARS:
         case DS12C887_REG_CENTURIES:
-            retval = ds12c887_get_clock(context, (BYTE)address, latch);
+            retval = ds12c887_get_clock(context, (uint8_t)address, latch);
             break;
         case DS12C887_REG_CTRL_A:
             retval = context->ctrl_regs[0];
@@ -823,13 +828,13 @@ int ds12c887_dump(rtc_ds12c887_t *context)
 
     mon_out("Registers contents:\n");
     for (i = 0; i < 8; ++i) {
-        mon_out("%02X-%02X:", i * 16, (i * 16) + 15);
+        mon_out("%02X-%02X:", i * 16U, (i * 16U) + 15U);
         for (j = 0; j < 16; ++j) {
             mon_out(" %02X", ds12c887_read_regs(context, (i * 16) + j));
         }
         mon_out("\n");
     }
-    
+
     return 0;
 }
 
@@ -839,62 +844,62 @@ int ds12c887_dump(rtc_ds12c887_t *context)
 
    type   | name                | description
    ------------------------------------------
-   BYTE   | clock halt          | clock halt flag
-   DWORD  | clock halt latch hi | high DWORD of the clock halt offset
-   DWORD  | clock halt latch lo | low DWORD of the clock halt offset
-   BYTE   | am pm               | AM/PM flag
-   BYTE   | set                 | RTC set in progress flag
-   DWORD  | set latch hi        | high DWORD of the set offset
-   DWORD  | set latch lo        | low DWORD of the set offset
-   DWORD  | offset hi           | high DWORD of the RTC offset
-   DWORD  | offset lo           | low DWORD of the RTC offset
-   DWORD  | old offset hi       | high DWORD of the old RTC offset
-   DWORD  | old offset lo       | low DWORD of the old RTC offset
-   BYTE   | bcd                 | BCD mode flag
-   BYTE   | alarm flag          | alarm flag
-   BYTE   | end of update flag  | end of update flag
+   uint8_t   | clock halt          | clock halt flag
+   uint32_t  | clock halt latch hi | high uint32_t of the clock halt offset
+   uint32_t  | clock halt latch lo | low uint32_t of the clock halt offset
+   uint8_t   | am pm               | AM/PM flag
+   uint8_t   | set                 | RTC set in progress flag
+   uint32_t  | set latch hi        | high uint32_t of the set offset
+   uint32_t  | set latch lo        | low uint32_t of the set offset
+   uint32_t  | offset hi           | high uint32_t of the RTC offset
+   uint32_t  | offset lo           | low uint32_t of the RTC offset
+   uint32_t  | old offset hi       | high uint32_t of the old RTC offset
+   uint32_t  | old offset lo       | low uint32_t of the old RTC offset
+   uint8_t   | bcd                 | BCD mode flag
+   uint8_t   | alarm flag          | alarm flag
+   uint8_t   | end of update flag  | end of update flag
    ARRAY  | clock regs          | 11 BYTES of register data
    ARRAY  | old clock regs      | 11 BYTES of old register data
    ARRAY  | clock regs changed  | 11 BYTES of changed register data
    ARRAY  | ctrl regs           | 2 BYTES of control register data
    ARRAY  | RAM                 | 128 BYTES of RAM data
    ARRAY  | old RAM             | 128 BYTES of old RAM data
-   BYTE   | reg                 | current register
-   BYTE   | prev second         | previous second
+   uint8_t   | reg                 | current register
+   uint8_t   | prev second         | previous second
    STRING | device              | device name STRING
  */
 
-static char snap_module_name[] = "RTC_DS12C887";
+static const char snap_module_name[] = "RTC_DS12C887";
 #define SNAP_MAJOR   0
 #define SNAP_MINOR   0
 
 int ds12c887_write_snapshot(rtc_ds12c887_t *context, snapshot_t *s)
 {
-    DWORD clock_halt_latch_hi = 0;
-    DWORD clock_halt_latch_lo = 0;
-    DWORD set_latch_lo = 0;
-    DWORD set_latch_hi = 0;
-    DWORD offset_lo = 0;
-    DWORD offset_hi = 0;
-    DWORD old_offset_lo = 0;
-    DWORD old_offset_hi = 0;
+    uint32_t clock_halt_latch_hi = 0;
+    uint32_t clock_halt_latch_lo = 0;
+    uint32_t set_latch_lo = 0;
+    uint32_t set_latch_hi = 0;
+    uint32_t offset_lo = 0;
+    uint32_t offset_hi = 0;
+    uint32_t old_offset_lo = 0;
+    uint32_t old_offset_hi = 0;
     snapshot_module_t *m;
 
     /* time_t can be either 32bit or 64bit, so we save as 64bit */
 #if (SIZE_OF_TIME_T == 8)
-    clock_halt_latch_hi = (DWORD)(context->clock_halt_latch >> 32);
-    clock_halt_latch_lo = (DWORD)(context->clock_halt_latch & 0xffffffff);
-    set_latch_hi = (DWORD)(context->set_latch >> 32);
-    set_latch_lo = (DWORD)(context->set_latch & 0xffffffff);
-    offset_hi = (DWORD)(context->offset >> 32);
-    offset_lo = (DWORD)(context->offset & 0xffffffff);
-    old_offset_hi = (DWORD)(context->old_offset >> 32);
-    old_offset_lo = (DWORD)(context->old_offset & 0xffffffff);
+    clock_halt_latch_hi = (uint32_t)(context->clock_halt_latch >> 32);
+    clock_halt_latch_lo = (uint32_t)(context->clock_halt_latch & 0xffffffff);
+    set_latch_hi = (uint32_t)(context->set_latch >> 32);
+    set_latch_lo = (uint32_t)(context->set_latch & 0xffffffff);
+    offset_hi = (uint32_t)(context->offset >> 32);
+    offset_lo = (uint32_t)(context->offset & 0xffffffff);
+    old_offset_hi = (uint32_t)(context->old_offset >> 32);
+    old_offset_lo = (uint32_t)(context->old_offset & 0xffffffff);
 #else
-    clock_halt_latch_lo = (DWORD)context->clock_halt_latch;
-    set_latch_lo = (DWORD)context->set_latch;
-    offset_lo = (DWORD)context->offset;
-    old_offset_lo = (DWORD)context->old_offset;
+    clock_halt_latch_lo = (uint32_t)context->clock_halt_latch;
+    set_latch_lo = (uint32_t)context->set_latch;
+    offset_lo = (uint32_t)context->offset;
+    old_offset_lo = (uint32_t)context->old_offset;
 #endif
 
     m = snapshot_module_create(s, snap_module_name, SNAP_MAJOR, SNAP_MINOR);
@@ -904,20 +909,20 @@ int ds12c887_write_snapshot(rtc_ds12c887_t *context, snapshot_t *s)
     }
 
     if (0
-        || SMW_B(m, (BYTE)context->clock_halt) < 0
+        || SMW_B(m, (uint8_t)context->clock_halt) < 0
         || SMW_DW(m, clock_halt_latch_hi) < 0
         || SMW_DW(m, clock_halt_latch_lo) < 0
-        || SMW_B(m, (BYTE)context->am_pm) < 0
-        || SMW_B(m, (BYTE)context->set) < 0
+        || SMW_B(m, (uint8_t)context->am_pm) < 0
+        || SMW_B(m, (uint8_t)context->set) < 0
         || SMW_DW(m, set_latch_hi) < 0
         || SMW_DW(m, set_latch_lo) < 0
         || SMW_DW(m, offset_hi) < 0
         || SMW_DW(m, offset_lo) < 0
         || SMW_DW(m, old_offset_hi) < 0
         || SMW_DW(m, old_offset_lo) < 0
-        || SMW_B(m, (BYTE)context->bcd) < 0
-        || SMW_B(m, (BYTE)context->alarm_flag) < 0
-        || SMW_B(m, (BYTE)context->end_of_update_flag) < 0
+        || SMW_B(m, (uint8_t)context->bcd) < 0
+        || SMW_B(m, (uint8_t)context->alarm_flag) < 0
+        || SMW_B(m, (uint8_t)context->end_of_update_flag) < 0
         || SMW_BA(m, context->clock_regs, DS12C887_REG_SIZE) < 0
         || SMW_BA(m, context->old_clock_regs, DS12C887_REG_SIZE) < 0
         || SMW_BA(m, context->clock_regs_changed, DS12C887_REG_SIZE) < 0
@@ -935,15 +940,15 @@ int ds12c887_write_snapshot(rtc_ds12c887_t *context, snapshot_t *s)
 
 int ds12c887_read_snapshot(rtc_ds12c887_t *context, snapshot_t *s)
 {
-    DWORD clock_halt_latch_hi = 0;
-    DWORD clock_halt_latch_lo = 0;
-    DWORD set_latch_lo = 0;
-    DWORD set_latch_hi = 0;
-    DWORD offset_lo = 0;
-    DWORD offset_hi = 0;
-    DWORD old_offset_lo = 0;
-    DWORD old_offset_hi = 0;
-    BYTE vmajor, vminor;
+    uint32_t clock_halt_latch_hi = 0;
+    uint32_t clock_halt_latch_lo = 0;
+    uint32_t set_latch_lo = 0;
+    uint32_t set_latch_hi = 0;
+    uint32_t offset_lo = 0;
+    uint32_t offset_hi = 0;
+    uint32_t old_offset_lo = 0;
+    uint32_t old_offset_hi = 0;
+    uint8_t vmajor, vminor;
     snapshot_module_t *m;
 
     m = snapshot_module_open(s, snap_module_name, &vmajor, &vminor);
@@ -953,7 +958,7 @@ int ds12c887_read_snapshot(rtc_ds12c887_t *context, snapshot_t *s)
     }
 
     /* Do not accept versions higher than current */
-    if (vmajor > SNAP_MAJOR || vminor > SNAP_MINOR) {
+    if (snapshot_version_is_bigger(vmajor, vminor, SNAP_MAJOR, SNAP_MINOR)) {
         snapshot_set_error(SNAPSHOT_MODULE_HIGHER_VERSION);
         goto fail;
     }

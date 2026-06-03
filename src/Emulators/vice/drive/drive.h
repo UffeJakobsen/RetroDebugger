@@ -33,11 +33,26 @@
 #include "ds1216e.h"	//rtc/
 #include "p64.h"
 
-#define DRIVE_NUM 4
+/* VICE 3.10: Disk unit definitions */
+#define NUM_DISK_UNITS   4
+#define NUM_DRIVES       2
+
+#define DRIVE_UNIT_MIN   8
+#define DRIVE_UNIT_MAX   (DRIVE_UNIT_MIN + NUM_DISK_UNITS - 1)
+#define DRIVE_UNIT_DEFAULT  DRIVE_UNIT_MIN
+
+#define DRIVE_NUMBER_MIN  0
+#define DRIVE_NUMBER_MAX  1
+#define DRIVE_NUMBER_DEFAULT  DRIVE_NUMBER_MIN
+
+/* VICE 3.10: struct tag compat — new code can use diskunit_context_s,
+   which expands to the actual struct tag drive_context_s */
+#define diskunit_context_s drive_context_s
+
 #define MAX_PWM 1000
 
 #define DRIVE_ROM_SIZE 0x8000
-#define DRIVE_RAM_SIZE 0xc000
+#define DRIVE_RAM_SIZE 0x10000  /* Upped to 64K due to CMD HD */
 
 /* Extended disk image handling.  */
 #define DRIVE_EXTEND_NEVER  0
@@ -70,8 +85,33 @@
 #define DRIVE_TYPE_1001   1001  /* DOS 2.7 single floppy drive, 1M/disk */
 #define DRIVE_TYPE_8050   8050  /* DOS 2.7 dual floppy drive, 0.5M/disk */
 #define DRIVE_TYPE_8250   8250  /* DOS 2.7 dual floppy drive, 1M/disk */
+#define DRIVE_TYPE_9000   9000  /* DOS 3.0 hard drive */
+#define DRIVE_TYPE_CMDHD  4844  /* ASCII for HD */
 
-#define DRIVE_TYPE_NUM    17
+#define DRIVE_TYPE_NUM    19
+
+/* Drive name strings for UI/config */
+#define DRIVE_NAME_NONE     "None"
+#define DRIVE_NAME_ANY      "Any"
+#define DRIVE_NAME_1540     "CBM 1540"
+#define DRIVE_NAME_1541     "CBM 1541"
+#define DRIVE_NAME_1541II   "CBM 1541-II"
+#define DRIVE_NAME_1551     "CBM 1551"
+#define DRIVE_NAME_1570     "CBM 1570"
+#define DRIVE_NAME_1571     "CBM 1571"
+#define DRIVE_NAME_1571CR   "CBM 1571 CR"
+#define DRIVE_NAME_1581     "CBM 1581"
+#define DRIVE_NAME_2000     "CMD FD-2000"
+#define DRIVE_NAME_4000     "CMD FD-4000"
+#define DRIVE_NAME_2031     "CBM 2031"
+#define DRIVE_NAME_2040     "CBM 2040"
+#define DRIVE_NAME_3040     "CBM 3040"
+#define DRIVE_NAME_4040     "CBM 4040"
+#define DRIVE_NAME_1001     "CBM SFD-1001"
+#define DRIVE_NAME_8050     "CBM 8050"
+#define DRIVE_NAME_8250     "CBM 8250"
+#define DRIVE_NAME_9000     "CBM D9090/60"
+#define DRIVE_NAME_CMDHD    "CMD HD"
 
 /* max. half tracks */
 #define DRIVE_HALFTRACKS_1541   84
@@ -84,6 +124,15 @@
 #define DRIVE_LED2_RED     0
 #define DRIVE_LED2_GREEN   2
 
+/* maximum number of LEDs per drive (not unit!) */
+#define DRIVE_LEDS_MAX  2
+
+/* Drive button masks for CMD devices */
+#define DRIVE_BUTTON_WRITE_PROTECT  0x01
+#define DRIVE_BUTTON_SWAP_8         0x02
+#define DRIVE_BUTTON_SWAP_9         0x04
+#define DRIVE_BUTTON_SWAP_SINGLE    0x08
+
 /* Number of cycles before an attached disk becomes visible to the R/W head.
    This is mostly to make routines that auto-detect disk changes happy.  */
 #define DRIVE_ATTACH_DELAY           (3 * 600000)
@@ -95,21 +144,51 @@
    detached.  */
 #define DRIVE_ATTACH_DETACH_DELAY    (3 * 400000)
 
+/* Drive RPM settings (values are RPM * 100) */
+#define DRIVE_RPM_ONE                    100        /* 1 RPM */
+#define DRIVE_RPM_MAX                  32000        /* 320 RPM */
+#define DRIVE_RPM_MIN                  28000        /* 280 RPM */
+#define DRIVE_RPM_DEFAULT              30000        /* 300 RPM */
+
+/* Drive wobble settings (frequency in mHz, amplitude in mRPM) */
+#define DRIVE_WOBBLE_FREQ_ONE           1000        /* 1 Hz */
+#define DRIVE_WOBBLE_FREQ_MAX          50000        /* 50 Hz */
+#define DRIVE_WOBBLE_FREQ_DEFAULT         75        /* .075 Hz */
+
+#define DRIVE_WOBBLE_AMPLITUDE_ONE      1000        /* +/- 1 RPM */
+#define DRIVE_WOBBLE_AMPLITUDE_MAX      5000        /* +/- 5 RPM */
+#define DRIVE_WOBBLE_AMPLITUDE_DEFAULT   200        /* +/- 0.2 RPM */
+
+/* Drive sound volume settings (values are volume * 40) */
+#define DRIVE_SOUND_VOLUME_ONE          4000        /* 100% */
+#define DRIVE_SOUND_VOLUME_MAX          4000        /* 100% */
+#define DRIVE_SOUND_VOLUME_DEFAULT      1000        /* 25% */
+
 /* Parallel cables available.  */
 #define DRIVE_PC_NONE     0
 #define DRIVE_PC_STANDARD 1  /* speed-dos userport cable */
 #define DRIVE_PC_DD3      2  /* dolphin-dos 3 userport cable */
 #define DRIVE_PC_FORMEL64 3  /* formel 64 cartridge */
+#define DRIVE_PC_21SEC_BACKUP 4  /* 21 second backup userport cable */
 
-#define DRIVE_PC_NUM 4
+#define DRIVE_PC_NUM 5
 
 /* ------------------------------------------------------------------------- */
+
+/* Drive type info for UI lookups */
+typedef struct drive_type_info_s {
+    const char *name;
+    int         id;
+} drive_type_info_t;
 
 struct gcr_s;
 struct disk_image_s;
 
 typedef struct drive_s {
     unsigned int mynumber;
+
+    /* Pointer to the containing diskunit_context (VICE 3.10) */
+    struct drive_context_s *diskunit;
 
     /* Pointer to the drive clock.  */
     CLOCK *clk;
@@ -160,10 +239,10 @@ typedef struct drive_s {
 	int GCR_dirty_track_needs_refresh;
 
     /* GCR value being written to the disk.  */
-    BYTE GCR_write_value;
+    uint8_t GCR_write_value;
 
     /* Pointer to the start of the GCR data of this track.  */
-    BYTE *GCR_track_start_ptr;
+    uint8_t *GCR_track_start_ptr;
 
     /* Size of the GCR data for the current track.  */
     unsigned int GCR_current_track_size;
@@ -191,31 +270,31 @@ typedef struct drive_s {
     CLOCK attach_detach_clk;
 
     /* Byte to read from r/w head.  */
-    BYTE GCR_read;
+    uint8_t GCR_read;
 
     /* Only used for snapshot */
     unsigned long snap_accum;
     CLOCK snap_rotation_last_clk;
     int snap_last_read_data;
-    BYTE snap_last_write_data;
+    uint8_t snap_last_write_data;
     int snap_bit_counter;
     int snap_zero_count;
     int snap_seed;
-    DWORD snap_speed_zone;
-    DWORD snap_ue7_dcba;
-    DWORD snap_ue7_counter;
-    DWORD snap_uf4_counter;
-    DWORD snap_fr_randcount;
-    DWORD snap_filter_counter;
-    DWORD snap_filter_state;
-    DWORD snap_filter_last_state;
-    DWORD snap_write_flux;
-    DWORD snap_PulseHeadPosition;
-    DWORD snap_xorShift32;
-    DWORD snap_so_delay;
-    DWORD snap_cycle_index;
-    DWORD snap_ref_advance;
-    DWORD snap_req_ref_cycles;
+    uint32_t snap_speed_zone;
+    uint32_t snap_ue7_dcba;
+    uint32_t snap_ue7_counter;
+    uint32_t snap_uf4_counter;
+    uint32_t snap_fr_randcount;
+    uint32_t snap_filter_counter;
+    uint32_t snap_filter_state;
+    uint32_t snap_filter_last_state;
+    uint32_t snap_write_flux;
+    uint32_t snap_PulseHeadPosition;
+    uint32_t snap_xorShift32;
+    uint32_t snap_so_delay;
+    uint32_t snap_cycle_index;
+    uint32_t snap_ref_advance;
+    uint32_t snap_req_ref_cycles;
 
     /* IF: requested additional R cycles */
     int req_ref_cycles;
@@ -280,13 +359,13 @@ typedef struct drive_s {
     rtc_ds1216e_t *ds1216;
 
     /* Current ROM image.  */
-    BYTE rom[DRIVE_ROM_SIZE];
+    uint8_t rom[DRIVE_ROM_SIZE];
 
     /* Current trap ROM image.  */
-    BYTE trap_rom[DRIVE_ROM_SIZE];
+    uint8_t trap_rom[DRIVE_ROM_SIZE];
 
     /* Drive RAM */
-    BYTE drive_ram[DRIVE_RAM_SIZE];
+    uint8_t drive_ram[DRIVE_RAM_SIZE];
 
     /* rotations per minute (300rpm = 30000) */
     int rpm;
@@ -294,66 +373,71 @@ typedef struct drive_s {
 } drive_t;
 
 
-extern CLOCK drive_clk[DRIVE_NUM];
+extern CLOCK drive_clk[NUM_DISK_UNITS];
+
+/* VICE 3.10 compat aliases for renamed globals */
+#define diskunit_clk drive_clk
 
 /* Drive context structure for low-level drive emulation.
    Full definition in drivetypes.h */
 struct drive_context_s;
-extern struct drive_context_s *drive_context[DRIVE_NUM];
+extern struct drive_context_s *drive_context[NUM_DISK_UNITS];
+
+/* VICE 3.10 compat alias */
+#define diskunit_context drive_context
 
 extern int rom_loaded;
 
-extern int drive_init(void);
-extern int drive_enable(struct drive_context_s *drv);
-extern void drive_disable(struct drive_context_s *drv);
-extern void drive_move_head(int step, struct drive_s *drive);
+int drive_init(void);
+int drive_enable(struct drive_context_s *drv);
+void drive_disable(struct drive_context_s *drv);
+void drive_move_head(int step, struct drive_s *drive);
 /* Don't use these pointers before the context is set up!  */
-extern struct monitor_interface_s *drive_cpu_monitor_interface_get(unsigned int dnr);
-extern void drive_cpu_early_init_all(void);
-extern void drive_cpu_prevent_clk_overflow_all(CLOCK sub);
-extern void drive_cpu_trigger_reset(unsigned int dnr);
-extern void drive_reset(void);
-extern void drive_shutdown(void);
-extern void drive_cpu_execute_one(struct drive_context_s *drv, CLOCK clk_value);
-extern void drive_cpu_execute_all(CLOCK clk_value);
-extern void drive_cpu_set_overflow(struct drive_context_s *drv);
-extern void drive_vsync_hook(void);
-extern int drive_get_disk_drive_type(int dnr);
-extern void drive_enable_update_ui(struct drive_context_s *drv);
-extern void drive_update_ui_status(void);
-extern void drive_gcr_data_writeback(struct drive_s *drive);
-extern void drive_gcr_data_writeback_all(void);
-extern void drive_set_active_led_color(unsigned int type, unsigned int dnr);
-extern int drive_set_disk_drive_type(unsigned int drive_type,
+struct monitor_interface_s *drive_cpu_monitor_interface_get(unsigned int dnr);
+void drive_cpu_early_init_all(void);
+void drive_cpu_trigger_reset(unsigned int dnr);
+void drive_reset(void);
+void drive_shutdown(void);
+void drive_cpu_execute_one(struct drive_context_s *drv, CLOCK clk_value);
+void drive_cpu_execute_all(CLOCK clk_value);
+void drive_cpu_set_overflow(struct drive_context_s *drv);
+void drive_vsync_hook(void);
+int drive_get_disk_drive_type(int dnr);
+void drive_enable_update_ui(struct drive_context_s *drv);
+void drive_update_ui_status(void);
+void drive_gcr_data_writeback(struct drive_s *drive);
+void drive_gcr_data_writeback_all(void);
+void drive_set_active_led_color(unsigned int type, unsigned int dnr);
+int drive_set_disk_drive_type(unsigned int drive_type,
                                      struct drive_context_s *drv);
 
-extern void drive_set_half_track(int num, int side, drive_t *dptr);
-extern void drive_set_machine_parameter(long cycles_per_sec);
-extern void drive_set_disk_memory(BYTE *id, unsigned int track,
+void drive_set_half_track(int num, int side, drive_t *dptr);
+void drive_set_machine_parameter(long cycles_per_sec);
+void drive_set_disk_memory(uint8_t *id, unsigned int track,
                                   unsigned int sector,
                                   struct drive_context_s *drv);
-extern void drive_set_last_read(unsigned int track, unsigned int sector,
-                                BYTE *buffer, struct drive_context_s *drv);
+void drive_set_last_read(unsigned int track, unsigned int sector,
+                                uint8_t *buffer, struct drive_context_s *drv);
 
-extern int drive_check_type(unsigned int drive_type, unsigned int dnr);
-extern int drive_check_extend_policy(int drive_type);
-extern int drive_check_idle_method(int drive_type);
-extern int drive_check_expansion(int drive_type);
-extern int drive_check_expansion2000(int drive_type);
-extern int drive_check_expansion4000(int drive_type);
-extern int drive_check_expansion6000(int drive_type);
-extern int drive_check_expansion8000(int drive_type);
-extern int drive_check_expansionA000(int drive_type);
-extern int drive_check_parallel_cable(int drive_type);
-extern int drive_check_extend_policy(int drive_type);
-extern int drive_check_profdos(int drive_type);
-extern int drive_check_supercard(int drive_type);
-extern int drive_check_stardos(int drive_type);
+int drive_check_type(unsigned int drive_type, unsigned int dnr);
+int drive_check_extend_policy(int drive_type);
+int drive_check_idle_method(int drive_type);
+int drive_check_expansion(int drive_type);
+int drive_check_expansion2000(int drive_type);
+int drive_check_expansion4000(int drive_type);
+int drive_check_expansion6000(int drive_type);
+int drive_check_expansion8000(int drive_type);
+int drive_check_expansionA000(int drive_type);
+int drive_check_parallel_cable(int drive_type);
+int drive_check_extend_policy(int drive_type);
+int drive_check_profdos(int drive_type);
+int drive_check_supercard(int drive_type);
+int drive_check_stardos(int drive_type);
 
-extern int drive_num_leds(unsigned int dnr);
+int drive_num_leds(unsigned int dnr);
 
-extern void drive_setup_context(void);
+void drive_setup_context(void);
 
-extern int drive_resources_type_init(unsigned int default_type);
+int drive_resources_type_init(unsigned int default_type);
 
 #endif

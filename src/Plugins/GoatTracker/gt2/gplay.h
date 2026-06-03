@@ -37,6 +37,10 @@ typedef struct
   unsigned char mute;
   unsigned char advance;
   unsigned char gatetimer;
+  unsigned char arpcolnotes[MAX_ARP_COLS]; // Per-column active note (0=off)
+  unsigned char arpnotes[MAX_ARP_COLS+1];  // Active note set for cycling (including base)
+  unsigned char arpcount;                   // Number of active notes in arpnotes[]
+  unsigned char arppos;                     // Current position in arp cycle
 } CHN;
 
 #ifndef GPLAY_C
@@ -45,11 +49,15 @@ extern unsigned char masterfader;
 extern unsigned char freqtbllo[];
 extern unsigned char freqtblhi[];
 extern int lastsonginit;
+extern int songinit;
+extern int gt2LoopCurrentPattern;
 #endif
 
+void rebuildarp(CHN *cptr);
 void initchannels(void);
 void initsong(int num, int playmode);
 void initsongpos(int num, int playmode, int pattpos);
+void triggerpatternrow(int pattpos);
 void stopsong(void);
 void rewindsong(void);
 void playtestnote(int note, int ins, int chnnum);

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -38,6 +38,8 @@
     <Filter Include="Source Files\src\Emulators\nestopiaue\NestopiaInterface">
     </Filter>
     <Filter Include="Source Files\src\Emulators\nestopiaue\sdl">
+    </Filter>
+    <Filter Include="Source Files\src\Emulators\c64u">
     </Filter>
     <Filter Include="Source Files\src\Emulators\vice">
     </Filter>
@@ -109,6 +111,8 @@
     </Filter>
     <Filter Include="Source Files\src\Emulators\vice\tape">
     </Filter>
+    <Filter Include="Source Files\src\Emulators\vice\datasette">
+    </Filter>
     <Filter Include="Source Files\src\Emulators\vice\tapeport">
     </Filter>
     <Filter Include="Source Files\src\Emulators\vice\userport">
@@ -174,6 +178,9 @@
     <Filter Include="Source Files\src\Views\Nes">
       <UniqueIdentifier>{ba968487-a7df-4af1-b108-daa60f1dc9f1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\src\Views\JoystickLayouts">
+      <UniqueIdentifier>{d4e5f6a7-b8c9-4d0e-a1f2-3c4d5e6f7a8b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\src\Tests">
       <UniqueIdentifier>{c3b7f9a1-2d4e-4f8b-a1c6-9e3d5f7b2a08}</UniqueIdentifier>
     </Filter>
@@ -213,11 +220,19 @@
     <Filter Include="Source Files\src\Plugins\GoatTracker\gt2\bme">
       <UniqueIdentifier>{c601e184-bac9-4ae4-8d35-591932f281ce}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\src\Plugins\GoatTracker\libs">
+    </Filter>
     <Filter Include="Source Files\src\Views\C64\VicDisplay">
       <UniqueIdentifier>{e10bd8ef-19c7-4b8c-bafc-627472969113}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\src\Plugins\CrtMaker">
       <UniqueIdentifier>{d4c98f09-4571-41d2-805d-d6d305531694}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\Plugins\FlameTiles\tests">
+      <UniqueIdentifier>{a1b2c3d4-0004-4f00-9a00-0000000f1a0e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\Plugins\FlameTiles">
+      <UniqueIdentifier>{f1a2e3b4-5c6d-47e8-9f10-1b2c3d4e5f60}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\src.Windows\hardsid">
       <UniqueIdentifier>{b730cbaa-9927-41cd-b03e-780aeed38b63}</UniqueIdentifier>
@@ -479,6 +494,12 @@
     <ClCompile Include="..\..\..\src\Emulators\nestopiaue\sdl\nstcursor.cpp">
       <Filter>Source Files\src\Emulators\nestopiaue\sdl</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\arch\archdep_file_io.c">
+      <Filter>Source Files\src\Emulators\vice\arch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\arch\archdep_tick.c">
+      <Filter>Source Files\src\Emulators\vice\arch</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\arch\blockdev.c">
       <Filter>Source Files\src\Emulators\vice\arch</Filter>
     </ClCompile>
@@ -665,6 +686,9 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\arch\x64sc_ui.c">
       <Filter>Source Files\src\Emulators\vice\arch</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\arch\vice310_stubs.c">
+      <Filter>Source Files\src\Emulators\vice\arch</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\c64-cmdline-options.c">
       <Filter>Source Files\src\Emulators\vice\c64</Filter>
     </ClCompile>
@@ -794,6 +818,24 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\atomicpower.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\bisplus.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\blackbox3.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\blackbox4.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\blackbox8.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\blackbox9.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\bmpdataturbo.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\c64-generic.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
@@ -869,6 +911,9 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ds12c887rtc.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\drean.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\easycalc.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
@@ -902,6 +947,9 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\freezeframe.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\freezeframe2.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\freezemachine.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
@@ -917,10 +965,19 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\gmod2.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\gmod3.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\gs.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\hyperbasic.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ide64.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ieeeflash64.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\isepic.c">
@@ -932,16 +989,28 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\kingsoft.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ltkernal.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\mach5.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\magicdesk.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\magicdesk16.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\magicformel.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\magicvoice.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\maxbasic.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\megabyter.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\mikroass.c">
@@ -953,16 +1022,28 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\mmcreplay.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\multimax.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ocean.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\pagefox.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\partner64.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\profidos.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\prophet64.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ramcart.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\ramlink.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\retroreplay.c">
@@ -972,6 +1053,9 @@
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\rexep256.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\rexramfloppy.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\rexutility.c">
@@ -984,6 +1068,9 @@
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\rrnetmk3.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\sdbox.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\sfx_soundexpander.c">
@@ -1028,6 +1115,15 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\supersnapshot4.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\turtlegraphics.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\uc1.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\uc2.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\warpspeed.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
@@ -1035,6 +1131,9 @@
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\zaxxon.c">
+      <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\c64\cart\zippcode48.c">
       <Filter>Source Files\src\Emulators\vice\c64\cart</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\diag\c64_diag_586220_harness.c">
@@ -1064,18 +1163,13 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\diskimage\fsimage.c">
       <Filter>Source Files\src\Emulators\vice\diskimage</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\diskimage\rawimage.c">
-      <Filter>Source Files\src\Emulators\vice\diskimage</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\drive\drive-check.c">
       <Filter>Source Files\src\Emulators\vice\drive</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\drive\drive-cmdline-options.c">
       <Filter>Source Files\src\Emulators\vice\drive</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\drive\drive-overflow.c">
-      <Filter>Source Files\src\Emulators\vice\drive</Filter>
-    </ClCompile>
+
     <ClCompile Include="..\..\..\src\Emulators\vice\drive\drive-resources.c">
       <Filter>Source Files\src\Emulators\vice\drive</Filter>
     </ClCompile>
@@ -1111,6 +1205,9 @@
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\drive\rotation.c">
       <Filter>Source Files\src\Emulators\vice\drive</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\drive\iec\cmdhd_stubs.c">
+      <Filter>Source Files\src\Emulators\vice\drive\iec</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\drive\iec\cia1571d.c">
       <Filter>Source Files\src\Emulators\vice\drive\iec</Filter>
@@ -1221,6 +1318,9 @@
       <Filter>Source Files\src\Emulators\vice\fsdevice</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\fsdevice\fsdevice-cmdline-options.c">
+      <Filter>Source Files\src\Emulators\vice\fsdevice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\fsdevice\fsdevice-filename.c">
       <Filter>Source Files\src\Emulators\vice\fsdevice</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\fsdevice\fsdevice-flush.c">
@@ -1337,6 +1437,57 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\joyport\vizawrite64_dongle.c">
       <Filter>Source Files\src\Emulators\vice\joyport</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\inception.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\joyport_diag_586220_harness.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\joyport_io_sim.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\mouse_1351.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\mouse_neos.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\mouse_paddle.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\mouse_quadrature.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\multijoy.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\ninja_snespad.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\paperclip2.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\paperclip64e.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\paperclip64sc.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\powerpad.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\protopad.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\spaceballs.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\trapthem_snespad.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\joyport\waasoft_dongle.c">
+      <Filter>Source Files\src\Emulators\vice\joyport</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\lib\p64\p64.c">
       <Filter>Source Files\src\Emulators\vice\lib\p64</Filter>
     </ClCompile>
@@ -1422,6 +1573,18 @@
       <Filter>Source Files\src\Emulators\vice\monitor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\monitor\monitor.c">
+      <Filter>Source Files\src\Emulators\vice\monitor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\monitor\monitor_binary.c">
+      <Filter>Source Files\src\Emulators\vice\monitor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\monitor\mon_profile.c">
+      <Filter>Source Files\src\Emulators\vice\monitor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\monitor\asm65816.c">
+      <Filter>Source Files\src\Emulators\vice\monitor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\monitor\mon_assemble65816.c">
       <Filter>Source Files\src\Emulators\vice\monitor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\monitor\monitor_network.c">
@@ -1529,6 +1692,9 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\raster\raster-line.c">
       <Filter>Source Files\src\Emulators\vice\raster</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\raster\raster-snapshot.c">
+      <Filter>Source Files\src\Emulators\vice\raster</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\raster\raster-modes.c">
       <Filter>Source Files\src\Emulators\vice\raster</Filter>
     </ClCompile>
@@ -1569,9 +1735,6 @@
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\root\clipboard.c">
-      <Filter>Source Files\src\Emulators\vice\root</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\root\clkguard.c">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\root\cmdline.c">
@@ -1688,9 +1851,6 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\root\sysfile.c">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\root\translate.c">
-      <Filter>Source Files\src\Emulators\vice\root</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\root\traps.c">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClCompile>
@@ -1742,6 +1902,9 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\rtc\rtc-58321a.c">
       <Filter>Source Files\src\Emulators\vice\rtc</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\rtc\rtc-72421.c">
+      <Filter>Source Files\src\Emulators\vice\rtc</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\rtc\rtc.c">
       <Filter>Source Files\src\Emulators\vice\rtc</Filter>
     </ClCompile>
@@ -1781,7 +1944,13 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\serial\serial.c">
       <Filter>Source Files\src\Emulators\vice\serial</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\serial\iec-ieee488-shared.c">
+      <Filter>Source Files\src\Emulators\vice\serial</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\sid\fastsid.c">
+      <Filter>Source Files\src\Emulators\vice\sid</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\sid\fakesid.c">
       <Filter>Source Files\src\Emulators\vice\sid</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\sid\sid-cmdline-options.c">
@@ -1859,6 +2028,15 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\tapeport\tapeport.c">
       <Filter>Source Files\src\Emulators\vice\tapeport</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\tapeport\tapecart.c">
+      <Filter>Source Files\src\Emulators\vice\tapeport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\tapeport\wordcraft-dongle.c">
+      <Filter>Source Files\src\Emulators\vice\tapeport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\datasette\datasette-sound.c">
+      <Filter>Source Files\src\Emulators\vice\datasette</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport.c">
       <Filter>Source Files\src\Emulators\vice\userport</Filter>
     </ClCompile>
@@ -1884,6 +2062,36 @@
       <Filter>Source Files\src\Emulators\vice\userport</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_rtc_ds1307.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_diag_pin.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_hks_joystick.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_hummer_joystick.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_io_sim.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_petscii_snespad.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_ps2mouse.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_spt_joystick.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_superpad64.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_synergy_joystick.c">
+      <Filter>Source Files\src\Emulators\vice\userport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\userport\userport_woj_joystick.c">
       <Filter>Source Files\src\Emulators\vice\userport</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\vdrive\vdrive-bam.c">
@@ -1958,25 +2166,22 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x1.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x1crt.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x1ntsc.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x1pal.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x1rgbi.c">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x2.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x2crt.c">
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\render1x2rgbi.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x2.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x2crt.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x2ntsc.c">
@@ -1985,16 +2190,19 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x2pal.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x2palu.c">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x2rgbi.c">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x4.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x4crt.c">
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\render2x4rgbi.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\renderscale2x.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\renderyuv.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\video-canvas.c">
@@ -2006,19 +2214,16 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\video\video-color.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-1x2.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-2x2.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-crt.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-pal.c">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render.c">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-palntsc.c">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-crtmono.c">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\video\video-render-rgbi.c">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\video\video-resources.c">
@@ -2033,11 +2238,92 @@
     <ClCompile Include="..\..\..\src\Plugins\C64D_InitPlugins.cpp">
       <Filter>Source Files\src\Plugins</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\CPluginsManager.cpp">
+      <Filter>Source Files\src\Plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\CViewPluginManager.cpp">
+      <Filter>Source Files\src\Plugins</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\C64DebuggerPluginDummy.cpp">
       <Filter>Source Files\src\Plugins</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Screens\CViewAbout.cpp">
       <Filter>Source Files\src\Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\DebugInterface\C64\C64BackendFactory.cpp">
+      <Filter>Source Files\src\DebugInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\CDebugInterfaceC64U.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\CDebuggerApiC64U.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\C64UModeManager.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UPort64Client.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64URestClient.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UVideoStream.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64ULocalIpDetect.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UDebugStream.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UAudioStream.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UMulticastHelper.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UFtpClient.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Transport\C64UTelnetClient.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Trace\C64UTraceBuffer.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Trace\C64U6502Decoder.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Trace\C64UIecDecoder.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Audio\C64UAudioJitterBuffer.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Audio\CAudioChannelC64U.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\State\C64UMemoryCache.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\State\C64UMediaStatusCache.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Adapters\CDataAdapterC64U.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Adapters\CDataAdapterC64UDirectRamBestEffort.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\Adapters\CDataAdapterC64UVicRam.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\State\C64ULogicalStateCache.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\c64u\State\C64URomBypass.cpp">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Screens\CViewC64.cpp">
       <Filter>Source Files\src\Screens</Filter>
@@ -2056,6 +2342,66 @@
     </ClCompile>
     <ClCompile Include="..\..\..\src\Tools\C64ColodoreScreen.cpp">
       <Filter>Source Files\src\Tools</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UScreen.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UScreenViewfinder.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UConnectionStatus.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UModeStatus.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UMediaStatus.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UDisassembly.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UStateVIC.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UStateCPU.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UStateCIA.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UStateSID.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UMemoryBank.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UBusTrace.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UTimeline.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UIecDecoder.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UExecutionFlow.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UAudioMonitor.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UFileBrowser.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UTerminal.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UAllGraphicsBitmaps.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\C64U\CViewC64UAllGraphicsScreens.cpp">
+      <Filter>Source Files\src\Views</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Tools\C64CommandLine.cpp">
       <Filter>Source Files\src\Tools</Filter>
@@ -2255,7 +2601,13 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\core\flash040core.c">
       <Filter>Source Files\src\Emulators\vice\core</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\core\flash800core.c">
+      <Filter>Source Files\src\Emulators\vice\core</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\core\fmopl.c">
+      <Filter>Source Files\src\Emulators\vice\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\core\i8255a.c">
       <Filter>Source Files\src\Emulators\vice\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\core\m93c86.c">
@@ -2267,7 +2619,13 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\core\riotcore.c">
       <Filter>Source Files\src\Emulators\vice\core</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\core\scsi.c">
+      <Filter>Source Files\src\Emulators\vice\core</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\core\ser-eeprom.c">
+      <Filter>Source Files\src\Emulators\vice\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\core\spi-flash.c">
       <Filter>Source Files\src\Emulators\vice\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\core\spi-sdcard.c">
@@ -2405,6 +2763,9 @@
     <ClCompile Include="..\..\..\src\Tests\CTestSuite.cpp">
       <Filter>Source Files\src\Tests</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestC64UBackendRegistration.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Tests\CTestEmulatorStartup.cpp">
       <Filter>Source Files\src\Tests</Filter>
     </ClCompile>
@@ -2421,6 +2782,261 @@
       <Filter>Source Files\src\Tests</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Tests\CTestMemoryAccessTiming.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceCpuHooks.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceMemoryAccess.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceViciiHooks.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceCiaHooks.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceSidHooks.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceDrive1541.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceEmbeddedRoms.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceBreakpoints.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceSnapshot.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceRewindWhileRunning.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceModelConfig.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestVicePlatformAbstraction.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceSoundIntegration.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestSidStatusWaveform.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestVicePeripherals.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceInstructionStepping.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestViceInputReplay.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestNesInputReplay.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestAtariInputReplay.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2Oscilloscope.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGoatTrackerExport.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2ExportComan07.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2Patterns.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2OrderList.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2Tables.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2Instrument.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2SongInfo.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2Status.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2TitleBar.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2InstrumentOps.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2TableEditor.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestGT2SelectionOps.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestDataDumpSelection.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestDisassemblySelection.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestDefaultWorkspaceSpecs.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestArpCycling.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestArpParity.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestMonitorConsoleSelection.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\FlameTilesTests.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\CPluginTestRegistry.cpp">
+      <Filter>Source Files\src\Plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePluginActivation.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitCore.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitOpcodes.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameLAXEquivalence.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitBytes.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502VicSetup.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RasterIRQ.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGRunsInVice.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameEmitDebugLog.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitFull.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502IrqEntryExit.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRNGParity.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502WindParity.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RowSigParity.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CellsParity.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CramParity.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502LUTs.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGFormat.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRGRuns60Frames.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502Parity.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGvsCpp.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRealExtraction.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameAutoFillMirror.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameDenoise.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMergeDuplicates.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationState.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRNG.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameWindState.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRowSignatures.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCellLookup.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameHotPeak.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePushToC64.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePOCFirstFrame.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationDeterminism.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EnvelopeLUTs.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameBuildReport.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetExtraction.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetPersistence.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMockCharset.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameReferenceImage.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CFlameSimulation.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestMCPProtocol.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestMCPBridge.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestRemoteProtocol.cpp">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Tests\CTestPlatformSwitching.cpp">
       <Filter>Source Files\src\Tests</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Tests\CImGuiTests.cpp">
@@ -3347,14 +3963,125 @@
     <ClCompile Include="..\..\..\src\Tools\TextEditor\TextEditor.cpp">
       <Filter>Source Files\src\Tools\TextEditor</Filter>
     </ClCompile>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\C64DebuggerPluginFlameTiles.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\C64DebuggerPluginFlameTiles.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\FlameMemoryLayout.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\FlameMemoryLayout.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\Flame6502Emit.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CFlameGenerator.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CFlameGenerator.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CViewFlameCharsetDesigner.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CViewFlameCharsetDesigner.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CViewFlameTileEditor.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CViewFlameTileEditor.cpp">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\C64DebuggerPluginGoatTracker.cpp">
       <Filter>Source Files\src\Plugins\GoatTracker</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CAudioChannelGoatTracker.cpp">
       <Filter>Source Files\src\Plugins\GoatTracker</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Oscilloscope.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CGT2VoiceWaveforms.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewC64GoatTracker.cpp">
       <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CGT2FontAtlas.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\GT2RenderHelper.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\GT2ViewCommon.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Patterns.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CGT2RenoiseInput.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2OrderList.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2PatternList.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Instrument.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2InstrumentList.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CGT2Favorites.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Tables.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2SongInfo.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Status.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2TitleBar.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CGT2EffectBiquadFilter.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CGT2AudioMixer.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Mixer.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Toolbar.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CPianoKeyboardGT2.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewGT2KeyboardSetup.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CRenoiseImporter.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\CViewRenoiseImport.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\libs\tinyxml2.cpp">
+      <Filter>Source Files\src\Plugins\GoatTracker\libs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\libs\miniz.c">
+      <Filter>Source Files\src\Plugins\GoatTracker\libs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\gt2\gconsole.c">
       <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
@@ -3369,6 +4096,9 @@
       <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\gt2\ginstr.c">
+      <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Plugins\GoatTracker\gt2\ginstrops.c">
       <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\gt2\goatdata.c">
@@ -3461,8 +4191,23 @@
     <ClCompile Include="..\..\..\src\Views\CViewDisassembly.cpp">
       <Filter>Source Files\src\Views</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\CDisassemblyInterpreter.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Views\CViewInputEvents.cpp">
       <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\CViewInputEventsTable.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\CViewJoystick.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\JoystickLayouts\CJoystickLayoutC64.cpp">
+      <Filter>Source Files\src\Views\JoystickLayouts</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\JoystickLayouts\CJoystickLayoutNes.cpp">
+      <Filter>Source Files\src\Views\JoystickLayouts</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Views\C64\CViewC64SidPianoKeyboard.cpp">
       <Filter>Source Files\src\Views\C64</Filter>
@@ -3560,6 +4305,9 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\ViceInterface\CDebugInterfaceVice.cpp">
       <Filter>Source Files\src\Emulators\vice\ViceInterface</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\vice\ViceInterface\CDebugInterfaceViceTasks.cpp">
+      <Filter>Source Files\src\Emulators\vice\ViceInterface</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\vice\ViceInterface\ViceLogWrapper.cpp">
       <Filter>Source Files\src\Emulators\vice\ViceInterface</Filter>
     </ClCompile>
@@ -3570,6 +4318,9 @@
       <Filter>Source Files\src\Emulators\nestopiaue\NestopiaInterface</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\nestopiaue\NestopiaInterface\CDebuggerApiNestopia.cpp">
+      <Filter>Source Files\src\Emulators\nestopiaue\NestopiaInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\nestopiaue\NestopiaInterface\CDebuggerServerApiNes.cpp">
       <Filter>Source Files\src\Emulators\nestopiaue\NestopiaInterface</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\nestopiaue\NestopiaInterface\CDebuggerEmulatorPluginNestopia.cpp">
@@ -3614,10 +4365,16 @@
     <ClCompile Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebuggerApiAtari.cpp">
       <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebuggerServerApiAtari.cpp">
+      <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebuggerEmulatorPluginAtari.cpp">
       <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebugInterfaceAtari.cpp">
+      <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebugInterfaceAtariTasks.cpp">
       <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\DNDK\C64DebuggerPluginDNDK.cpp">
@@ -3782,6 +4539,12 @@
     <ClCompile Include="..\..\..\src\Views\CViewFileBrowser.cpp">
       <Filter>Source Files\src\Views</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\CDefaultWorkspaceLayouts.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Views\CViewWSLog.cpp">
+      <Filter>Source Files\src\Views</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\src\Views\CViewStack.cpp">
       <Filter>Source Files\src\Views</Filter>
     </ClCompile>
@@ -3934,6 +4697,15 @@
     </ClCompile>
     <ClCompile Include="..\..\..\src\Remote\CDebuggerServerApi.cpp">
       <Filter>Source Files\src\Remote</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Remote\CDebuggerServerProtocol.cpp">
+      <Filter>Source Files\src\Remote</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Remote\MCP\CMCPServer.cpp">
+      <Filter>Source Files\src\Remote\MCP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\Remote\MCP\CMCPBridgeClient.cpp">
+      <Filter>Source Files\src\Remote\MCP</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Remote\WebSockets\CDebuggerServerWebSockets.cpp">
       <Filter>Source Files\src\Remote\WebSockets</Filter>
@@ -4801,9 +5573,7 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\drive\drive-cmdline-options.h">
       <Filter>Source Files\src\Emulators\vice\drive</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\drive\drive-overflow.h">
-      <Filter>Source Files\src\Emulators\vice\drive</Filter>
-    </ClInclude>
+
     <ClInclude Include="..\..\..\src\Emulators\vice\drive\drive-resources.h">
       <Filter>Source Files\src\Emulators\vice\drive</Filter>
     </ClInclude>
@@ -4943,6 +5713,9 @@
       <Filter>Source Files\src\Emulators\vice\fsdevice</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\fsdevice\fsdevice-cmdline-options.h">
+      <Filter>Source Files\src\Emulators\vice\fsdevice</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\vice\fsdevice\fsdevice-filename.h">
       <Filter>Source Files\src\Emulators\vice\fsdevice</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\fsdevice\fsdevice-flush.h">
@@ -5278,9 +6051,6 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\root\clipboard.h">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\root\clkguard.h">
-      <Filter>Source Files\src\Emulators\vice\root</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\root\cmdline.h">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClInclude>
@@ -5551,15 +6321,6 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\root\tpi.h">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\root\translate.h">
-      <Filter>Source Files\src\Emulators\vice\root</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\root\translate_funcs.h">
-      <Filter>Source Files\src\Emulators\vice\root</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\root\translate_languages.h">
-      <Filter>Source Files\src\Emulators\vice\root</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\root\traps.h">
       <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClInclude>
@@ -5743,6 +6504,9 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\sid\fastsid.h">
       <Filter>Source Files\src\Emulators\vice\sid</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\vice\sid\fakesid.h">
+      <Filter>Source Files\src\Emulators\vice\sid</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\sid\resid-fp.h">
       <Filter>Source Files\src\Emulators\vice\sid</Filter>
     </ClInclude>
@@ -5899,25 +6663,22 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x1.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x1crt.h">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x1ntsc.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x1pal.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x1rgbi.h">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x2.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x2crt.h">
+    <ClInclude Include="..\..\..\src\Emulators\vice\video\render1x2rgbi.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x2.h">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x2crt.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x2ntsc.h">
@@ -5926,16 +6687,19 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x2pal.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x2rgbi.h">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x4.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x4crt.h">
+    <ClInclude Include="..\..\..\src\Emulators\vice\video\render2x4rgbi.h">
+      <Filter>Source Files\src\Emulators\vice\video</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\vice\video\render-common.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\renderscale2x.h">
-      <Filter>Source Files\src\Emulators\vice\video</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\video\renderyuv.h">
       <Filter>Source Files\src\Emulators\vice\video</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\video\video-canvas.h">
@@ -5956,14 +6720,128 @@
     <ClInclude Include="..\..\..\src\Plugins\C64D_InitPlugins.h">
       <Filter>Source Files\src\Plugins</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\CPluginsManager.h">
+      <Filter>Source Files\src\Plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\CViewPluginManager.h">
+      <Filter>Source Files\src\Plugins</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\C64DebuggerPluginDummy.h">
       <Filter>Source Files\src\Plugins</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Screens\CViewAbout.h">
       <Filter>Source Files\src\Screens</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\DebugInterface\C64\C64BackendFactory.h">
+      <Filter>Source Files\src\DebugInterface</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\CDebugInterfaceC64U.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\C64UConnectionStatus.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\C64UMode.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\C64UModeManager.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\C64UTestFixture.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UPort64Client.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64URestClient.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UVideoStream.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UNybbleLUT.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64ULocalIpDetect.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UDebugStream.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UAudioStream.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UMulticastHelper.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UFtpClient.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Transport\C64UTelnetClient.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Trace\C64UDebugEntry.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Trace\C64UTraceBuffer.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Trace\C64U6502Decoder.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Trace\C64UDecoderAnnotation.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Trace\C64UIecDecoder.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Audio\C64UAudioJitterBuffer.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\Audio\CAudioChannelC64U.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\c64u\State\C64URomBypass.h">
+      <Filter>Source Files\src\Emulators\c64u</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Screens\CViewC64.h">
       <Filter>Source Files\src\Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UScreen.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UScreenViewfinder.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UConnectionStatus.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UModeStatus.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UMediaStatus.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UBusTrace.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UTimeline.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UIecDecoder.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UExecutionFlow.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UAudioMonitor.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UFileBrowser.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\C64U\CViewC64UTerminal.h">
+      <Filter>Source Files\src\Views</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Screens\CViewColodore.h">
       <Filter>Source Files\src\Screens</Filter>
@@ -6412,6 +7290,21 @@
     <ClInclude Include="..\..\..\src\Tests\CTest.h">
       <Filter>Source Files\src\Tests</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestC64UBackendRegistration.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestC64URomBypass.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestC64UFtpProtocol.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestC64UTelnetProtocol.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestTerminalEmulator.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Tests\CTestRunner.h">
       <Filter>Source Files\src\Tests</Filter>
     </ClInclude>
@@ -6437,6 +7330,246 @@
       <Filter>Source Files\src\Tests</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Tests\CTestMemoryAccessTiming.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceCpuHooks.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceMemoryAccess.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceViciiHooks.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceCiaHooks.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceSidHooks.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceDrive1541.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceEmbeddedRoms.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceBreakpoints.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceSnapshot.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceRewindWhileRunning.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceModelConfig.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestVicePlatformAbstraction.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceSoundIntegration.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestSidStatusWaveform.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestVicePeripherals.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceInstructionStepping.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestViceInputReplay.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestNesInputReplay.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestAtariInputReplay.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2Oscilloscope.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGoatTrackerExport.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2ExportComan07.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2Patterns.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2OrderList.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2Tables.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2Instrument.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2SongInfo.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2Status.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2TitleBar.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2InstrumentOps.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2TableEditor.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestGT2SelectionOps.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestArpParity.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestMonitorConsoleSelection.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\FlameTilesTests.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\CPluginTestRegistry.h">
+      <Filter>Source Files\src\Plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePluginActivation.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitCore.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitOpcodes.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameLAXEquivalence.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitBytes.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502VicSetup.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RasterIRQ.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGRunsInVice.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameEmitDebugLog.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitFull.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502IrqEntryExit.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRNGParity.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502WindParity.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RowSigParity.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CellsParity.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CramParity.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502LUTs.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGFormat.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRGRuns60Frames.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502Parity.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGvsCpp.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRealExtraction.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameAutoFillMirror.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameDenoise.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMergeDuplicates.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationState.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRNG.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameWindState.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRowSignatures.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCellLookup.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameHotPeak.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePushToC64.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePOCFirstFrame.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationDeterminism.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EnvelopeLUTs.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameBuildReport.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetExtraction.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetPersistence.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMockCharset.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameReferenceImage.h">
+      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CFlameSimulation.h">
+      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestDataDumpSelection.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestDisassemblySelection.h">
+      <Filter>Source Files\src\Tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Tests\CTestDefaultWorkspaceSpecs.h">
       <Filter>Source Files\src\Tests</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Views\C64\CViewC64Screen.h">
@@ -7477,8 +8610,89 @@
     <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CAudioChannelGoatTracker.h">
       <Filter>Source Files\src\Plugins\GoatTracker</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Oscilloscope.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CGT2VoiceWaveforms.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewC64GoatTracker.h">
       <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CGT2FontAtlas.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\GT2RenderHelper.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\GT2ViewCommon.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Patterns.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CGT2RenoiseInput.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2OrderList.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2PatternList.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Instrument.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2InstrumentList.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CGT2Favorites.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Tables.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2SongInfo.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Status.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2TitleBar.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\IGT2AudioEffect.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CGT2EffectBiquadFilter.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CGT2AudioMixer.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Mixer.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2Toolbar.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CPianoKeyboardGT2.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewGT2KeyboardSetup.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CRenoiseImporter.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\CViewRenoiseImport.h">
+      <Filter>Source Files\src\Plugins\GoatTracker</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\libs\tinyxml2.h">
+      <Filter>Source Files\src\Plugins\GoatTracker\libs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\libs\miniz.h">
+      <Filter>Source Files\src\Plugins\GoatTracker\libs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\GoatTracker\gt2\cwsid.h">
       <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
@@ -7496,6 +8710,9 @@
       <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\GoatTracker\gt2\ginstr.h">
+      <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Plugins\GoatTracker\gt2\ginstrops.h">
       <Filter>Source Files\src\Plugins\GoatTracker\gt2</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\GoatTracker\gt2\goattrk2.h">
@@ -7600,8 +8817,26 @@
     <ClInclude Include="..\..\..\src\Views\CViewDisassembly.h">
       <Filter>Source Files\src\Views</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\CDisassemblyInterpreter.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Views\CViewInputEvents.h">
       <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\CViewInputEventsTable.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\CViewJoystick.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\JoystickLayouts\CJoystickLayout.h">
+      <Filter>Source Files\src\Views\JoystickLayouts</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\JoystickLayouts\CJoystickLayoutC64.h">
+      <Filter>Source Files\src\Views\JoystickLayouts</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\JoystickLayouts\CJoystickLayoutNes.h">
+      <Filter>Source Files\src\Views\JoystickLayouts</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Views\C64\CViewC64SidPianoKeyboard.h">
       <Filter>Source Files\src\Views\C64</Filter>
@@ -7687,6 +8922,9 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\ViceInterface\CDebugInterfaceVice.h">
       <Filter>Source Files\src\Emulators\vice\ViceInterface</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\vice\ViceInterface\CDebugInterfaceViceTasks.h">
+      <Filter>Source Files\src\Emulators\vice\ViceInterface</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\ViceInterface\ViceLogWrapper.h">
       <Filter>Source Files\src\Emulators\vice\ViceInterface</Filter>
     </ClInclude>
@@ -7748,6 +8986,9 @@
       <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebugInterfaceAtari.h">
+      <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Emulators\atari800\AtariInterface\CDebugInterfaceAtariTasks.h">
       <Filter>Source Files\src\Emulators\atari800\AtariInterface</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\DNDK\C64DebuggerPluginDNDK.h">
@@ -7952,6 +9193,12 @@
       <Filter>Source Files\src\Views</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Views\CViewFileBrowser.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\CDefaultWorkspaceLayouts.h">
+      <Filter>Source Files\src\Views</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Views\CViewWSLog.h">
       <Filter>Source Files\src\Views</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Views\CViewStack.h">

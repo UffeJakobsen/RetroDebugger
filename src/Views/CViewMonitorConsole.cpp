@@ -24,6 +24,9 @@
 #include "SYS_Funct.h"
 #include "CDebugSymbolsSegment.h"
 #include "CDebugBreakpointsData.h"
+#include "C64KeyboardShortcuts.h"
+#include "CMainMenuBar.h"
+#include <cctype>
 
 #define C64DEBUGGER_MONITOR_HISTORY_FILE_VERSION	1
 
@@ -117,11 +120,44 @@ void CViewMonitorConsole::ActivateView()
 
 bool CViewMonitorConsole::KeyDownRepeat(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper)
 {
-	return KeyDown(keyCode, isShift, isAlt, isControl, isSuper);
+	// Copy / Paste / Select-All must fire once per press, never on auto-repeat.
+	u32 bareKey = SYS_GetBareKey(keyCode, isShift, isAlt, isControl, isSuper);
+	CSlrKeyboardShortcut *sc = guiMain->keyboardShortcuts->FindShortcut(
+		KBZONE_GLOBAL, bareKey, isShift, isAlt, isControl, isSuper);
+	if (sc != NULL && (sc == viewC64->mainMenuBar->kbsCopyToClipboard
+		|| sc == viewC64->mainMenuBar->kbsPasteFromClipboard))
+	{
+		return true;   // swallow repeats
+	}
+	if ((isControl || isSuper) && tolower((int)bareKey) == 'a')
+	{
+		return true;   // swallow repeats
+	}
+	return this->viewConsole->KeyDown(keyCode);
 }
 
 bool CViewMonitorConsole::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper)
 {
+	u32 bareKey = SYS_GetBareKey(keyCode, isShift, isAlt, isControl, isSuper);
+	CSlrKeyboardShortcut *sc = guiMain->keyboardShortcuts->FindShortcut(
+		KBZONE_GLOBAL, bareKey, isShift, isAlt, isControl, isSuper);
+
+	if (sc != NULL && sc == viewC64->mainMenuBar->kbsCopyToClipboard)
+	{
+		viewConsole->CopySelectionToClipboard();
+		return true;
+	}
+	if (sc != NULL && sc == viewC64->mainMenuBar->kbsPasteFromClipboard)
+	{
+		viewConsole->PasteFromClipboard();
+		return true;
+	}
+	if ((isControl || isSuper) && tolower((int)bareKey) == 'a')
+	{
+		viewConsole->SelectAll();
+		return true;
+	}
+
 	return this->viewConsole->KeyDown(keyCode);
 }
 
@@ -196,6 +232,22 @@ void CViewMonitorConsole::RenderImGui()
 	PostRenderImGui();
 }
 
+bool CViewMonitorConsole::HasContextMenuItems()
+{
+	return true;
+}
+
+void CViewMonitorConsole::RenderContextMenuItems()
+{
+	if (ImGui::MenuItem("Copy", NULL, false, viewConsole->hasSelection))
+		viewConsole->CopySelectionToClipboard();
+	if (ImGui::MenuItem("Paste"))
+		viewConsole->PasteFromClipboard();
+	if (ImGui::MenuItem("Select All"))
+		viewConsole->SelectAll();
+	ImGui::Separator();
+}
+
 void CViewMonitorConsole::Render()
 {
 	BlitFilledRectangle(posX, posY, posZ, sizeX, sizeY, 0.15f, 0.15f, 0.15f, 1.0f);
@@ -205,6 +257,26 @@ void CViewMonitorConsole::Render()
 bool CViewMonitorConsole::DoScrollWheel(float deltaX, float deltaY)
 {
 	return this->viewConsole->DoScrollWheel(deltaX, deltaY);
+}
+
+bool CViewMonitorConsole::DoTap(float x, float y)
+{
+	return this->viewConsole->DoTap(x, y);
+}
+
+bool CViewMonitorConsole::DoMove(float x, float y, float distX, float distY, float diffX, float diffY)
+{
+	return this->viewConsole->DoMove(x, y, distX, distY, diffX, diffY);
+}
+
+bool CViewMonitorConsole::DoFinishTap(float x, float y)
+{
+	return this->viewConsole->DoFinishTap(x, y);
+}
+
+bool CViewMonitorConsole::DoRightClick(float x, float y)
+{
+	return this->viewConsole->DoRightClick(x, y);
 }
 
 void CViewMonitorConsole::PrintInitPrompt()

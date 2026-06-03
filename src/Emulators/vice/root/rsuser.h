@@ -38,18 +38,18 @@
 
 extern int rsuser_enabled;
 
-extern void rsuser_init(long cycles_per_sec, void (*start_bit_trigger)(void),
-                        void (*byte_rx_func)(BYTE));
-extern int rsuser_resources_init(void);
-extern int rsuser_cmdline_options_init(void);
+void rsuser_init(long cycles_per_sec, void (*start_bit_trigger)(void),
+                        void (*byte_rx_func)(uint8_t));
+int rsuser_resources_init(void);
+int rsuser_cmdline_options_init(void);
 
-extern void rsuser_tx_byte(BYTE b);
-extern void rsuser_write_ctrl(BYTE b);
-extern BYTE rsuser_read_ctrl(BYTE b);
+void rsuser_tx_byte(uint8_t b);
+void rsuser_write_ctrl(uint8_t b);
+uint8_t rsuser_read_ctrl(uint8_t b);
 
-extern void rsuser_reset(void);
+void rsuser_reset(void);
 
-extern BYTE rsuser_get_rx_bit(void);
-extern void rsuser_set_tx_bit(int b);
+uint8_t rsuser_get_rx_bit(void);
+void rsuser_set_tx_bit(int b);
 
 #endif

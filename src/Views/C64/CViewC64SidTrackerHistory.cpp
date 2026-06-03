@@ -15,6 +15,12 @@ extern "C" {
 #include "CViewC64SidPianoKeyboard.h"
 #include "C64SIDDump.h"
 #include "SYS_DefaultConfig.h"
+#include <vector>
+
+// Engine-wide shutdown flag (defined in MTEngineSDL/Render/VID_Main.cpp).
+// Polled by the history-playback worker thread so it stops once the app
+// starts tearing down.
+extern volatile bool mtQuitApplication;
 
 // TODO: load tracker font from MG Tracker
 
@@ -460,18 +466,29 @@ bool CViewC64SidTrackerHistory::DoTap(float x, float y)
 
 void CViewC64SidTrackerHistory::SetSidWithCurrentPositionData()
 {
+	// Lock order must match the VICE CPU traps (c64_set_sid_register_trap etc.):
+	// debugInterface (breakpointsMutex) BEFORE gSoundEngine. Acquiring gSoundEngine
+	// first here while SetSid() takes breakpointsMutex internally is an ABBA
+	// deadlock against those traps.
+	debugInterface->LockMutex();
 	gSoundEngine->LockMutex("CViewSIDTrackerHistory::SetSidWithCurrentPositionData");
 	debugInterface->mutexSidDataHistory->Lock();
 
-	std::list<CSidData *>::iterator it = debugInterface->sidDataHistory.begin();
 	int sy = scrollPosition;
-	std::advance(it, sy);
-	
-	CSidData *pSidDataCurrent  = *it;
+	if (sy < 0 || sy >= (int)debugInterface->sidDataHistory.size())
+	{
+		debugInterface->mutexSidDataHistory->Unlock();
+		gSoundEngine->UnlockMutex("CViewSIDTrackerHistory::SetSidWithCurrentPositionData");
+		debugInterface->UnlockMutex();
+		return;
+	}
+
+	CSidData *pSidDataCurrent  = debugInterface->sidDataHistory[sy];
 	debugInterface->SetSid(pSidDataCurrent);
-	
+
 	debugInterface->mutexSidDataHistory->Unlock();
 	gSoundEngine->UnlockMutex("CViewSIDTrackerHistory::SetSidWithCurrentPositionData");
+	debugInterface->UnlockMutex();
 }
 
 void CViewC64SidTrackerHistory::PianoKeyboardNotePressed(CPianoKeyboard *pianoKeyboard, CPianoKey *pianoKey)
@@ -506,11 +523,14 @@ void CViewC64SidTrackerHistory::PianoKeyboardNotePressed(CPianoKeyboard *pianoKe
 //		lstMidiIn->SetElement(chanNum, false, false);
 	}
 	
-	std::list<CSidData *>::iterator it = debugInterface->sidDataHistory.begin();
 	int sy = scrollPosition;
-	std::advance(it, sy);
-	
-	CSidData *pSidDataCurrent  = *it;
+	if (sy < 0 || sy >= (int)debugInterface->sidDataHistory.size())
+	{
+		debugInterface->mutexSidDataHistory->Unlock();
+		return;
+	}
+
+	CSidData *pSidDataCurrent  = debugInterface->sidDataHistory[sy];
 
 	const sid_frequency_t *sidFrequencyData = SidNoteToFrequency(pianoKey->keyNote);
 	
@@ -542,12 +562,15 @@ void CViewC64SidTrackerHistory::UpdateHistoryWithCurrentSidData()
 	int sidNum = 0;
 	
 	debugInterface->mutexSidDataHistory->Lock();
-	
-	std::list<CSidData *>::iterator it = debugInterface->sidDataHistory.begin();
+
 	int sy = scrollPosition;
-	std::advance(it, sy);
-	
-	CSidData *pSidDataCurrent  = *it;
+	if (sy < 0 || sy >= (int)debugInterface->sidDataHistory.size())
+	{
+		debugInterface->mutexSidDataHistory->Unlock();
+		return;
+	}
+
+	CSidData *pSidDataCurrent  = debugInterface->sidDataHistory[sy];
 
 	// update with current SID state
 	if (debugInterface->sidDataToRestore)
@@ -569,13 +592,16 @@ void CViewC64SidTrackerHistory::PianoKeyboardNoteReleased(CPianoKeyboard *pianoK
 		return;
 	
 	debugInterface->mutexSidDataHistory->Lock();
-	
-	std::list<CSidData *>::iterator it = debugInterface->sidDataHistory.begin();
+
 	int sy = scrollPosition;
-	std::advance(it, sy);
-	
-	CSidData *pSidDataCurrent  = *it;
-	
+	if (sy < 0 || sy >= (int)debugInterface->sidDataHistory.size())
+	{
+		debugInterface->mutexSidDataHistory->Unlock();
+		return;
+	}
+
+	CSidData *pSidDataCurrent  = debugInterface->sidDataHistory[sy];
+
 	if (pSidDataCurrent == NULL)
 	{
 		debugInterface->mutexSidDataHistory->Unlock();
@@ -725,7 +751,14 @@ void CViewC64SidTrackerHistory::Render()
 {
 //	LOGD("CViewSIDTrackerHistory");
 	float gap = -2.0f;
-		
+
+	struct TrackerLine {
+		char text[65];
+		float y;
+	};
+	std::vector<TrackerLine> lines;
+	lines.reserve(64);
+
 	// start rendering
 	debugInterface->mutexSidDataHistory->Lock();
 
@@ -762,31 +795,22 @@ void CViewC64SidTrackerHistory::Render()
 	int stepNum = 0;
 	memset(buf, 0x20, 63);
 	
-	std::list<CSidData *>::iterator it = debugInterface->sidDataHistory.begin();
-	
 	int sy = scrollPosition;
-//	LOGD("size=%d scrollPosition=%d",  debugInterface->sidDataHistory[sidNum].size(), sy);
-	std::advance(it, sy);
-	
+//	LOGD("size=%d scrollPosition=%d",  debugInterface->sidDataHistory.size(), sy);
+
+	int historySize = (int)debugInterface->sidDataHistory.size();
 	int currentLine = 0;
-	while (it != debugInterface->sidDataHistory.end())
+	for (int idx = sy; idx + 1 < historySize; idx++)
 	{
-		std::list<CSidData *>::iterator itPrevious = it;
-		itPrevious++;
-		
-		if (itPrevious == debugInterface->sidDataHistory.end())
-			break;
-		
 		if (skip > 0)
 		{
 			skip--;
-			it++;
 			continue;
 		}
-		
+
 		int pos = 0;
-		CSidData *pSidDataCurrent  = *it;
-		CSidData *pSidDataPrevious = *itPrevious;
+		CSidData *pSidDataCurrent  = debugInterface->sidDataHistory[idx];
+		CSidData *pSidDataPrevious = debugInterface->sidDataHistory[idx + 1];
 
 		for (int sidNum = 0; sidNum < debugInterface->numSids; sidNum++)
 		{
@@ -1044,29 +1068,37 @@ void CViewC64SidTrackerHistory::Render()
 		if (stepNum == selectedNumSteps)
 		{
 			currentLine++;
-			
+
 //	FIIIXME				printf("strlen=%d\n", strlen(buf));
 			buf[64] = 0x00;
-			font->BlitText(buf, posX, py, -1, fontSize);
-			
+
+			TrackerLine line;
+			memcpy(line.text, buf, 65);
+			line.y = py;
+			lines.push_back(line);
+
 			py -= fontSize;
-			
+
 			if (py <= (pEndY))
 				break;
 
 			stepNum = 0;
 			memset(buf, 0x20, 63);
 		}
-		
-		it++;
 	}
 	
 	numVisibleTrackLines = currentLine;
 	
 	debugInterface->mutexSidDataHistory->Unlock();
-	
+
 	SYS_ReleaseCharBuf(buf);
-	
+
+	// Render collected lines without holding the mutex
+	for (const TrackerLine &line : lines)
+	{
+		font->BlitText(line.text, posX, line.y, -1, fontSize);
+	}
+
 	if (showController)
 		CGuiView::Render();
 }
@@ -1086,10 +1118,9 @@ bool CViewC64SidTrackerHistory::ButtonPressed(CGuiButton *button)
 void CViewC64SidTrackerHistory::UpdateButtonsGroup(CGuiButtonSwitch *btn)
 {
 	// TODO: add group of buttons as GuiElement
-	for (std::list<CGuiButtonSwitch *>::iterator it = btnsStepSwitches.begin(); it != btnsStepSwitches.end(); it++)
+	for (CGuiButtonSwitch *b : btnsStepSwitches)
 	{
-		CGuiButtonSwitch *btn = *it;
-		btn->SetOn(false);
+		b->SetOn(false);
 	}
 	
 	btn->SetOn(true);
@@ -1360,9 +1391,8 @@ void CViewC64SidTrackerHistory::RenderContextMenuItems()
 	if (ImGui::MenuItem("Reset filter"))
 	{
 		debugInterface->mutexSidDataHistory->Lock();
-		for (std::list<CSidData*>::iterator it = debugInterface->sidDataHistory.begin(); it != debugInterface->sidDataHistory.end(); it++)
+		for (CSidData *sidData : debugInterface->sidDataHistory)
 		{
-			CSidData *sidData = *it;
 			sidData->sidRegs[0][0x15] = 0x00;
 			sidData->sidRegs[0][0x16] = 0xF0;
 			sidData->sidRegs[0][0x17] = 0x00;
@@ -1370,13 +1400,12 @@ void CViewC64SidTrackerHistory::RenderContextMenuItems()
 		}
 		debugInterface->mutexSidDataHistory->Unlock();
 	}
-	
+
 	if (ImGui::MenuItem("Reset filter mode and volume"))
 	{
 		debugInterface->mutexSidDataHistory->Lock();
-		for (std::list<CSidData*>::iterator it = debugInterface->sidDataHistory.begin(); it != debugInterface->sidDataHistory.end(); it++)
+		for (CSidData *sidData : debugInterface->sidDataHistory)
 		{
-			CSidData *sidData = *it;
 			sidData->sidRegs[0][0x18] = 0x0F;
 		}
 		debugInterface->mutexSidDataHistory->Unlock();
@@ -1385,9 +1414,8 @@ void CViewC64SidTrackerHistory::RenderContextMenuItems()
 	if (ImGui::MenuItem("Reset filter freq"))
 	{
 		debugInterface->mutexSidDataHistory->Lock();
-		for (std::list<CSidData*>::iterator it = debugInterface->sidDataHistory.begin(); it != debugInterface->sidDataHistory.end(); it++)
+		for (CSidData *sidData : debugInterface->sidDataHistory)
 		{
-			CSidData *sidData = *it;
 			sidData->sidRegs[0][0x15] = 0x00;
 			sidData->sidRegs[0][0x16] = 0xF0;
 		}
@@ -1397,9 +1425,8 @@ void CViewC64SidTrackerHistory::RenderContextMenuItems()
 	if (ImGui::MenuItem("Reset filter resonance and routing"))
 	{
 		debugInterface->mutexSidDataHistory->Lock();
-		for (std::list<CSidData*>::iterator it = debugInterface->sidDataHistory.begin(); it != debugInterface->sidDataHistory.end(); it++)
+		for (CSidData *sidData : debugInterface->sidDataHistory)
 		{
-			CSidData *sidData = *it;
 			sidData->sidRegs[0][0x17] = 0x00;
 		}
 		debugInterface->mutexSidDataHistory->Unlock();
@@ -1480,7 +1507,7 @@ void CViewC64SidTrackerHistory::ThreadRun(void *passData)
 	
 //	debugInterfaceVice->SetDebugMode(DEBUGGER_MODE_PAUSED);
 	
-	while(true)
+	while (mtQuitApplication == false)
 	{
 		if (isPlayingHistory == false)
 		{

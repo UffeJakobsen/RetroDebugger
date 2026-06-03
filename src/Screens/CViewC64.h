@@ -26,6 +26,7 @@
 #include "CGlobalDropFileCallback.h"
 #include "CRecentlyOpenedFiles.h"
 #include "CGuiViewProgressBarWindow.h"
+#include "CViewCamera.h"
 #include "SYS_Threading.h"
 
 class CTestRunner;
@@ -65,6 +66,26 @@ class CDebugInterfaceMenuItemView;
 
 class CViewC64Screen;
 class CViewC64ScreenViewfinder;
+class CViewC64UScreen;
+class CViewC64UScreenViewfinder;
+class CViewC64UConnectionStatus;
+class CViewC64UModeStatus;
+class CViewC64UMediaStatus;
+class CViewDisassembly;
+class CViewC64UStateVIC;
+class CViewC64UStateCIA;
+class CViewC64UStateSID;
+class CViewC64UStateCPU;
+class CViewC64UMemoryBank;
+class CViewC64UBusTrace;
+class CViewC64UTimeline;
+class CViewC64UIecDecoder;
+class CViewC64UExecutionFlow;
+class CViewC64UAudioMonitor;
+class CViewC64UFileBrowser;
+class CViewC64UTerminal;
+class CViewC64UAllGraphicsBitmaps;
+class CViewC64UAllGraphicsScreens;
 
 class CViewDataMap;
 class CViewDataDump;
@@ -117,6 +138,8 @@ class CViewEmulationState;
 class CViewEmulationCounters;
 class CViewTimeline;
 class CViewInputEvents;
+class CViewInputEventsTable;
+class CViewJoystick;
 class CViewMonitorConsole;
 
 class CViewAtariScreen;
@@ -147,6 +170,7 @@ class CViewSnapshots;
 class CViewColodore;
 class CViewAbout;
 class CViewAudioMixer;
+class CViewPluginManager;
 
 class CMainMenuBar;
 class CColorsTheme;
@@ -231,6 +255,7 @@ public:
 	std::vector<CDebugInterface *> debugInterfaces;
 	
 	CDebugInterfaceC64 *debugInterfaceC64;
+	CDebugInterfaceC64 *debugInterfaceC64U;
 	CEmulationThreadC64 *emulationThreadC64;
 
 	CDebugInterfaceAtari *debugInterfaceAtari;
@@ -253,6 +278,7 @@ public:
 	CMainMenuBar *mainMenuBar;
 	CGuiViewMessages *viewMessages;
 	CViewFileBrowser *viewFileBrowser;
+	class CViewWSLog *viewWSLog;
 	
 	CMainMenuHelper *mainMenuHelper;
 	CViewSettingsMenu *viewC64SettingsMenu;
@@ -271,6 +297,34 @@ public:
 	void InitViceViews();
 	CViewC64Screen *viewC64Screen;
 	CViewC64ScreenViewfinder *viewC64ScreenViewfinder;
+	void InitC64UViews();
+	CViewC64UScreen *viewC64UScreen;
+	CViewC64UScreenViewfinder *viewC64UScreenViewfinder;
+	CViewC64UConnectionStatus *viewC64UConnectionStatus;
+	CViewC64UModeStatus *viewC64UModeStatus;
+	CViewC64UMediaStatus *viewC64UMediaStatus;
+	CViewDisassembly *viewC64UDisassembly;
+	CViewDataDump *viewC64UMemoryDataDump;
+	CViewDataMap *viewC64UMemoryMap;
+	CViewDataWatch *viewC64UMemoryDataWatch;
+	CViewDataMonitor *viewC64UMemoryMonitor;
+	CViewDataPlot *viewC64UMemoryPlot;
+	CViewC64UStateVIC *viewC64UStateVIC;
+	CViewC64UStateCIA *viewC64UStateCIA;
+	CViewC64UStateSID *viewC64UStateSID;
+	CViewC64UStateCPU *viewC64UStateCPU;
+	CViewC64UMemoryBank *viewC64UMemoryBank;
+	CViewC64UBusTrace *viewC64UBusTrace;
+	CViewC64UTimeline *viewC64UTimeline;
+	CViewC64UIecDecoder *viewC64UIecDecoder;
+	CViewC64UExecutionFlow *viewC64UExecutionFlow;
+	CViewC64UAudioMonitor *viewC64UAudioMonitor;
+	CViewC64UFileBrowser *viewC64UFileBrowser;
+	CViewC64UTerminal *viewC64UTerminal;
+	CViewC64AllGraphicsCharsets *viewC64UAllGraphicsCharsets;
+	CViewC64AllGraphicsSprites *viewC64UAllGraphicsSprites;
+	CViewC64UAllGraphicsBitmaps *viewC64UAllGraphicsBitmaps;
+	CViewC64UAllGraphicsScreens *viewC64UAllGraphicsScreens;
 
 	CViewDataDump *viewC64MemoryDataDump;
 	CViewDataMap *viewC64MemoryMap;
@@ -361,6 +415,9 @@ public:
 	CViewC64Sprite *viewC64Sprite;
 	CViewC64ColorRamScreen *viewC64ColorRamScreen;
 
+	CViewJoystick *viewC64Joystick;
+	CViewInputEventsTable *viewC64InputEventsTable;
+
 	// Atari
 	void InitAtari800Views();
 	CViewAtariScreen *viewAtariScreen;
@@ -387,6 +444,8 @@ public:
 	CViewSnapshots *viewAtariSnapshots;
 	CViewTimeline *viewAtariTimeline;
 	CViewStack *viewAtariStack;
+	CViewJoystick *viewAtariJoystick;
+	CViewInputEventsTable *viewAtariInputEventsTable;
 
 	// NES
 	void InitNestopiaViews();
@@ -417,12 +476,16 @@ public:
 	CViewMonitorConsole *viewNesMonitorConsole;
 	CViewEmulationCounters *viewNesEmulationCounters;
 	CViewInputEvents *viewNesInputEvents;
+	CViewJoystick *viewNesJoystick;
+	CViewInputEventsTable *viewNesInputEventsTable;
 	CViewSnapshots *viewNesSnapshots;
 	CViewTimeline *viewNesTimeline;
 	CViewStack *viewNesStack;
 
 	//
 	CViewAudioMixer *viewAudioMixer;
+	CViewPluginManager *viewPluginManager;
+	CViewCamera *viewCamera;
 	CGuiViewProgressBarWindow *viewProgressBarWindow;
 	
 	//
@@ -456,6 +519,8 @@ public:
 	
 	// TODO: generalize the below
 	void StartEmulationThread(CDebugInterface *debugInterface);
+	void InitC64U();
+	void StartC64UEmulationThread();
 	void StartViceC64EmulationThread();
 	void StartAtari800EmulationThread();
 	void StartNestopiaEmulationThread();
@@ -464,6 +529,11 @@ public:
 	void StopViceC64EmulationThread();
 	void StopAtari800EmulationThread();
 	void StopNestopiaEmulationThread();
+
+	// Thread-safe start/stop called from background threads (WS/MCP).
+	// Skips guiMain view management — emulation thread only.
+	void StartEmulationThreadSafe(CDebugInterface *debugInterface);
+	void StopEmulationThreadSafe(CDebugInterface *debugInterface);
 
 	//
 	
@@ -619,6 +689,7 @@ public:
 	//
 	void CreateEmulatorPlugins();
 	void RegisterEmulatorPlugin(CDebuggerEmulatorPlugin *emuPlugin);
+	bool HandleOpenFileShortcutFromPlugins();
 	
 	// async show message
 	CSlrMutex *mutexShowMessage;
@@ -654,6 +725,8 @@ public:
 	//
 	void OpenFileDialog();
 	void OpenFile(CSlrString *path);
+	void AddOpenFileExtensionsFromPlugins(std::list<std::string> *extensions, bool isKeyboardShortcut);
+	bool OpenFileFromPlugins(CSlrString *path, bool isKeyboardShortcut);
 	
 	// remote debugger
 	CPipeProtocolDebuggerCallback *pipeProtocolCallback;

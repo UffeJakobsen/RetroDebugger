@@ -28,6 +28,7 @@ public:
 	virtual CSlrString *GetEmulatorVersionString();
 	virtual const char *GetPlatformNameString();
 	virtual const char *GetPlatformNameEndpointString();
+	virtual CDebuggerServerApi *GetDebuggerServerApi();
 
 	virtual float GetEmulationFPS();
 	float numEmulationFPS;
@@ -55,6 +56,8 @@ public:
 	volatile uint32 joystickState[NUM_ATARI_JOYSTICKS];
 	virtual void JoystickDown(int port, uint32 axis);
 	virtual void JoystickUp(int port, uint32 axis);
+	virtual uint32 GetJoystickState(int port);
+	virtual void ReplayInputEventsFromSnapshotsManager(CByteBuffer *inputEventsBuffer);
 	
 	//
 	virtual void SetDebugMode(uint8 debugMode);
@@ -87,6 +90,16 @@ public:
 	virtual bool GetSettingIsWarpSpeed();
 	virtual void SetSettingIsWarpSpeed(bool isWarpSpeed);
 
+	// Chip register access
+	u8 GetAnticRegister(int reg);
+	u8 GetGtiaRegister(int reg);
+	u8 GetPokeyRegister(int reg);
+	u8 GetPiaRegister(int reg);
+	void SetAnticRegister(int reg, u8 value);
+	void SetGtiaRegister(int reg, u8 value);
+	void SetPokeyRegister(int reg, u8 value);
+	void SetPiaRegister(int reg, u8 value);
+
 	// TODO: this is not working for mzpokey now
 	virtual void SetPokeyStereo(bool isStereo);
 	virtual bool IsPokeyStereo();
@@ -108,6 +121,7 @@ public:
 	virtual void GetWholeMemoryMapFromRam(uint8 *buffer);
 
 	//
+	virtual void GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S);
 	void GetCpuRegs(u16 *PC, u8 *A, u8 *X, u8 *Y, u8 *P, u8 *S, u8 *IRQ);
 	
 	int MapMTKeyToAKey(uint32 mtKeyCode, int shiftctrl, int key_control);

@@ -32,33 +32,33 @@
 struct cbmdos_cmd_parse_s;
 struct vdrive_s;
 
-extern void machine_bus_init(void);
-extern void machine_bus_init_machine(void);
+void machine_bus_init(void);
+void machine_bus_init_machine(void);
 
-extern int machine_bus_lib_directory(unsigned int unit, const char *pattern,
-                                     BYTE **buf);
-extern int machine_bus_lib_read_sector(unsigned int unit, unsigned int track,
-                                       unsigned int sector, BYTE *buf);
-extern int machine_bus_lib_write_sector(unsigned int unit, unsigned int track,
-                                        unsigned int sector, BYTE *buf);
+int machine_bus_lib_directory(unsigned int unit, const char *pattern,
+                                     uint8_t **buf);
+int machine_bus_lib_read_sector(unsigned int unit, unsigned int track,
+                                       unsigned int sector, uint8_t *buf);
+int machine_bus_lib_write_sector(unsigned int unit, unsigned int track,
+                                        unsigned int sector, uint8_t *buf);
 
-extern unsigned int machine_bus_device_type_get(unsigned int unit);
+unsigned int machine_bus_device_type_get(unsigned int unit);
 
-extern void machine_bus_status_truedrive_set(unsigned int enable);
-extern void machine_bus_status_drivetype_set(unsigned int unit,
-                                             unsigned int enable);
-extern void machine_bus_status_virtualdevices_set(unsigned int enable);
+void machine_bus_status_truedrive_set(unsigned int unit, unsigned int enable);
+void machine_bus_status_drivetype_set(unsigned int unit, unsigned int enable);
+void machine_bus_status_trapdevices_set(unsigned int unit, unsigned int enable);
+void machine_bus_status_virtualdevices_set(unsigned int enable);
 
-extern void machine_bus_eof_callback_set(void (*func)(void));
-extern void machine_bus_attention_callback_set(void (*func)(void));
+void machine_bus_eof_callback_set(void (*func)(void));
+void machine_bus_attention_callback_set(void (*func)(void));
 
-extern int machine_bus_device_attach(unsigned int unit, const char *name,
+int machine_bus_device_attach(unsigned int unit, const char *name,
                                      int (*getf)(struct vdrive_s *,
-                                                 BYTE *, unsigned int),
-                                     int (*putf)(struct vdrive_s *, BYTE,
+                                                 uint8_t *, unsigned int),
+                                     int (*putf)(struct vdrive_s *, uint8_t,
                                                  unsigned int),
                                      int (*openf)(struct vdrive_s *,
-                                                  const BYTE *, unsigned int, unsigned int,
+                                                  const uint8_t *, unsigned int, unsigned int,
                                                   struct cbmdos_cmd_parse_s *),
                                      int (*closef)(struct vdrive_s *,
                                                    unsigned int),
@@ -66,6 +66,6 @@ extern int machine_bus_device_attach(unsigned int unit, const char *name,
                                                     unsigned int),
                                      void (*listenf)(struct vdrive_s *,
                                                      unsigned int));
-extern int machine_bus_device_detach(unsigned int unit);
+int machine_bus_device_detach(unsigned int unit);
 
 #endif

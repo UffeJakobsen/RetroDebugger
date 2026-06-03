@@ -9,6 +9,7 @@
 #include "CColorsTheme.h"
 #include "CSlrKeyboardShortcuts.h"
 #include <list>
+#include <string>
 
 class CSlrKeyboardShortcut;
 class CViewC64MenuItem;
@@ -37,8 +38,16 @@ public:
 	std::list<CSlrString *> reuExtensions;
 	std::list<CSlrString *> jukeboxExtensions;
 	std::list<CSlrString *> romsFileExtensions;
+	std::list<CSlrString *> snapshotC64Extensions;
+	std::list<CSlrString *> openFileExtensionsWithPlugins;
+	bool openDialogFileRoutesToPlugins;
+	bool openDialogFileIsKeyboardShortcut;
 
 	void OpenDialogOpenFile();
+	void OpenDialogOpenFile(bool includePluginExtensions, bool isKeyboardShortcut);
+	void ClearOpenFileExtensionsWithPlugins();
+	bool TryOpenSelectedFileFromPlugins(CSlrString *path);
+	void OpenDialogSelectCustomStartupSnapshot();
 
 	void LoadFile(CSlrString *path);
 	void OpenDialogInsertD64();
@@ -54,6 +63,7 @@ public:
 	void LoadPRG(CByteBuffer *byteBuffer, u16 *startAddr, u16 *endAddr);
 	bool LoadPRGNotThreaded(CByteBuffer *byteBuffer, bool autoStart, bool showAddressInfo);
 	void SetupC64Defaults();
+	void LoadDefaultSnapshotAndRun(const char *snapshotResourcePath, int targetModelId);
 
 	bool LoadSID(CSlrString *filePath);
 	

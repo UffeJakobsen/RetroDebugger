@@ -37,22 +37,22 @@
 #include "sound.h"
 #include "vicetypes.h"
 
-static BYTE machine_sid2_read(WORD addr)
+static uint8_t machine_sid2_read(uint16_t addr)
 {
     return sid2_read(addr);
 }
 
-static void machine_sid2_store(WORD addr, BYTE byte)
+static void machine_sid2_store(uint16_t addr, uint8_t byte)
 {
     sid2_store(addr, byte);
 }
 
-static BYTE machine_sid3_read(WORD addr)
+static uint8_t machine_sid3_read(uint16_t addr)
 {
     return sid3_read(addr);
 }
 
-static void machine_sid3_store(WORD addr, BYTE byte)
+static void machine_sid3_store(uint16_t addr, uint8_t byte)
 {
     sid3_store(addr, byte);
 }
@@ -60,33 +60,37 @@ static void machine_sid3_store(WORD addr, BYTE byte)
 /* ---------------------------------------------------------------------*/
 
 static io_source_t stereo_sid_device = {
-    "Stereo SID",
-    IO_DETACH_RESOURCE,
-    "SidStereo",
-    0xde00, 0xde1f, 0x1f,
-    1, /* read is always valid */
-    machine_sid2_store,
-    machine_sid2_read,
-    NULL, /* TODO: peek */
-    sid2_dump,
-    0,
-    0,
-    0
+    "Stereo SID",         /* name of the device */
+    IO_DETACH_RESOURCE,   /* use resource to detach the device when involved in a read-collision */
+    "SidStereo",          /* resource to set to '0' */
+    0xde00, 0xde1f, 0x1f, /* range for the 2nd SID device, can be changed to other ranges */
+    1,                    /* read is always valid */
+    machine_sid2_store,   /* store function */
+    NULL,                 /* NO poke function */
+    machine_sid2_read,    /* read function */
+    NULL,                 /* TODO: peek */
+    sid2_dump,            /* device state information dump function */
+    IO_CART_ID_NONE,      /* none is used here, because it is an I/O only device */
+    IO_PRIO_NORMAL,       /* normal priority, device read needs to be checked for collisions */
+    0,                    /* insertion order, gets filled in by the registration function */
+    IO_MIRROR_NONE        /* NO mirroring */
 };
 
 static io_source_t triple_sid_device = {
-    "Triple SID",
-    IO_DETACH_RESOURCE,
-    "SidStereo",
-    0xdf00, 0xdf1f, 0x1f,
-    1, /* read is always valid */
-    machine_sid3_store,
-    machine_sid3_read,
-    NULL, /* TODO: peek */
-    sid3_dump,
-    0,
-    0,
-    0
+    "Triple SID",         /* name of the device */
+    IO_DETACH_RESOURCE,   /* use resource to detach the device when involved in a read-collision */
+    "SidStereo",          /* resource to set to '0' */
+    0xdf00, 0xdf1f, 0x1f, /* range for the 3rd SID device, can be changed to other ranges */
+    1,                    /* read is always valid */
+    machine_sid3_store,   /* store function */
+    NULL,                 /* NO poke function */
+    machine_sid3_read,    /* read function */
+    NULL,                 /* TODO: peek */
+    sid3_dump,            /* device state information dump function */
+    IO_CART_ID_NONE,      /* none is used here, because it is an I/O only device */
+    IO_PRIO_NORMAL,       /* normal priority, device read needs to be checked for collisions */
+    0,                    /* insertion order, gets filled in by the registration function */
+    IO_MIRROR_NONE        /* NO mirroring */
 };
 
 static io_source_list_t *stereo_sid_list_item = NULL;
@@ -107,7 +111,7 @@ static sound_chip_t sid_sound_chip = {
     1 /* chip enabled */
 };
 
-static WORD sid_sound_chip_offset = 0;
+static uint16_t sid_sound_chip_offset = 0;
 
 void sid_sound_chip_init(void)
 {
@@ -192,6 +196,13 @@ int machine_sid3_check_range(unsigned int sid3_adr)
     return -1;
 }
 
+/* Stubs for SID 4-8 (not supported in C64/C64SC) */
+int machine_sid4_check_range(unsigned int sid_adr) { return -1; }
+int machine_sid5_check_range(unsigned int sid_adr) { return -1; }
+int machine_sid6_check_range(unsigned int sid_adr) { return -1; }
+int machine_sid7_check_range(unsigned int sid_adr) { return -1; }
+int machine_sid8_check_range(unsigned int sid_adr) { return -1; }
+
 void machine_sid2_enable(int val)
 {
     if (stereo_sid_list_item != NULL) {
@@ -209,11 +220,6 @@ void machine_sid2_enable(int val)
     if (val >= 2) {
         triple_sid_list_item = io_source_register(&triple_sid_device);
     }
-}
-
-void sound_machine_prevent_clk_overflow(sound_t *psid, CLOCK sub)
-{
-    sid_sound_machine_prevent_clk_overflow(psid, sub);
 }
 
 char *sound_machine_dump_state(sound_t *psid)

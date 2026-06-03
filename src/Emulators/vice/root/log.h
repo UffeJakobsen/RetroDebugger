@@ -33,39 +33,43 @@
 #define LOG_LEVEL_NONE  0x00
 
 typedef signed int log_t;
-#define LOG_ERR     ((log_t)-1)
-#define LOG_DEFAULT ((log_t)-2)
+#define LOG_DEFAULT ((log_t)-1)
 
-extern int log_resources_init(void);
-extern void log_resources_shutdown(void);
-extern int log_cmdline_options_init(void);
-extern int log_init(void);
-extern int log_init_with_fd(FILE *f);
-extern log_t log_open(const char *id);
-extern int log_close(log_t log);
-extern void log_close_all(void);
-extern void log_enable(int on);
-extern int log_set_silent(int n);
-extern int log_set_verbose(int n);
-extern int log_verbose_init(int argc, char **argv);
+/* back-compat: LOG_ERR removed in VICE 3.10, maps to LOG_DEFAULT */
+#define LOG_ERR     LOG_DEFAULT
+
+int log_resources_init(void);
+void log_resources_shutdown(void);
+int log_cmdline_options_init(void);
+int log_init(void);
+int log_init_with_fd(FILE *f);
+log_t log_open(const char *id);
+int log_close(log_t log);
+void log_close_all(void);
+void log_enable(int on);
+int log_set_silent(int n);
+int log_set_verbose(int n);
 
 #ifdef __GNUC__
-extern int log_message(log_t log, const char *format, ...)
+int log_message(log_t log, const char *format, ...)
     __attribute__((format(printf, 2, 3)));
-extern int log_warning(log_t log, const char *format, ...)
+int log_warning(log_t log, const char *format, ...)
     __attribute__((format(printf, 2, 3)));
-extern int log_error(log_t log, const char *format, ...)
+int log_error(log_t log, const char *format, ...)
     __attribute__((format(printf, 2, 3)));
-extern int log_debug(const char *format, ...)
-    __attribute__((format(printf, 1, 2)));
-extern int log_verbose(const char *format, ...)
+int log_debug(log_t log, const char *format, ...)
+    __attribute__((format(printf, 2, 3)));
+int log_verbose(log_t log, const char *format, ...)
+    __attribute__((format(printf, 2, 3)));
+int log_printf(const char *format, ...)
     __attribute__((format(printf, 1, 2)));
 #else
-extern int log_message(log_t log, const char *format, ...);
-extern int log_warning(log_t log, const char *format, ...);
-extern int log_error(log_t log, const char *format, ...);
-extern int log_debug(const char *format, ...);
-extern int log_verbose(const char *format, ...);
+int log_message(log_t log, const char *format, ...);
+int log_warning(log_t log, const char *format, ...);
+int log_error(log_t log, const char *format, ...);
+int log_debug(log_t log, const char *format, ...);
+int log_verbose(log_t log, const char *format, ...);
+int log_printf(const char *format, ...);
 #endif
 
 // MT-style logging to not let confuse me (Slajerek) ;)

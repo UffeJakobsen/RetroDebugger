@@ -128,7 +128,7 @@ void CViewC64StateCIA::Render()
 
 /// render states
 extern "C" {
-	BYTE c64d_ciacore_peek(cia_context_t *cia_context, WORD addr);
+	uint8_t c64d_ciacore_peek(cia_context_t *cia_context, uint16_t addr);
 }
 
 void CViewC64StateCIA::RenderImGui()

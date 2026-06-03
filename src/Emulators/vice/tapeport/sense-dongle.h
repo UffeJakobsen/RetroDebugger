@@ -27,9 +27,8 @@
 #ifndef VICE_SENSEDONGLE_H
 #define VICE_SENSEDONGLE_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int sense_dongle_resources_init(void);
-extern int sense_dongle_cmdline_options_init(void);
+int sense_dongle_resources_init(int amount);
 
 #endif

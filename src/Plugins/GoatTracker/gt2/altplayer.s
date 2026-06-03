@@ -608,6 +608,12 @@ mt_resetloop:
                 ldx #$07
               .ENDIF
 mt_initchn:
+              .IF (NOARPCHANNELS == 0)
+                lda #$00                        ;Clear arp pointer + pos for
+                sta mt_chnarplo,x               ;this channel (X=0/7/14)
+                sta mt_chnarphi,x
+                sta mt_chnarppos,x
+              .ENDIF
               .IF (NUMSONGS > 1)
                 tya
                 iny
@@ -1282,7 +1288,8 @@ mt_fx:
                 lda (mt_temp1),y
                 sta mt_chnnewparam,x
 mt_fx_noparam:
-                bcs mt_rest
+                bcc mt_fx_getnote               ;See player.s sibling.
+                jmp mt_rest
 mt_fx_getnote:
                 iny
                 lda (mt_temp1),y
@@ -1309,6 +1316,17 @@ mt_normalnote:
                 adc mt_chntrans,x
               .ENDIF
                 sta mt_chnnewnote,x
+              .IF (NOARPCHANNELS == 0)
+                lda mt_chnarphi,x           ;Arp active? Skip hard restart so
+                ora mt_chnarplo,x           ;the new base note slides in
+                beq mt_normalnote_nosuppress  ;without ADSR reset.
+                lda #$fe                    ;Mirror mt_skiphr's gate write
+                sta mt_chngate,x            ;so mt_newnoteinit's `inc` lands
+                                            ;on $fe→$ff (NOFIRSTWAVECMD=1
+                                            ;path) instead of $ff→$00 wrap.
+                jmp mt_rest                 ;Skip HR/skiphr blocks below.
+mt_normalnote_nosuppress:
+              .ENDIF
               .IF (NOTONEPORTA == 0)
                 lda mt_chnnewfx,x           ;If toneportamento, no gateoff
                 cmp #TONEPORTA
@@ -1318,7 +1336,9 @@ mt_normalnote:
                 lda mt_chninstr,x
                 cmp #FIRSTNOHRINSTR         ;Instrument order:
               .IF (NUMLEGATOINSTR > 0)
-                bcs mt_nohr_legato          ;With HR - no HR - legato
+                bcc mt_hr_take                  ;See player.s sibling.
+                jmp mt_nohr_legato
+mt_hr_take:
               .ELSE
                 bcs mt_skiphr
               .ENDIF
@@ -1353,6 +1373,23 @@ mt_setgate:
         ;Check for end of pattern
 
 mt_rest:
+              .IF (NOARPCHANNELS == 0)
+                iny
+                lda (mt_temp1),y                ;Inline arp byte after row data
+                beq mt_restnoarp                ;$00 = no change
+                cmp #$ff
+                bne mt_restsetarp
+                                                ;$ff = clear arp pointer
+                lda #$00
+                sta mt_chnarphi,x
+                sta mt_chnarplo,x
+                beq mt_restnoarp                ;(always taken, A=0)
+
+mt_restsetarp:
+                jsr mt_arp_setpool              ;See player.s sibling.
+
+mt_restnoarp:
+              .ENDIF
                 iny
                 lda (mt_temp1),y
                 beq mt_endpatt
@@ -1363,6 +1400,48 @@ mt_endpatt:
         ;Load voice registers
 
 mt_loadregs:
+              .IF (NOARPCHANNELS == 0)
+                lda mt_chnarphi,x               ;Skip if no arp pointer set
+                ora mt_chnarplo,x
+                beq mt_arpskip
+
+                lda mt_chnarplo,x               ;Set up (mt_temp1) -> arp buf
+                sta <mt_temp1
+                lda mt_chnarphi,x
+                sta <mt_temp2
+
+                lda mt_chnarppos,x              ;Y = current arp position.
+                tay                             ;Workaround for asm ldy abs,X.
+                lda (mt_temp1),y                ;Read note (or $ff loop marker)
+                cmp #$ff
+                bne mt_arpplaynote
+                                                ;Loop: take jump target
+                iny
+                lda (mt_temp1),y
+                sta mt_chnarppos,x              ;Reset position to target
+                tay
+                lda (mt_temp1),y                ;Read note at target
+
+mt_arpplaynote:
+                inc mt_chnarppos,x              ;Advance for next tick
+                tay                             ;(A still holds the note)
+                lda mt_freqtbllo-FIRSTNOTE,y    ;Override channel freq
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqlo,x
+              .ELSE
+                sta <ghostfreqlo,x
+              .ENDIF
+                lda mt_freqtblhi-FIRSTNOTE,y
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqhi,x
+              .ELSE
+                sta <ghostfreqhi,x
+              .ENDIF
+
+mt_arpskip:
+              .ENDIF
+                jsr mt_freq_catchup             ;Phase 2b C-parity:
+                                                ;see player.s sibling.
               .IF (BUFFEREDWRITES == 0)
 mt_loadregswave:lda mt_chnwave,x
                 and mt_chngate,x
@@ -1413,8 +1492,10 @@ mt_loadregswave:lda mt_chnwave,x
               .IF (NUMLEGATOINSTR > 0)
 mt_nohr_legato:
                 cmp #FIRSTLEGATOINSTR
-                bcc mt_skiphr
-                bcs mt_rest
+                bcs mt_legato_take              ;See player.s sibling.
+                jmp mt_skiphr
+mt_legato_take:
+                jmp mt_rest
               .ENDIF
 
         ;Sound FX code
@@ -1842,6 +1923,115 @@ ghostfiltcutoff = ghostregs+22
 ghostfiltctrl   = ghostregs+23
 ghostfilttype   = ghostregs+24
               .ENDIF
+
+        ;Arp channel state (multi-arp tracks). Stride-7 per channel,
+        ;matching the existing channel block layout so X=0/7/14 indexes
+        ;channels 0/1/2 directly.
+        ;mt_chnarphi = mt_chnarplo+1, mt_chnarppos = mt_chnarplo+2.
+
+              .IF (NOARPCHANNELS == 0)
+
+        ;Trigger-on-silent hook — see player.s sibling for rationale.
+mt_arp_trigger_silent:
+                lda mt_chnnewnote,x
+                bne mt_arp_trigger_done
+                lda mt_chngate,x
+                cmp #$ff
+                beq mt_arp_trigger_done
+                lda #$ff
+                sta mt_chngate,x
+                lda mt_chninstr,x
+                tay
+              .IF (BUFFEREDWRITES == 0)
+                lda mt_insad-1,y
+                sta SIDBASE+$05,x
+                lda mt_inssr-1,y
+                sta SIDBASE+$06,x
+              .ELSE
+              .IF (GHOSTREGS == 0)
+                lda mt_insad-1,y
+                sta mt_chnad,x
+                lda mt_inssr-1,y
+                sta mt_chnsr,x
+              .ELSE
+                lda mt_insad-1,y
+                sta <ghostad,x
+                lda mt_inssr-1,y
+                sta <ghostsr,x
+              .ENDIF
+              .ENDIF
+                lda mt_inswaveptr-1,y
+                sta mt_chnwaveptr,x
+mt_arp_trigger_done:
+                rts
+
+        ;mt_arp_setpool — see player.s sibling for full commentary.
+mt_arp_setpool:
+                sty mt_arptmpy
+                pha
+                lda mt_chnpattnum,x
+                tay
+                lda mt_arppool_patt_lo,y
+                sta mt_arpsmc1+1
+                sta mt_arpsmc2+1
+                lda mt_arppool_patt_hi,y
+                sta mt_arpsmc1+2
+                sta mt_arpsmc2+2
+                pla
+                asl
+                tay
+                dey
+                dey
+mt_arpsmc1:     lda $0000,y
+                sta mt_chnarplo,x
+                iny
+mt_arpsmc2:     lda $0000,y
+                sta mt_chnarphi,x
+                lda #$00
+                sta mt_chnarppos,x
+                jsr mt_arp_trigger_silent
+                ldy mt_arptmpy
+                rts
+
+mt_chnarpdata:
+mt_chnarplo:    .BYTE (0)
+mt_chnarphi:    .BYTE (0)
+mt_chnarppos:   .BYTE (0)
+                .BYTE (0,0,0,0)
+              .IF (NUMCHANNELS > 1)
+                .BYTE (0,0,0,0,0,0,0)
+              .ENDIF
+              .IF (NUMCHANNELS > 2)
+                .BYTE (0,0,0,0,0,0,0)
+              .ENDIF
+mt_arptmpy:     .BYTE (0)
+              .ENDIF
+
+        ;mt_freq_catchup — see player.s sibling. Lives outside the
+        ;NOARPCHANNELS .IF so non-arp songs benefit too.
+mt_freq_catchup:
+              .IF (NOARPCHANNELS == 0)
+                lda mt_chnarphi,x
+                ora mt_chnarplo,x
+                bne mt_freq_catchup_done
+              .ENDIF
+                lda mt_chnnote,x
+                beq mt_freq_catchup_done
+                tay
+                lda mt_freqtbllo-FIRSTNOTE,y
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqlo,x
+              .ELSE
+                sta <ghostfreqlo,x
+              .ENDIF
+                lda mt_freqtblhi-FIRSTNOTE,y
+              .IF (GHOSTREGS == 0)
+                sta mt_chnfreqhi,x
+              .ELSE
+                sta <ghostfreqhi,x
+              .ENDIF
+mt_freq_catchup_done:
+                rts
 
         ;Songdata & frequencytable will be inserted by the relocator here
 

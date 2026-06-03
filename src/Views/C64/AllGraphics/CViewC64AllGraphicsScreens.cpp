@@ -203,8 +203,15 @@ void CViewC64AllGraphicsScreens::Render()
 				break;
 		}
 		
+		// Skip off-screen displays
+		if (vicDisplays[i]->posY + vicDisplays[i]->sizeY < this->posY ||
+			vicDisplays[i]->posY > this->posY + this->sizeY ||
+			vicDisplays[i]->posX + vicDisplays[i]->sizeX < this->posX ||
+			vicDisplays[i]->posX > this->posX + this->sizeX)
+			continue;
+
 		vicDisplays[i]->Render();
-		
+
 		// this below does not work as vic display may clear the state
 //		if (IsInsideView(guiMain->mousePosX, guiMain->mousePosY) && vicDisplays[i]->IsInside(guiMain->mousePosX, guiMain->mousePosY))
 //		{

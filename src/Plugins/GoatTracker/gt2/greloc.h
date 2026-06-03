@@ -1,6 +1,10 @@
 #ifndef GRELOC_H
 #define GRELOC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define FORMAT_SID 0
 #define FORMAT_PRG 1
 #define FORMAT_BIN 2
@@ -37,8 +41,36 @@ extern int tableerror;
 #endif
 
 void relocator(void);
+int relocator_export(const char *outputPath, char *errorMsg, int errorMsgSize);
+
+// Phase 6: pack & assemble the current song and append the resulting
+// FORMAT_PRG bytes to `out` instead of a file. Caller owns `out`.
+struct membuf;
+int relocator_export_to_membuf(struct membuf *out, char *errorMsg, int errorMsgSize);
+
+// Phase 7 diagnostics for parity tests. After a successful
+// relocator_export* call, these mirror the packer's per-song
+// decisions. Test code consults them to verify that NOARPCHANNELS
+// was flipped to 0 when arp data was present and that the pool was
+// populated. Reading them before any export returns the post-init
+// values (noarppool=1, arppoolcount=0).
+#ifndef GRELOC_C
+extern int noarppool;
+extern int arppoolcount;
+extern unsigned char gt2_diag_arpbyterow0[MAX_PATT];
+extern unsigned char gt2_diag_scan_log[64];
+extern int gt2_diag_scan_count;
+extern unsigned char gt2_diag_emit_log[64];
+extern int gt2_diag_emit_count;
+#endif
+
+// Look up a captured post-export arp-related label address. Returns
+// -1 if the label wasn't resolved (e.g. mt_arppool_patt_lo is absent in
+// a song that didn't emit any arp data). Call after any
+// relocator_export* on the same thread.
+int gt2_get_arp_label_addr(const char *name);
 int testoverlap(int area1start, int area1size, int area2start, int area2size);
-int packpattern(unsigned char *dest, unsigned char *src, int rows);
+int packpattern(unsigned char *dest, unsigned char *src, int rows, int pattnum);
 unsigned char swapnybbles(unsigned char n);
 void findtableduplicates(int num);
 int isusedandselfcontained(int num, int start);
@@ -52,5 +84,9 @@ void insertbyte(unsigned char value);
 void insertbytes(const unsigned char *values, int size);
 void insertaddrlo(const char *name);
 void insertaddrhi(const char *name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

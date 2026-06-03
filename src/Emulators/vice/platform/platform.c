@@ -197,7 +197,7 @@ char *platform_get_ui(void)
 	
 #ifdef USE_SDLUI
     return "SDL";
-#elif defined(USE_SDLUI2)
+#elif defined(USE_SDL2UI)
     return "SDL2";
 #elif defined(USE_GNOMEUI)
     return "GTK+";

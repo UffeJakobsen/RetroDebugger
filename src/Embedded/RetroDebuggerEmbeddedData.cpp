@@ -46,8 +46,10 @@
 #include "FontExoMedium.h"
 
 // template data
-#include "reset_basic_snap_zlib.h"
-
+#include "vice310_c64_ntsc_snap_zlib.h"
+#include "vice310_c64_pal_snap_zlib.h"
+#include "vice310_c64c_ntsc_snap_zlib.h"
+#include "vice310_c64c_pal_snap_zlib.h"
 
 void RetroDebuggerEmbeddedAddData()
 {
@@ -80,8 +82,10 @@ void RetroDebuggerEmbeddedAddData()
 	RES_AddEmbeddedDataToDeploy("/gfx/icon_small_export", DEPLOY_FILE_TYPE_GFX, icon_small_export_gfx, icon_small_export_gfx_length);
 	RES_AddEmbeddedDataToDeploy("/gfx/icon_small_import", DEPLOY_FILE_TYPE_GFX, icon_small_import_gfx, icon_small_import_gfx_length);
 	
-	RES_AddEmbeddedDataToDeploy("/template/reset_basic_snapshot", DEPLOY_FILE_TYPE_DATA, reset_basic_snap_zlib, reset_basic_snap_zlib_length);
-
+	RES_AddEmbeddedDataToDeploy("/template/vice310_c64_ntsc_snap", DEPLOY_FILE_TYPE_DATA, vice310_c64_ntsc_snap_zlib, vice310_c64_ntsc_snap_zlib_length);
+	RES_AddEmbeddedDataToDeploy("/template/vice310_c64c_ntsc_snap", DEPLOY_FILE_TYPE_DATA, vice310_c64c_ntsc_snap_zlib, vice310_c64c_ntsc_snap_zlib_length);
+	RES_AddEmbeddedDataToDeploy("/template/vice310_c64_pal_snap", DEPLOY_FILE_TYPE_DATA, vice310_c64_pal_snap_zlib, vice310_c64_pal_snap_zlib_length);
+	RES_AddEmbeddedDataToDeploy("/template/vice310_c64c_pal_snap", DEPLOY_FILE_TYPE_DATA, vice310_c64c_pal_snap_zlib, vice310_c64c_pal_snap_zlib_length);
 }
 
 //

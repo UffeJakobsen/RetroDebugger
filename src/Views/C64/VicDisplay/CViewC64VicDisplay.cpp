@@ -16,6 +16,8 @@ extern "C" {
 #include "CDebugInterfaceC64.h"
 #include "CDebugInterfaceVice.h"
 #include "C64SettingsStorage.h"
+#include "SYS_DefaultConfig.h"
+#include "CConfigStorageHjson.h"
 #include "CViewC64Screen.h"
 #include "CSlrFont.h"
 #include "CGuiLabel.h"
@@ -164,6 +166,7 @@ void CViewC64VicDisplay::Initialize(CDebugInterfaceC64 *debugInterface)
 	this->showSpritesFrames = true;
 	this->showBadLines = false;
 	this->showBreakpointsLines = false;
+	this->requestOpenColorPopup = false;
 
 	this->isCursorLocked = false;
 	
@@ -902,8 +905,8 @@ int CViewC64VicDisplay::GetBitmapAddressForRaster(int x, int y)
 
 extern "C" {
 	unsigned char c64d_fetch_phi1_type(int addr);
-	BYTE *ultimax_romh_phi1_ptr(WORD addr);
-	BYTE *ultimax_romh_phi2_ptr(WORD addr);
+	uint8_t *ultimax_romh_phi1_ptr(uint16_t addr);
+	uint8_t *ultimax_romh_phi2_ptr(uint16_t addr);
 
 }
 
@@ -975,7 +978,7 @@ void CViewC64VicDisplay::GetViciiPointers(vicii_cycle_state_t *viciiState,
 	{
 		if ((screen_addr & 0x3fff) >= 0x3000)
 		{
-			screen_base_phi2 = ultimax_romh_phi2_ptr((WORD)(0x1000 + (screen_addr & 0xfff)));
+			screen_base_phi2 = ultimax_romh_phi2_ptr((uint16_t)(0x1000 + (screen_addr & 0xfff)));
 		}
 		else
 		{
@@ -998,7 +1001,7 @@ void CViewC64VicDisplay::GetViciiPointers(vicii_cycle_state_t *viciiState,
 	if (viciiState->export_ultimax_phi1)
 	{
 		if ((tmp & 0x3fff) >= 0x3000) {
-			char_base = ultimax_romh_phi1_ptr((WORD)(0x1000 + (tmp & 0xfff)));
+			char_base = ultimax_romh_phi1_ptr((uint16_t)(0x1000 + (tmp & 0xfff)));
 		} else {
 			char_base = vicii.ram_base_phi1 + tmp;
 		}
@@ -1257,6 +1260,7 @@ void CViewC64VicDisplay::RenderImGui()
 {
 	PreRenderImGui();
 	Render();
+	RenderColorEditPopup();
 	PostRenderImGui();
 }
 
@@ -2207,13 +2211,21 @@ void CViewC64VicDisplay::RenderBadLines()
 
 		if (viciiState->bad_line)
 		{
-			BlitFilledRectangle(lx, cy, posZ, lw, rasterScaleFactorY, 0.0f, 1.0f, 1.0f, c64SettingsScreenGridLinesAlpha);
+			BlitFilledRectangle(lx, cy, posZ, lw, rasterScaleFactorY,
+								c64SettingsVicDisplayBadLineColorR,
+								c64SettingsVicDisplayBadLineColorG,
+								c64SettingsVicDisplayBadLineColorB,
+								c64SettingsVicDisplayBadLineColorA);
 		}
 
 		uint8 irqMask = viciiState->regs[0x1a];
 		if (irqMask & 0x01 && rasterLine == viciiState->raster_irq_line)
 		{
-			BlitFilledRectangle(lx, cy, posZ, lw, rasterScaleFactorY, 1.0f, 1.0f, 0.0f, c64SettingsScreenGridLinesAlpha * 0.75f);
+			BlitFilledRectangle(lx, cy, posZ, lw, rasterScaleFactorY,
+								c64SettingsVicDisplayIrqLineColorR,
+								c64SettingsVicDisplayIrqLineColorG,
+								c64SettingsVicDisplayIrqLineColorB,
+								c64SettingsVicDisplayIrqLineColorA);
 		}
 
 		cy += rasterScaleFactorY;
@@ -2255,7 +2267,7 @@ void CViewC64VicDisplay::Render(float posX, float posY)
 
 bool CViewC64VicDisplay::ScrollMemoryAndDisassemblyToRasterPosition(float rx, float ry, bool isForced)
 {
-	LOGD("ScrollMemoryAndDisassemblyToRasterPosition: %f %f %d", rx, ry, isForced);
+//	LOGD("ScrollMemoryAndDisNassemblyToRasterPosition: %f %f %d", rx, ry, isForced);
 
 	// check if outside
 	int addr = -1;
@@ -2423,7 +2435,95 @@ bool CViewC64VicDisplay::DoTap(float x, float y)
 
 bool CViewC64VicDisplay::DoRightClick(float x, float y)
 {
-	return CGuiView::DoRightClick(x, y);
+	// VIC editor uses VIC display as canvas — when editor is the top window,
+	// don't intercept right-click here, let the editor handle it.
+	if (viewC64->viewVicEditor != NULL && viewC64->viewVicEditor->IsVisible()
+		&& guiMain->FindTopWindow(x, y) == viewC64->viewVicEditor)
+	{
+		return CGuiView::DoRightClick(x, y);
+	}
+
+	this->requestOpenColorPopup = true;
+	return true;
+}
+
+void CViewC64VicDisplay::RenderColorEditPopup()
+{
+	if (this->requestOpenColorPopup)
+	{
+		ImGui::OpenPopup("VicDisplayMarkerColors");
+		this->requestOpenColorPopup = false;
+	}
+
+	if (ImGui::BeginPopup("VicDisplayMarkerColors"))
+	{
+		ImGui::TextUnformatted("VIC Display marker line colors");
+		ImGui::Separator();
+
+		float irq[4] = {
+			c64SettingsVicDisplayIrqLineColorR,
+			c64SettingsVicDisplayIrqLineColorG,
+			c64SettingsVicDisplayIrqLineColorB,
+			c64SettingsVicDisplayIrqLineColorA
+		};
+		if (ImGui::ColorEdit4("IRQ raster line", irq, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview))
+		{
+			c64SettingsVicDisplayIrqLineColorR = irq[0];
+			c64SettingsVicDisplayIrqLineColorG = irq[1];
+			c64SettingsVicDisplayIrqLineColorB = irq[2];
+			c64SettingsVicDisplayIrqLineColorA = irq[3];
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineR", &c64SettingsVicDisplayIrqLineColorR);
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineG", &c64SettingsVicDisplayIrqLineColorG);
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineB", &c64SettingsVicDisplayIrqLineColorB);
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineA", &c64SettingsVicDisplayIrqLineColorA);
+		}
+
+		float bad[4] = {
+			c64SettingsVicDisplayBadLineColorR,
+			c64SettingsVicDisplayBadLineColorG,
+			c64SettingsVicDisplayBadLineColorB,
+			c64SettingsVicDisplayBadLineColorA
+		};
+		if (ImGui::ColorEdit4("Bad line", bad, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview))
+		{
+			c64SettingsVicDisplayBadLineColorR = bad[0];
+			c64SettingsVicDisplayBadLineColorG = bad[1];
+			c64SettingsVicDisplayBadLineColorB = bad[2];
+			c64SettingsVicDisplayBadLineColorA = bad[3];
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineR", &c64SettingsVicDisplayBadLineColorR);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineG", &c64SettingsVicDisplayBadLineColorG);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineB", &c64SettingsVicDisplayBadLineColorB);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineA", &c64SettingsVicDisplayBadLineColorA);
+		}
+
+		ImGui::Separator();
+		if (ImGui::Button("Reset to defaults"))
+		{
+			c64SettingsVicDisplayIrqLineColorR = 1.0f;
+			c64SettingsVicDisplayIrqLineColorG = 1.0f;
+			c64SettingsVicDisplayIrqLineColorB = 0.0f;
+			c64SettingsVicDisplayIrqLineColorA = 0.225f;
+			c64SettingsVicDisplayBadLineColorR = 0.0f;
+			c64SettingsVicDisplayBadLineColorG = 1.0f;
+			c64SettingsVicDisplayBadLineColorB = 1.0f;
+			c64SettingsVicDisplayBadLineColorA = 0.3f;
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineR", &c64SettingsVicDisplayIrqLineColorR);
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineG", &c64SettingsVicDisplayIrqLineColorG);
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineB", &c64SettingsVicDisplayIrqLineColorB);
+			gApplicationDefaultConfig->SetFloat("VicDispIrqLineA", &c64SettingsVicDisplayIrqLineColorA);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineR", &c64SettingsVicDisplayBadLineColorR);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineG", &c64SettingsVicDisplayBadLineColorG);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineB", &c64SettingsVicDisplayBadLineColorB);
+			gApplicationDefaultConfig->SetFloat("VicDispBadLineA", &c64SettingsVicDisplayBadLineColorA);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Close"))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
 }
 
 void CViewC64VicDisplay::UpdateRasterCursorPos()

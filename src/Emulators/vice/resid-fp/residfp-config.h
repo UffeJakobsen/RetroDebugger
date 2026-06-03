@@ -20,10 +20,6 @@
 #ifndef VICE__RESIDFP_CONFIG_H__
 #define VICE__RESIDFP_CONFIG_H__
 
-#ifdef IDE_COMPILE
-#include "ide-sidfpdefs.h"
-#else
 #include "residfp-siddefs-fp.h"
-#endif
 
 #endif

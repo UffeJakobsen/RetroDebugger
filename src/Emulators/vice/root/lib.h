@@ -35,83 +35,59 @@
 #include <stdlib.h>
 
 #include "debug.h"
+#include "log.h"
 
-#ifdef VICE_DEBUG
-/* memory leak pinpointing, don't forget to enable in lib.c */
-//#define LIB_DEBUG_PINPOINT
+#ifdef DEBUG
+/* enable memory debugging */
+# define LIB_DEBUG
+/* enable pinpointing of memory leaks (lib_malloc etc) */
+# define LIB_DEBUG_PINPOINT
+/* warn on free(NULL) */
+/* #define LIB_DEBUG_WARN_FREE_NULL */
 #endif
 
-extern void lib_init_rand(void);
-extern unsigned int lib_unsigned_rand(unsigned int min, unsigned int max);
-extern float lib_float_rand(float min, float max);
+void lib_init(void);
 
-extern char *lib_msprintf(const char *fmt, ...);
-extern char *lib_mvsprintf(const char *fmt, va_list args);
+unsigned int lib_unsigned_rand(unsigned int min, unsigned int max);
+float lib_float_rand(float min, float max);
+double lib_double_rand_unit(void);
 
-extern void lib_debug_check(void);
+void lib_rand_seed(uint64_t seed);
+void lib_rand_printseed(log_t log);
 
-#if defined(__CYGWIN32__) || defined(__CYGWIN__) || defined(WIN32_COMPILE) || defined(WIN32)
-
-#ifdef WIN32_UNICODE_SUPPORT
-#include <wchar.h>
-
-extern size_t lib_tcstostr(char *str, const wchar_t *tcs, size_t len);
-extern size_t lib_strtotcs(wchar_t *tcs, const char *str, size_t len);
-
-extern int lib_swprintf(wchar_t *wcs, size_t len, const wchar_t *fmt, ...);
-#define lib_sntprintf lib_swprintf
-#else
-extern size_t lib_tcstostr(char *str, const char *tcs, size_t len);
-extern size_t lib_strtotcs(char *tcs, const char *str, size_t len);
-
-extern int lib_snprintf(char *str, size_t len, const char *fmt, ...);
-#define lib_sntprintf lib_snprintf
-#endif
-
-#endif /* CYGWIN or WIN32_COMPILE */
+char *lib_msprintf(const char *fmt, ...) VICE_ATTR_PRINTF;
+char *lib_mvsprintf(const char *fmt, va_list args);
 
 #ifdef LIB_DEBUG_PINPOINT
-extern void *lib_malloc_pinpoint(size_t size, const char *name, unsigned int line);
-extern void *lib_calloc_pinpoint(size_t nmemb, size_t size, const char *name, unsigned int line);
-extern void *lib_realloc_pinpoint(void *p, size_t size, const char *name, unsigned int line);
-extern void lib_free_pinpoint(const void *p, const char *name, unsigned int line);
+void *lib_malloc_pinpoint(size_t size, const char *name, unsigned int line);
+void *lib_calloc_pinpoint(size_t nmemb, size_t size, const char *name, unsigned int line);
+void *lib_realloc_pinpoint(void *p, size_t size, const char *name, unsigned int line);
+void lib_free_pinpoint(const void *p, const char *name, unsigned int line);
 
-extern char *lib_stralloc_pinpoint(const char *str, const char *name, unsigned int line);
+char *lib_strdup_pinpoint(const char *str, const char *name, unsigned int line);
 
 #define lib_malloc(x) lib_malloc_pinpoint(x, __FILE__, __LINE__)
 #define lib_free(x) lib_free_pinpoint(x, __FILE__, __LINE__)
 #define lib_calloc(x, y) lib_calloc_pinpoint(x, y, __FILE__, __LINE__)
 #define lib_realloc(x, y) lib_realloc_pinpoint(x, y, __FILE__, __LINE__)
-#define lib_stralloc(x) lib_stralloc_pinpoint(x, __FILE__, __LINE__)
-
-#if defined(AMIGA_SUPPORT) || defined(__VBCC__)
-extern void *lib_AllocVec_pinpoint(unsigned long size, unsigned long attributes, char *name, unsigned int line);
-extern void lib_FreeVec_pinpoint(void *ptr, char *name, unsigned int line);
-extern void *lib_AllocMem_pinpoint(unsigned long size, unsigned long attributes, char *name, unsigned int line);
-extern void lib_FreeMem_pinpoint(void *ptr, unsigned long size, char *name, unsigned int line);
-
-#define lib_AllocVec(x, y) lib_AllocVec_pinpoint(x, y, __FILE__, __LINE__)
-#define lib_FreeVec(x) lib_FreeVec_pinpoint(x, __FILE__, __LINE__)
-#define lib_AllocMem(x, y) lib_AllocMem_pinpoint(x, y, __FILE__, __LINE__)
-#define lib_FreeMem(x, y) lib_FreeMem_pinpoint(x, y, __FILE__, __LINE__)
-#endif
+#define lib_strdup(x) lib_strdup_pinpoint(x, __FILE__, __LINE__)
 
 #else
 
-extern void *lib_malloc(size_t size);
-extern void *lib_calloc(size_t nmemb, size_t size);
-extern void *lib_realloc(void *p, size_t size);
-extern void lib_free(const void *ptr);
+void *lib_malloc(size_t size);
+void *lib_calloc(size_t nmemb, size_t size);
+void *lib_realloc(void *p, size_t size);
+void lib_free(const void *ptr);
 
-extern char *lib_stralloc(const char *str);
-
-#if defined(AMIGA_SUPPORT) || defined(__VBCC__)
-extern void *lib_AllocVec(unsigned long size, unsigned long attributes);
-extern void lib_FreeVec(void *ptr);
-extern void *lib_AllocMem(unsigned long size, unsigned long attributes);
-extern void lib_FreeMem(void *ptr, unsigned long size);
-#endif
+char *lib_strdup(const char *str);
 
 #endif
+
+char *lib_strdup_trimmed(char *str);
+
+void lib_debug_set_output(int state);
+
+/* back-compat alias: old name lib_stralloc maps to lib_strdup */
+#define lib_stralloc lib_strdup
 
 #endif

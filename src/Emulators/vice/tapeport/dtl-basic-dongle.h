@@ -27,9 +27,8 @@
 #ifndef VICE_DTLBASICDONGLE_H
 #define VICE_DTLBASICDONGLE_H
 
-#include "vicetypes.h"
+#include "types.h"
 
-extern int dtlbasic_dongle_resources_init(void);
-extern int dtlbasic_dongle_cmdline_options_init(void);
+int dtlbasic_dongle_resources_init(int amount);
 
 #endif

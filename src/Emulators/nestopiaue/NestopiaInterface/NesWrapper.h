@@ -100,7 +100,7 @@ void nesd_mutex_unlock();
 
 //
 
-//
-//int nesd_get_joystick_state(int port);
+u8 nesd_get_api_input_buttons(int port);
+uint32 nesd_convert_pad_buttons_to_joypad(u8 padButtons);
 
 #endif
