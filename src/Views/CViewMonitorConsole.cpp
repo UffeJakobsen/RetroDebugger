@@ -8,6 +8,7 @@
 #include "CViewDataDump.h"
 #include "CDebugMemory.h"
 #include "CGuiMain.h"
+#include "SYS_KeyCodes.h"
 #include "CViewDisassembly.h"
 #include "CViewDataMap.h"
 #include "CViewC64StateCPU.h"
@@ -118,6 +119,20 @@ void CViewMonitorConsole::ActivateView()
 }
 
 
+// Returns true for keys that produce printable text in the console command line.
+// The console inserts these characters via KeyTextInput (SDL_TEXTINPUT), so its
+// KeyDown returns false for them. We must consume their KeyDown here, otherwise
+// CGuiMain::KeyDown falls through to currentView (the emulator screen) and the
+// same character is ALSO typed into the emulated machine. Control/Alt/Cmd combos
+// and all special keys (ESC, TAB, function keys, arrows, ...) are left to pass
+// through so global shortcuts keep working while the console is focused.
+static bool IsConsoleTextEntryKey(u32 keyCode, bool isAlt, bool isControl, bool isSuper)
+{
+	if (isControl || isAlt || isSuper)
+		return false;
+	return (keyCode >= MTKEY_SPACEBAR && keyCode <= MTKEY_TILDE);
+}
+
 bool CViewMonitorConsole::KeyDownRepeat(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper)
 {
 	// Copy / Paste / Select-All must fire once per press, never on auto-repeat.
@@ -133,7 +148,12 @@ bool CViewMonitorConsole::KeyDownRepeat(u32 keyCode, bool isShift, bool isAlt, b
 	{
 		return true;   // swallow repeats
 	}
-	return this->viewConsole->KeyDown(keyCode);
+	if (this->viewConsole->KeyDown(keyCode))
+		return true;
+	// swallow auto-repeated text keys so they don't leak into the emulator
+	if (viewConsole->hasCommandLine && IsConsoleTextEntryKey(keyCode, isAlt, isControl, isSuper))
+		return true;
+	return false;
 }
 
 bool CViewMonitorConsole::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool isControl, bool isSuper)
@@ -158,7 +178,17 @@ bool CViewMonitorConsole::KeyDown(u32 keyCode, bool isShift, bool isAlt, bool is
 		return true;
 	}
 
-	return this->viewConsole->KeyDown(keyCode);
+	if (this->viewConsole->KeyDown(keyCode))
+		return true;
+
+	// The console inserts printable characters via KeyTextInput, not KeyDown, so
+	// KeyDown returns false for them. Consume plain text-entry keys here so they
+	// are not forwarded to currentView (the emulator screen) and typed into the
+	// emulated machine as well. See IsConsoleTextEntryKey above.
+	if (viewConsole->hasCommandLine && IsConsoleTextEntryKey(keyCode, isAlt, isControl, isSuper))
+		return true;
+
+	return false;
 }
 
 bool CViewMonitorConsole::KeyTextInput(const char *text)
