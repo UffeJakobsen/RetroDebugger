@@ -7,14 +7,8 @@
 #include "C64DebuggerPluginTemplate.h"
 #include "C64DebuggerPluginCrtMaker.h"
 #include "C64DebuggerPluginGoatTracker.h"
-#include "FlameTiles/C64DebuggerPluginFlameTiles.h"
 #include "C64DebuggerPluginDNDK.h"
 //#include "C64DebuggerPluginCommando.h"
-//#include "C64DebuggerPluginShowPic.h"
-//#include "C64DebuggerPluginParallax.h"
-//#include "C64DebuggerPluginRasterBars.h"
-//#include "C64DebuggerPluginPicFader.h"
-//#include "C64DebuggerPluginConvolution.h"
 
 static void GoatTrackerActivate()
 {
@@ -35,28 +29,6 @@ static void GoatTrackerDeactivate()
 	{
 		PLUGIN_GoatTrackerSetVisible(false);
 		CDebuggerEmulatorPlugin::UnregisterPlugin(pluginGoatTracker);
-	}
-}
-
-static void FlameActivate()
-{
-	if (pluginFlameTiles == NULL)
-	{
-		PLUGIN_FlameTilesInit();
-	}
-	else
-	{
-		viewC64->RegisterEmulatorPlugin(pluginFlameTiles);
-	}
-	PLUGIN_FlameTilesSetVisible(true);
-}
-
-static void FlameDeactivate()
-{
-	if (pluginFlameTiles != NULL)
-	{
-		PLUGIN_FlameTilesSetVisible(false);
-		CDebuggerEmulatorPlugin::UnregisterPlugin(pluginFlameTiles);
 	}
 }
 
@@ -92,7 +64,6 @@ void C64D_InitPlugins()
 	gPluginsManager->DeclarePlugin("GoatTracker", "Goat Tracker 2",   GoatTrackerActivate, GoatTrackerDeactivate, true);
 	PLUGIN_GoatTrackerRestoreSettings();
 	gPluginsManager->DeclarePlugin("DNDK",        "DNDK Trainer",     DdnkActivate,        DdnkDeactivate);
-//	gPluginsManager->DeclarePlugin("FlameTiles",  "Candle Flame (tile-based, abandoned)", FlameActivate, FlameDeactivate);
 
 	if (crtMakerConfigFilePath != NULL)
 	{

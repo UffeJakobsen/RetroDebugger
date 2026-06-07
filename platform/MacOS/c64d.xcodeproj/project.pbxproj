@@ -1395,57 +1395,6 @@
 		F7A2B83E9D0C4F6A1E5B7D3C /* CTestOpenAllViews.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E63A8B4D2F1C7E9A0D5B3F71 /* CTestOpenAllViews.cpp */; };
 		FB219FEA879788DDD91FDFF7 /* CTestViceBreakpoints.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E721F7915ED100746642B000 /* CTestViceBreakpoints.cpp */; };
 		FBF02338E25BCABD0612F204 /* CTestSuite.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CEE12F5319337E194C76EEA2 /* CTestSuite.cpp */; };
-		FLAM000000000000000001 /* C64DebuggerPluginFlameTiles.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000002 /* C64DebuggerPluginFlameTiles.cpp */; };
-		FLAM000000000000000061 /* FlameMemoryLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000062 /* FlameMemoryLayout.cpp */; };
-		FLAM000000000000000101 /* CTestFlamePluginActivation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000102 /* CTestFlamePluginActivation.cpp */; };
-		FLAM000000000000000201 /* CTestFlame6502EmitCore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000202 /* CTestFlame6502EmitCore.cpp */; };
-		FLAM000000000000000211 /* CTestFlame6502EmitOpcodes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000212 /* CTestFlame6502EmitOpcodes.cpp */; };
-		FLAM000000000000000221 /* CTestFlameLAXEquivalence.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000222 /* CTestFlameLAXEquivalence.cpp */; };
-		FLAM000000000000000231 /* CTestFlame6502InitBytes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000232 /* CTestFlame6502InitBytes.cpp */; };
-		FLAM000000000000000241 /* CTestFlame6502VicSetup.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000242 /* CTestFlame6502VicSetup.cpp */; };
-		FLAM000000000000000251 /* CTestFlame6502RasterIRQ.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000252 /* CTestFlame6502RasterIRQ.cpp */; };
-		FLAM000000000000000261 /* CTestFlamePRGRunsInVice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000262 /* CTestFlamePRGRunsInVice.cpp */; };
-		FLAM000000000000000301 /* CFlameGenerator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000302 /* CFlameGenerator.cpp */; };
-		FLAM000000000000000311 /* CFlameReferenceImage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000312 /* CFlameReferenceImage.cpp */; };
-		FLAM000000000000000321 /* CFlameCharset.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000322 /* CFlameCharset.cpp */; };
-		FLAM000000000000000331 /* CFlameCharsetExtractor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000332 /* CFlameCharsetExtractor.cpp */; };
-		FLAM000000000000000341 /* FlameBuildReport.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000342 /* FlameBuildReport.cpp */; };
-		FLAM000000000000000351 /* CTestFlameReferenceImage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000352 /* CTestFlameReferenceImage.cpp */; };
-		FLAM000000000000000361 /* CTestFlameCharsetExtraction.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000362 /* CTestFlameCharsetExtraction.cpp */; };
-		FLAM000000000000000371 /* CTestFlameBuildReport.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000372 /* CTestFlameBuildReport.cpp */; };
-		FLAM000000000000000381 /* CTestFlameCharsetPersistence.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000382 /* CTestFlameCharsetPersistence.cpp */; };
-		FLAM000000000000000391 /* CTestFlameMockCharset.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000392 /* CTestFlameMockCharset.cpp */; };
-		FLAM000000000000000411 /* CViewFlameCharsetDesigner.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000412 /* CViewFlameCharsetDesigner.cpp */; };
-		FLAM000000000000000501 /* CTestFlameRealExtraction.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000502 /* CTestFlameRealExtraction.cpp */; };
-		FLAM000000000000000511 /* CViewFlameTileEditor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000512 /* CViewFlameTileEditor.cpp */; };
-		FLAM000000000000000521 /* CTestFlameAutoFillMirror.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000522 /* CTestFlameAutoFillMirror.cpp */; };
-		FLAM000000000000000531 /* CTestFlameDenoise.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000532 /* CTestFlameDenoise.cpp */; };
-		FLAM000000000000000541 /* CTestFlameMergeDuplicates.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000542 /* CTestFlameMergeDuplicates.cpp */; };
-		FLAM000000000000000701 /* CFlameSimulation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000702 /* CFlameSimulation.cpp */; };
-		FLAM000000000000000711 /* CTestFlameSimulationState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000712 /* CTestFlameSimulationState.cpp */; };
-		FLAM000000000000000721 /* CTestFlamePRNG.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000722 /* CTestFlamePRNG.cpp */; };
-		FLAM000000000000000731 /* CTestFlameWindState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000732 /* CTestFlameWindState.cpp */; };
-		FLAM000000000000000741 /* CTestFlameRowSignatures.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000742 /* CTestFlameRowSignatures.cpp */; };
-		FLAM000000000000000751 /* CTestFlameCellLookup.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000752 /* CTestFlameCellLookup.cpp */; };
-		FLAM000000000000000761 /* CTestFlameHotPeak.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000762 /* CTestFlameHotPeak.cpp */; };
-		FLAM000000000000000801 /* CTestFlamePushToC64.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000802 /* CTestFlamePushToC64.cpp */; };
-		FLAM000000000000000811 /* CTestFlamePOCFirstFrame.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000812 /* CTestFlamePOCFirstFrame.cpp */; };
-		FLAM000000000000000821 /* CTestFlameSimulationDeterminism.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM000000000000000822 /* CTestFlameSimulationDeterminism.cpp */; };
-		FLAM00000000000009A1 /* CTestFlameEmitDebugLog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM00000000000009A2 /* CTestFlameEmitDebugLog.cpp */; };
-		FLAM00000000000009B1 /* CTestFlame6502InitFull.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM00000000000009B2 /* CTestFlame6502InitFull.cpp */; };
-		FLAM00000000000009C1 /* CTestFlame6502IrqEntryExit.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM00000000000009C2 /* CTestFlame6502IrqEntryExit.cpp */; };
-		FLAM00000000000009D1 /* CTestFlame6502PRNGParity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM00000000000009D2 /* CTestFlame6502PRNGParity.cpp */; };
-		FLAM0000000000000A01 /* CTestFlame6502WindParity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000A02 /* CTestFlame6502WindParity.cpp */; };
-		FLAM0000000000000A11 /* CTestFlame6502RowSigParity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000A12 /* CTestFlame6502RowSigParity.cpp */; };
-		FLAM0000000000000A21 /* CTestFlame6502CellsParity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000A22 /* CTestFlame6502CellsParity.cpp */; };
-		FLAM0000000000000A31 /* CTestFlame6502CramParity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000A32 /* CTestFlame6502CramParity.cpp */; };
-		FLAM0000000000000B01 /* CTestFlame6502LUTs.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000B02 /* CTestFlame6502LUTs.cpp */; };
-		FLAM0000000000000B11 /* CTestFlamePRGFormat.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000B12 /* CTestFlamePRGFormat.cpp */; };
-		FLAM0000000000000B21 /* CTestFlame6502PRGRuns60Frames.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000B22 /* CTestFlame6502PRGRuns60Frames.cpp */; };
-		FLAM0000000000000B31 /* CTestFlame6502Parity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000B32 /* CTestFlame6502Parity.cpp */; };
-		FLAM0000000000000B41 /* CTestFlamePRGvsCpp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000B42 /* CTestFlamePRGvsCpp.cpp */; };
-		FLAM0000000000000C01 /* CTestFlame6502EnvelopeLUTs.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FLAM0000000000000C02 /* CTestFlame6502EnvelopeLUTs.cpp */; };
-		FMTS000000000000000001 /* FlameTilesTests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FMTS000000000000000002 /* FlameTilesTests.cpp */; };
 		GFXOUT001000000000000001 /* artstudiodrv.c in Sources */ = {isa = PBXBuildFile; fileRef = GFXOUT001000000000000011 /* artstudiodrv.c */; };
 		GFXOUT001000000000000003 /* minipaintdrv.c in Sources */ = {isa = PBXBuildFile; fileRef = GFXOUT001000000000000013 /* minipaintdrv.c */; };
 		GFXOUT001000000000000004 /* pngdrv.c in Sources */ = {isa = PBXBuildFile; fileRef = GFXOUT001000000000000014 /* pngdrv.c */; };
@@ -4434,106 +4383,6 @@
 		FF46CD67705B41EE9DAD5EA7 /* userport_synergy_joystick.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = userport_synergy_joystick.c; sourceTree = "<group>"; };
 		FF5E9EE2DEE14A4F81861FDE /* mouse_1351.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mouse_1351.c; sourceTree = "<group>"; };
 		FFCB90A5A474448015DDAB47 /* CImGuiTests.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CImGuiTests.cpp; path = ../../src/Tests/CImGuiTests.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000002 /* C64DebuggerPluginFlameTiles.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = C64DebuggerPluginFlameTiles.cpp; path = ../../src/Plugins/FlameTiles/C64DebuggerPluginFlameTiles.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000062 /* FlameMemoryLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FlameMemoryLayout.cpp; path = ../../src/Plugins/FlameTiles/FlameMemoryLayout.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000102 /* CTestFlamePluginActivation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePluginActivation.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePluginActivation.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000103 /* CTestFlamePluginActivation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePluginActivation.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePluginActivation.h; sourceTree = "<group>"; };
-		FLAM000000000000000202 /* CTestFlame6502EmitCore.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502EmitCore.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502EmitCore.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000203 /* CTestFlame6502EmitCore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502EmitCore.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502EmitCore.h; sourceTree = "<group>"; };
-		FLAM000000000000000212 /* CTestFlame6502EmitOpcodes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502EmitOpcodes.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502EmitOpcodes.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000213 /* CTestFlame6502EmitOpcodes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502EmitOpcodes.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502EmitOpcodes.h; sourceTree = "<group>"; };
-		FLAM000000000000000222 /* CTestFlameLAXEquivalence.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameLAXEquivalence.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameLAXEquivalence.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000223 /* CTestFlameLAXEquivalence.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameLAXEquivalence.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameLAXEquivalence.h; sourceTree = "<group>"; };
-		FLAM000000000000000232 /* CTestFlame6502InitBytes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502InitBytes.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502InitBytes.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000233 /* CTestFlame6502InitBytes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502InitBytes.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502InitBytes.h; sourceTree = "<group>"; };
-		FLAM000000000000000242 /* CTestFlame6502VicSetup.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502VicSetup.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502VicSetup.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000243 /* CTestFlame6502VicSetup.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502VicSetup.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502VicSetup.h; sourceTree = "<group>"; };
-		FLAM000000000000000252 /* CTestFlame6502RasterIRQ.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502RasterIRQ.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502RasterIRQ.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000253 /* CTestFlame6502RasterIRQ.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502RasterIRQ.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502RasterIRQ.h; sourceTree = "<group>"; };
-		FLAM000000000000000262 /* CTestFlamePRGRunsInVice.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePRGRunsInVice.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRGRunsInVice.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000263 /* CTestFlamePRGRunsInVice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePRGRunsInVice.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRGRunsInVice.h; sourceTree = "<group>"; };
-		FLAM000000000000000302 /* CFlameGenerator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CFlameGenerator.cpp; path = ../../src/Plugins/FlameTiles/CFlameGenerator.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000303 /* CFlameGenerator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CFlameGenerator.h; path = ../../src/Plugins/FlameTiles/CFlameGenerator.h; sourceTree = "<group>"; };
-		FLAM000000000000000312 /* CFlameReferenceImage.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CFlameReferenceImage.cpp; path = ../../src/Plugins/FlameTiles/CFlameReferenceImage.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000313 /* CFlameReferenceImage.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CFlameReferenceImage.h; path = ../../src/Plugins/FlameTiles/CFlameReferenceImage.h; sourceTree = "<group>"; };
-		FLAM000000000000000322 /* CFlameCharset.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CFlameCharset.cpp; path = ../../src/Plugins/FlameTiles/CFlameCharset.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000323 /* CFlameCharset.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CFlameCharset.h; path = ../../src/Plugins/FlameTiles/CFlameCharset.h; sourceTree = "<group>"; };
-		FLAM000000000000000332 /* CFlameCharsetExtractor.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CFlameCharsetExtractor.cpp; path = ../../src/Plugins/FlameTiles/CFlameCharsetExtractor.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000333 /* CFlameCharsetExtractor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CFlameCharsetExtractor.h; path = ../../src/Plugins/FlameTiles/CFlameCharsetExtractor.h; sourceTree = "<group>"; };
-		FLAM000000000000000342 /* FlameBuildReport.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FlameBuildReport.cpp; path = ../../src/Plugins/FlameTiles/FlameBuildReport.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000343 /* FlameBuildReport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FlameBuildReport.h; path = ../../src/Plugins/FlameTiles/FlameBuildReport.h; sourceTree = "<group>"; };
-		FLAM000000000000000352 /* CTestFlameReferenceImage.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameReferenceImage.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameReferenceImage.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000353 /* CTestFlameReferenceImage.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameReferenceImage.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameReferenceImage.h; sourceTree = "<group>"; };
-		FLAM000000000000000362 /* CTestFlameCharsetExtraction.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameCharsetExtraction.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameCharsetExtraction.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000363 /* CTestFlameCharsetExtraction.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameCharsetExtraction.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameCharsetExtraction.h; sourceTree = "<group>"; };
-		FLAM000000000000000372 /* CTestFlameBuildReport.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameBuildReport.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameBuildReport.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000373 /* CTestFlameBuildReport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameBuildReport.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameBuildReport.h; sourceTree = "<group>"; };
-		FLAM000000000000000382 /* CTestFlameCharsetPersistence.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameCharsetPersistence.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameCharsetPersistence.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000383 /* CTestFlameCharsetPersistence.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameCharsetPersistence.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameCharsetPersistence.h; sourceTree = "<group>"; };
-		FLAM000000000000000392 /* CTestFlameMockCharset.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameMockCharset.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameMockCharset.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000393 /* CTestFlameMockCharset.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameMockCharset.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameMockCharset.h; sourceTree = "<group>"; };
-		FLAM000000000000000412 /* CViewFlameCharsetDesigner.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CViewFlameCharsetDesigner.cpp; path = ../../src/Plugins/FlameTiles/CViewFlameCharsetDesigner.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000413 /* CViewFlameCharsetDesigner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CViewFlameCharsetDesigner.h; path = ../../src/Plugins/FlameTiles/CViewFlameCharsetDesigner.h; sourceTree = "<group>"; };
-		FLAM000000000000000502 /* CTestFlameRealExtraction.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameRealExtraction.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameRealExtraction.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000503 /* CTestFlameRealExtraction.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameRealExtraction.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameRealExtraction.h; sourceTree = "<group>"; };
-		FLAM000000000000000512 /* CViewFlameTileEditor.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CViewFlameTileEditor.cpp; path = ../../src/Plugins/FlameTiles/CViewFlameTileEditor.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000513 /* CViewFlameTileEditor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CViewFlameTileEditor.h; path = ../../src/Plugins/FlameTiles/CViewFlameTileEditor.h; sourceTree = "<group>"; };
-		FLAM000000000000000522 /* CTestFlameAutoFillMirror.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameAutoFillMirror.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameAutoFillMirror.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000523 /* CTestFlameAutoFillMirror.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameAutoFillMirror.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameAutoFillMirror.h; sourceTree = "<group>"; };
-		FLAM000000000000000532 /* CTestFlameDenoise.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameDenoise.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameDenoise.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000533 /* CTestFlameDenoise.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameDenoise.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameDenoise.h; sourceTree = "<group>"; };
-		FLAM000000000000000542 /* CTestFlameMergeDuplicates.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameMergeDuplicates.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameMergeDuplicates.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000543 /* CTestFlameMergeDuplicates.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameMergeDuplicates.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameMergeDuplicates.h; sourceTree = "<group>"; };
-		FLAM000000000000000702 /* CFlameSimulation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CFlameSimulation.cpp; path = ../../src/Plugins/FlameTiles/CFlameSimulation.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000703 /* CFlameSimulation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CFlameSimulation.h; path = ../../src/Plugins/FlameTiles/CFlameSimulation.h; sourceTree = "<group>"; };
-		FLAM000000000000000712 /* CTestFlameSimulationState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameSimulationState.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameSimulationState.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000713 /* CTestFlameSimulationState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameSimulationState.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameSimulationState.h; sourceTree = "<group>"; };
-		FLAM000000000000000722 /* CTestFlamePRNG.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePRNG.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRNG.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000723 /* CTestFlamePRNG.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePRNG.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRNG.h; sourceTree = "<group>"; };
-		FLAM000000000000000732 /* CTestFlameWindState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameWindState.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameWindState.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000733 /* CTestFlameWindState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameWindState.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameWindState.h; sourceTree = "<group>"; };
-		FLAM000000000000000742 /* CTestFlameRowSignatures.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameRowSignatures.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameRowSignatures.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000743 /* CTestFlameRowSignatures.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameRowSignatures.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameRowSignatures.h; sourceTree = "<group>"; };
-		FLAM000000000000000752 /* CTestFlameCellLookup.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameCellLookup.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameCellLookup.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000753 /* CTestFlameCellLookup.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameCellLookup.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameCellLookup.h; sourceTree = "<group>"; };
-		FLAM000000000000000762 /* CTestFlameHotPeak.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameHotPeak.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameHotPeak.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000763 /* CTestFlameHotPeak.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameHotPeak.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameHotPeak.h; sourceTree = "<group>"; };
-		FLAM000000000000000802 /* CTestFlamePushToC64.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePushToC64.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePushToC64.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000803 /* CTestFlamePushToC64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePushToC64.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePushToC64.h; sourceTree = "<group>"; };
-		FLAM000000000000000812 /* CTestFlamePOCFirstFrame.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePOCFirstFrame.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePOCFirstFrame.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000813 /* CTestFlamePOCFirstFrame.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePOCFirstFrame.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePOCFirstFrame.h; sourceTree = "<group>"; };
-		FLAM000000000000000822 /* CTestFlameSimulationDeterminism.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameSimulationDeterminism.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameSimulationDeterminism.cpp; sourceTree = "<group>"; };
-		FLAM000000000000000823 /* CTestFlameSimulationDeterminism.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameSimulationDeterminism.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameSimulationDeterminism.h; sourceTree = "<group>"; };
-		FLAM00000000000009A2 /* CTestFlameEmitDebugLog.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlameEmitDebugLog.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlameEmitDebugLog.cpp; sourceTree = "<group>"; };
-		FLAM00000000000009A3 /* CTestFlameEmitDebugLog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlameEmitDebugLog.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlameEmitDebugLog.h; sourceTree = "<group>"; };
-		FLAM00000000000009B2 /* CTestFlame6502InitFull.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502InitFull.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502InitFull.cpp; sourceTree = "<group>"; };
-		FLAM00000000000009B3 /* CTestFlame6502InitFull.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502InitFull.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502InitFull.h; sourceTree = "<group>"; };
-		FLAM00000000000009C2 /* CTestFlame6502IrqEntryExit.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502IrqEntryExit.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502IrqEntryExit.cpp; sourceTree = "<group>"; };
-		FLAM00000000000009C3 /* CTestFlame6502IrqEntryExit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502IrqEntryExit.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502IrqEntryExit.h; sourceTree = "<group>"; };
-		FLAM00000000000009D2 /* CTestFlame6502PRNGParity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502PRNGParity.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502PRNGParity.cpp; sourceTree = "<group>"; };
-		FLAM00000000000009D3 /* CTestFlame6502PRNGParity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502PRNGParity.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502PRNGParity.h; sourceTree = "<group>"; };
-		FLAM0000000000000A02 /* CTestFlame6502WindParity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502WindParity.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502WindParity.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000A03 /* CTestFlame6502WindParity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502WindParity.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502WindParity.h; sourceTree = "<group>"; };
-		FLAM0000000000000A12 /* CTestFlame6502RowSigParity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502RowSigParity.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502RowSigParity.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000A13 /* CTestFlame6502RowSigParity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502RowSigParity.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502RowSigParity.h; sourceTree = "<group>"; };
-		FLAM0000000000000A22 /* CTestFlame6502CellsParity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502CellsParity.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502CellsParity.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000A23 /* CTestFlame6502CellsParity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502CellsParity.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502CellsParity.h; sourceTree = "<group>"; };
-		FLAM0000000000000A32 /* CTestFlame6502CramParity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502CramParity.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502CramParity.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000A33 /* CTestFlame6502CramParity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502CramParity.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502CramParity.h; sourceTree = "<group>"; };
-		FLAM0000000000000B02 /* CTestFlame6502LUTs.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502LUTs.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502LUTs.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000B03 /* CTestFlame6502LUTs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502LUTs.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502LUTs.h; sourceTree = "<group>"; };
-		FLAM0000000000000B12 /* CTestFlamePRGFormat.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePRGFormat.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRGFormat.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000B13 /* CTestFlamePRGFormat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePRGFormat.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRGFormat.h; sourceTree = "<group>"; };
-		FLAM0000000000000B22 /* CTestFlame6502PRGRuns60Frames.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502PRGRuns60Frames.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502PRGRuns60Frames.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000B23 /* CTestFlame6502PRGRuns60Frames.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502PRGRuns60Frames.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502PRGRuns60Frames.h; sourceTree = "<group>"; };
-		FLAM0000000000000B32 /* CTestFlame6502Parity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502Parity.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502Parity.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000B33 /* CTestFlame6502Parity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502Parity.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502Parity.h; sourceTree = "<group>"; };
-		FLAM0000000000000B42 /* CTestFlamePRGvsCpp.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlamePRGvsCpp.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRGvsCpp.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000B43 /* CTestFlamePRGvsCpp.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlamePRGvsCpp.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlamePRGvsCpp.h; sourceTree = "<group>"; };
-		FLAM0000000000000C02 /* CTestFlame6502EnvelopeLUTs.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CTestFlame6502EnvelopeLUTs.cpp; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502EnvelopeLUTs.cpp; sourceTree = "<group>"; };
-		FLAM0000000000000C03 /* CTestFlame6502EnvelopeLUTs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CTestFlame6502EnvelopeLUTs.h; path = ../../src/Plugins/FlameTiles/tests/CTestFlame6502EnvelopeLUTs.h; sourceTree = "<group>"; };
-		FMTS000000000000000002 /* FlameTilesTests.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FlameTilesTests.cpp; path = ../../src/Plugins/FlameTiles/tests/FlameTilesTests.cpp; sourceTree = "<group>"; };
-		FMTS000000000000000003 /* FlameTilesTests.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FlameTilesTests.h; path = ../../src/Plugins/FlameTiles/tests/FlameTilesTests.h; sourceTree = "<group>"; };
 		GFXOUT001000000000000011 /* artstudiodrv.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = artstudiodrv.c; sourceTree = "<group>"; };
 		GFXOUT001000000000000012 /* ffmpegexedrv.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ffmpegexedrv.c; sourceTree = "<group>"; };
 		GFXOUT001000000000000013 /* minipaintdrv.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = minipaintdrv.c; sourceTree = "<group>"; };
@@ -8209,8 +8058,6 @@
 		41E4D8A72FB1F16E00188071 /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
-				FLAM000000000000000002 /* C64DebuggerPluginFlameTiles.cpp */,
-				FLAM000000000000000062 /* FlameMemoryLayout.cpp */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -8574,106 +8421,8 @@
 				ARP1000000000000000001 /* CTestArpCycling.cpp */,
 				ARP2000000000000000002 /* CTestArpParity.h */,
 				ARP2000000000000000001 /* CTestArpParity.cpp */,
-				FMTS000000000000000003 /* FlameTilesTests.h */,
-				FMTS000000000000000002 /* FlameTilesTests.cpp */,
 				PLGT000000000000000003 /* CPluginTestRegistry.h */,
 				PLGT000000000000000002 /* CPluginTestRegistry.cpp */,
-				FLAM000000000000000103 /* CTestFlamePluginActivation.h */,
-				FLAM000000000000000102 /* CTestFlamePluginActivation.cpp */,
-				FLAM000000000000000203 /* CTestFlame6502EmitCore.h */,
-				FLAM000000000000000202 /* CTestFlame6502EmitCore.cpp */,
-				FLAM000000000000000213 /* CTestFlame6502EmitOpcodes.h */,
-				FLAM000000000000000212 /* CTestFlame6502EmitOpcodes.cpp */,
-				FLAM000000000000000223 /* CTestFlameLAXEquivalence.h */,
-				FLAM000000000000000222 /* CTestFlameLAXEquivalence.cpp */,
-				FLAM000000000000000233 /* CTestFlame6502InitBytes.h */,
-				FLAM000000000000000232 /* CTestFlame6502InitBytes.cpp */,
-				FLAM000000000000000243 /* CTestFlame6502VicSetup.h */,
-				FLAM000000000000000242 /* CTestFlame6502VicSetup.cpp */,
-				FLAM000000000000000253 /* CTestFlame6502RasterIRQ.h */,
-				FLAM000000000000000252 /* CTestFlame6502RasterIRQ.cpp */,
-				FLAM000000000000000263 /* CTestFlamePRGRunsInVice.h */,
-				FLAM000000000000000262 /* CTestFlamePRGRunsInVice.cpp */,
-				FLAM00000000000009A3 /* CTestFlameEmitDebugLog.h */,
-				FLAM00000000000009A2 /* CTestFlameEmitDebugLog.cpp */,
-				FLAM00000000000009B3 /* CTestFlame6502InitFull.h */,
-				FLAM00000000000009B2 /* CTestFlame6502InitFull.cpp */,
-				FLAM00000000000009C3 /* CTestFlame6502IrqEntryExit.h */,
-				FLAM00000000000009C2 /* CTestFlame6502IrqEntryExit.cpp */,
-				FLAM00000000000009D3 /* CTestFlame6502PRNGParity.h */,
-				FLAM00000000000009D2 /* CTestFlame6502PRNGParity.cpp */,
-				FLAM0000000000000A03 /* CTestFlame6502WindParity.h */,
-				FLAM0000000000000A02 /* CTestFlame6502WindParity.cpp */,
-				FLAM0000000000000A13 /* CTestFlame6502RowSigParity.h */,
-				FLAM0000000000000A12 /* CTestFlame6502RowSigParity.cpp */,
-				FLAM0000000000000A23 /* CTestFlame6502CellsParity.h */,
-				FLAM0000000000000A22 /* CTestFlame6502CellsParity.cpp */,
-				FLAM0000000000000A33 /* CTestFlame6502CramParity.h */,
-				FLAM0000000000000A32 /* CTestFlame6502CramParity.cpp */,
-				FLAM0000000000000B03 /* CTestFlame6502LUTs.h */,
-				FLAM0000000000000B02 /* CTestFlame6502LUTs.cpp */,
-				FLAM0000000000000C03 /* CTestFlame6502EnvelopeLUTs.h */,
-				FLAM0000000000000C02 /* CTestFlame6502EnvelopeLUTs.cpp */,
-				FLAM0000000000000B13 /* CTestFlamePRGFormat.h */,
-				FLAM0000000000000B12 /* CTestFlamePRGFormat.cpp */,
-				FLAM0000000000000B23 /* CTestFlame6502PRGRuns60Frames.h */,
-				FLAM0000000000000B22 /* CTestFlame6502PRGRuns60Frames.cpp */,
-				FLAM0000000000000B33 /* CTestFlame6502Parity.h */,
-				FLAM0000000000000B32 /* CTestFlame6502Parity.cpp */,
-				FLAM0000000000000B43 /* CTestFlamePRGvsCpp.h */,
-				FLAM0000000000000B42 /* CTestFlamePRGvsCpp.cpp */,
-				FLAM000000000000000303 /* CFlameGenerator.h */,
-				FLAM000000000000000302 /* CFlameGenerator.cpp */,
-				FLAM000000000000000313 /* CFlameReferenceImage.h */,
-				FLAM000000000000000312 /* CFlameReferenceImage.cpp */,
-				FLAM000000000000000323 /* CFlameCharset.h */,
-				FLAM000000000000000322 /* CFlameCharset.cpp */,
-				FLAM000000000000000333 /* CFlameCharsetExtractor.h */,
-				FLAM000000000000000332 /* CFlameCharsetExtractor.cpp */,
-				FLAM000000000000000343 /* FlameBuildReport.h */,
-				FLAM000000000000000342 /* FlameBuildReport.cpp */,
-				FLAM000000000000000353 /* CTestFlameReferenceImage.h */,
-				FLAM000000000000000352 /* CTestFlameReferenceImage.cpp */,
-				FLAM000000000000000363 /* CTestFlameCharsetExtraction.h */,
-				FLAM000000000000000362 /* CTestFlameCharsetExtraction.cpp */,
-				FLAM000000000000000373 /* CTestFlameBuildReport.h */,
-				FLAM000000000000000372 /* CTestFlameBuildReport.cpp */,
-				FLAM000000000000000383 /* CTestFlameCharsetPersistence.h */,
-				FLAM000000000000000382 /* CTestFlameCharsetPersistence.cpp */,
-				FLAM000000000000000393 /* CTestFlameMockCharset.h */,
-				FLAM000000000000000392 /* CTestFlameMockCharset.cpp */,
-				FLAM000000000000000413 /* CViewFlameCharsetDesigner.h */,
-				FLAM000000000000000412 /* CViewFlameCharsetDesigner.cpp */,
-				FLAM000000000000000503 /* CTestFlameRealExtraction.h */,
-				FLAM000000000000000502 /* CTestFlameRealExtraction.cpp */,
-				FLAM000000000000000513 /* CViewFlameTileEditor.h */,
-				FLAM000000000000000512 /* CViewFlameTileEditor.cpp */,
-				FLAM000000000000000523 /* CTestFlameAutoFillMirror.h */,
-				FLAM000000000000000522 /* CTestFlameAutoFillMirror.cpp */,
-				FLAM000000000000000533 /* CTestFlameDenoise.h */,
-				FLAM000000000000000532 /* CTestFlameDenoise.cpp */,
-				FLAM000000000000000543 /* CTestFlameMergeDuplicates.h */,
-				FLAM000000000000000542 /* CTestFlameMergeDuplicates.cpp */,
-				FLAM000000000000000703 /* CFlameSimulation.h */,
-				FLAM000000000000000702 /* CFlameSimulation.cpp */,
-				FLAM000000000000000713 /* CTestFlameSimulationState.h */,
-				FLAM000000000000000712 /* CTestFlameSimulationState.cpp */,
-				FLAM000000000000000723 /* CTestFlamePRNG.h */,
-				FLAM000000000000000722 /* CTestFlamePRNG.cpp */,
-				FLAM000000000000000733 /* CTestFlameWindState.h */,
-				FLAM000000000000000732 /* CTestFlameWindState.cpp */,
-				FLAM000000000000000743 /* CTestFlameRowSignatures.h */,
-				FLAM000000000000000742 /* CTestFlameRowSignatures.cpp */,
-				FLAM000000000000000753 /* CTestFlameCellLookup.h */,
-				FLAM000000000000000752 /* CTestFlameCellLookup.cpp */,
-				FLAM000000000000000763 /* CTestFlameHotPeak.h */,
-				FLAM000000000000000762 /* CTestFlameHotPeak.cpp */,
-				FLAM000000000000000803 /* CTestFlamePushToC64.h */,
-				FLAM000000000000000802 /* CTestFlamePushToC64.cpp */,
-				FLAM000000000000000813 /* CTestFlamePOCFirstFrame.h */,
-				FLAM000000000000000812 /* CTestFlamePOCFirstFrame.cpp */,
-				FLAM000000000000000823 /* CTestFlameSimulationDeterminism.h */,
-				FLAM000000000000000822 /* CTestFlameSimulationDeterminism.cpp */,
 				MCPTST0000000000000002 /* CTestMCPProtocol.h */,
 				MCPTST0000000000000001 /* CTestMCPProtocol.cpp */,
 				MCPTST0000000000000004 /* CTestMCPBridge.h */,
@@ -8859,57 +8608,6 @@
 				DDS10000000000000001 /* CTestDataDumpSelection.cpp in Sources */,
 				DAS10000000000000001 /* CTestDisassemblySelection.cpp in Sources */,
 				DFWSPEC000000000001 /* CTestDefaultWorkspaceSpecs.cpp in Sources */,
-				FLAM000000000000000001 /* C64DebuggerPluginFlameTiles.cpp in Sources */,
-				FLAM000000000000000061 /* FlameMemoryLayout.cpp in Sources */,
-				FLAM000000000000000101 /* CTestFlamePluginActivation.cpp in Sources */,
-				FLAM000000000000000201 /* CTestFlame6502EmitCore.cpp in Sources */,
-				FLAM000000000000000211 /* CTestFlame6502EmitOpcodes.cpp in Sources */,
-				FLAM000000000000000221 /* CTestFlameLAXEquivalence.cpp in Sources */,
-				FLAM000000000000000231 /* CTestFlame6502InitBytes.cpp in Sources */,
-				FLAM000000000000000241 /* CTestFlame6502VicSetup.cpp in Sources */,
-				FLAM000000000000000251 /* CTestFlame6502RasterIRQ.cpp in Sources */,
-				FLAM000000000000000261 /* CTestFlamePRGRunsInVice.cpp in Sources */,
-				FLAM00000000000009A1 /* CTestFlameEmitDebugLog.cpp in Sources */,
-				FLAM00000000000009B1 /* CTestFlame6502InitFull.cpp in Sources */,
-				FLAM00000000000009C1 /* CTestFlame6502IrqEntryExit.cpp in Sources */,
-				FLAM00000000000009D1 /* CTestFlame6502PRNGParity.cpp in Sources */,
-				FLAM0000000000000A01 /* CTestFlame6502WindParity.cpp in Sources */,
-				FLAM0000000000000A11 /* CTestFlame6502RowSigParity.cpp in Sources */,
-				FLAM0000000000000A21 /* CTestFlame6502CellsParity.cpp in Sources */,
-				FLAM0000000000000A31 /* CTestFlame6502CramParity.cpp in Sources */,
-				FLAM0000000000000B01 /* CTestFlame6502LUTs.cpp in Sources */,
-				FLAM0000000000000C01 /* CTestFlame6502EnvelopeLUTs.cpp in Sources */,
-				FLAM0000000000000B11 /* CTestFlamePRGFormat.cpp in Sources */,
-				FLAM0000000000000B21 /* CTestFlame6502PRGRuns60Frames.cpp in Sources */,
-				FLAM0000000000000B31 /* CTestFlame6502Parity.cpp in Sources */,
-				FLAM0000000000000B41 /* CTestFlamePRGvsCpp.cpp in Sources */,
-				FLAM000000000000000301 /* CFlameGenerator.cpp in Sources */,
-				FLAM000000000000000311 /* CFlameReferenceImage.cpp in Sources */,
-				FLAM000000000000000321 /* CFlameCharset.cpp in Sources */,
-				FLAM000000000000000331 /* CFlameCharsetExtractor.cpp in Sources */,
-				FLAM000000000000000341 /* FlameBuildReport.cpp in Sources */,
-				FLAM000000000000000351 /* CTestFlameReferenceImage.cpp in Sources */,
-				FLAM000000000000000361 /* CTestFlameCharsetExtraction.cpp in Sources */,
-				FLAM000000000000000371 /* CTestFlameBuildReport.cpp in Sources */,
-				FLAM000000000000000381 /* CTestFlameCharsetPersistence.cpp in Sources */,
-				FLAM000000000000000391 /* CTestFlameMockCharset.cpp in Sources */,
-				FLAM000000000000000411 /* CViewFlameCharsetDesigner.cpp in Sources */,
-				FLAM000000000000000501 /* CTestFlameRealExtraction.cpp in Sources */,
-				FLAM000000000000000511 /* CViewFlameTileEditor.cpp in Sources */,
-				FLAM000000000000000521 /* CTestFlameAutoFillMirror.cpp in Sources */,
-				FLAM000000000000000531 /* CTestFlameDenoise.cpp in Sources */,
-				FLAM000000000000000541 /* CTestFlameMergeDuplicates.cpp in Sources */,
-				FLAM000000000000000701 /* CFlameSimulation.cpp in Sources */,
-				FLAM000000000000000711 /* CTestFlameSimulationState.cpp in Sources */,
-				FLAM000000000000000721 /* CTestFlamePRNG.cpp in Sources */,
-				FLAM000000000000000731 /* CTestFlameWindState.cpp in Sources */,
-				FLAM000000000000000741 /* CTestFlameRowSignatures.cpp in Sources */,
-				FLAM000000000000000751 /* CTestFlameCellLookup.cpp in Sources */,
-				FLAM000000000000000761 /* CTestFlameHotPeak.cpp in Sources */,
-				FLAM000000000000000801 /* CTestFlamePushToC64.cpp in Sources */,
-				FLAM000000000000000811 /* CTestFlamePOCFirstFrame.cpp in Sources */,
-				FLAM000000000000000821 /* CTestFlameSimulationDeterminism.cpp in Sources */,
-				FMTS000000000000000001 /* FlameTilesTests.cpp in Sources */,
 				PLGT000000000000000001 /* CPluginTestRegistry.cpp in Sources */,
 				MCSE00000000000000001 /* CTestMonitorConsoleSelection.cpp in Sources */,
 				E71F42CF0A6F7EA5A1F93B79 /* CTestVicEditorZoom.cpp in Sources */,
@@ -10422,7 +10120,6 @@
 					"$(PROJECT_DIR)/../../../MTEngineSDL/src/Engine/Tests",
 					"$(PROJECT_DIR)/../../src/Emulators/vice/**",
 					"$(PROJECT_DIR)/../../src/Plugins",
-					"$(PROJECT_DIR)/../../src/Plugins/FlameTiles/tests",
 				);
 				INFOPLIST_FILE = "$(SRCROOT)/src.MacOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Retro Debugger";
@@ -10478,7 +10175,6 @@
 					"$(PROJECT_DIR)/../../../MTEngineSDL/src/Engine/Tests",
 					"$(PROJECT_DIR)/../../src/Emulators/vice/**",
 					"$(PROJECT_DIR)/../../src/Plugins",
-					"$(PROJECT_DIR)/../../src/Plugins/FlameTiles/tests",
 				);
 				INFOPLIST_FILE = "$(SRCROOT)/src.MacOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Retro Debugger";

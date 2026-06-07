@@ -228,12 +228,6 @@
     <Filter Include="Source Files\src\Plugins\CrtMaker">
       <UniqueIdentifier>{d4c98f09-4571-41d2-805d-d6d305531694}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\src\Plugins\FlameTiles\tests">
-      <UniqueIdentifier>{a1b2c3d4-0004-4f00-9a00-0000000f1a0e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\src\Plugins\FlameTiles">
-      <UniqueIdentifier>{f1a2e3b4-5c6d-47e8-9f10-1b2c3d4e5f60}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\src.Windows\hardsid">
       <UniqueIdentifier>{b730cbaa-9927-41cd-b03e-780aeed38b63}</UniqueIdentifier>
     </Filter>
@@ -266,9 +260,6 @@
     </Filter>
     <Filter Include="Source Files\src\Emulators\vice\ViceInterface\Adapters">
       <UniqueIdentifier>{da4c08a7-3ccf-4804-b001-5eef902d5ef8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\src\Plugins\Slideshow">
-      <UniqueIdentifier>{c04896c9-3f9c-4714-a338-b5fbbac3244a}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\src\Remote">
       <UniqueIdentifier>{d1406b71-a32f-4393-9871-aafa15f92907}</UniqueIdentifier>
@@ -2898,134 +2889,8 @@
     <ClCompile Include="..\..\..\src\Tests\CTestMonitorConsoleSelection.cpp">
       <Filter>Source Files\src\Tests</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\FlameTilesTests.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\CPluginTestRegistry.cpp">
       <Filter>Source Files\src\Plugins</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePluginActivation.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitCore.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitOpcodes.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameLAXEquivalence.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitBytes.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502VicSetup.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RasterIRQ.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGRunsInVice.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameEmitDebugLog.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitFull.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502IrqEntryExit.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRNGParity.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502WindParity.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RowSigParity.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CellsParity.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CramParity.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502LUTs.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGFormat.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRGRuns60Frames.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502Parity.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGvsCpp.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRealExtraction.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameAutoFillMirror.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameDenoise.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMergeDuplicates.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationState.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRNG.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameWindState.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRowSignatures.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCellLookup.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameHotPeak.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePushToC64.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePOCFirstFrame.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationDeterminism.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EnvelopeLUTs.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameBuildReport.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetExtraction.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetPersistence.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMockCharset.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameReferenceImage.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CFlameSimulation.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\Tests\CTestMCPProtocol.cpp">
       <Filter>Source Files\src\Tests</Filter>
@@ -3963,39 +3828,6 @@
     <ClCompile Include="..\..\..\src\Tools\TextEditor\TextEditor.cpp">
       <Filter>Source Files\src\Tools\TextEditor</Filter>
     </ClCompile>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\C64DebuggerPluginFlameTiles.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClInclude>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\C64DebuggerPluginFlameTiles.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClCompile>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\FlameMemoryLayout.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClInclude>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\FlameMemoryLayout.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClCompile>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\Flame6502Emit.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CFlameGenerator.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClInclude>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CFlameGenerator.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClCompile>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CViewFlameCharsetDesigner.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClInclude>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CViewFlameCharsetDesigner.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClCompile>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CViewFlameTileEditor.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClInclude>
-    <ClCompile Include="..\..\..\src\Plugins\FlameTiles\CViewFlameTileEditor.cpp">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Plugins\GoatTracker\C64DebuggerPluginGoatTracker.cpp">
       <Filter>Source Files\src\Plugins\GoatTracker</Filter>
     </ClCompile>
@@ -4593,9 +4425,6 @@
     <ClCompile Include="..\..\..\src\Emulators\vice\ViceInterface\Adapters\CDataAddressEditBoxDiskContents.cpp">
       <Filter>Source Files\src\Emulators\vice\ViceInterface\Adapters</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\Plugins\Slideshow\C64DebuggerPluginSlideshow.cpp">
-      <Filter>Source Files\src\Plugins\Slideshow</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\Views\C64\CViewC64BreakpointsIrq.cpp">
       <Filter>Source Files\src\Views\C64</Filter>
     </ClCompile>
@@ -4791,9 +4620,6 @@
       <Filter>Source Files\src\Embedded</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Embedded\icon_toolbox_import_gfx.h">
-      <Filter>Source Files\src\Embedded</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Embedded\ProFontIIx.h">
       <Filter>Source Files\src\Embedded</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\atari800\a-cartridge.h">
@@ -5162,8 +4988,8 @@
     <ClInclude Include="..\..\..\src\Emulators\vice\arch\socketimpl.h">
       <Filter>Source Files\src\Emulators\vice\arch</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Emulators\vice\arch\types.h">
-      <Filter>Source Files\src\Emulators\vice\arch</Filter>
+    <ClInclude Include="..\..\..\src\Emulators\vice\root\types.h">
+      <Filter>Source Files\src\Emulators\vice\root</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\arch\ui.h">
       <Filter>Source Files\src\Emulators\vice\arch</Filter>
@@ -7434,134 +7260,8 @@
     <ClInclude Include="..\..\..\src\Tests\CTestMonitorConsoleSelection.h">
       <Filter>Source Files\src\Tests</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\FlameTilesTests.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\Plugins\CPluginTestRegistry.h">
       <Filter>Source Files\src\Plugins</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePluginActivation.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitCore.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EmitOpcodes.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameLAXEquivalence.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitBytes.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502VicSetup.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RasterIRQ.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGRunsInVice.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameEmitDebugLog.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502InitFull.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502IrqEntryExit.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRNGParity.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502WindParity.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502RowSigParity.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CellsParity.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502CramParity.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502LUTs.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGFormat.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502PRGRuns60Frames.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502Parity.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRGvsCpp.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRealExtraction.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameAutoFillMirror.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameDenoise.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMergeDuplicates.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationState.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePRNG.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameWindState.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameRowSignatures.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCellLookup.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameHotPeak.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePushToC64.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlamePOCFirstFrame.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameSimulationDeterminism.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlame6502EnvelopeLUTs.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameBuildReport.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetExtraction.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameCharsetPersistence.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameMockCharset.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\tests\CTestFlameReferenceImage.h">
-      <Filter>Source Files\src\Plugins\FlameTiles\tests</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\FlameTiles\CFlameSimulation.h">
-      <Filter>Source Files\src\Plugins\FlameTiles</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Tests\CTestDataDumpSelection.h">
       <Filter>Source Files\src\Tests</Filter>
@@ -9251,9 +8951,6 @@
     </ClInclude>
     <ClInclude Include="..\..\..\src\Emulators\vice\ViceInterface\Adapters\CDataAddressEditBoxDiskContents.h">
       <Filter>Source Files\src\Emulators\vice\ViceInterface\Adapters</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\Plugins\Slideshow\C64DebuggerPluginSlideshow.h">
-      <Filter>Source Files\src\Plugins\Slideshow</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\Views\C64\CViewC64BreakpointsIrq.h">
       <Filter>Source Files\src\Views\C64</Filter>
