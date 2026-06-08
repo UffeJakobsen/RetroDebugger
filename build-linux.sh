@@ -30,9 +30,9 @@ case "$(uname -m)" in
 		;;
 esac
 
-if [ ! -f CMakeCache.txt ]; then
-	cmake ../ -DMT_ENABLE_MBEDTLS=OFF ${GGML_ARCH_ARGS} ${CMAKE_EXTRA_ARGS}
-fi
+# Always (re)run cmake so flag changes (e.g. MT_GGML_NATIVE) actually take effect
+# even when a build dir already exists. cmake is idempotent and cheap.
+cmake ../ -DMT_ENABLE_MBEDTLS=OFF ${GGML_ARCH_ARGS} ${CMAKE_EXTRA_ARGS}
 make -j$(nproc) MTEngineSDL
 
 # uSockets
@@ -52,9 +52,7 @@ cp -f uSockets.a $CURRENT_DIR/../MTEngineSDL/platform/Linux/libs/
 echo -e "\n\e[94mCompiling \e[31mRetroDebugger\e[0m"
 mkdir -p $CURRENT_DIR/build
 cd $CURRENT_DIR/build
-if [ ! -f CMakeCache.txt ]; then
-	cmake ../
-fi
+cmake ../
 make -j$(nproc) retrodebugger
 
 echo -e "\n\e[1;92mRetroDebugger compiled successfully. Binary is in ./build folder.\e[0m"
