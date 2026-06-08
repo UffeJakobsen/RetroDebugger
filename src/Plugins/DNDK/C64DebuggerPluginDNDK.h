@@ -38,4 +38,6 @@ public:
 
 };
 
+extern C64DebuggerPluginDNDK *pluginDDNK;
+
 #endif
