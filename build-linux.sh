@@ -18,8 +18,20 @@ fi
 echo -e "\e[94mCompiling \e[31mMTEngineSDL \e[94mlibrary\e[0m"
 mkdir -p $CURRENT_DIR/../MTEngineSDL/build
 cd $CURRENT_DIR/../MTEngineSDL/build
+
+# ggml/llama.cpp: on ARM the -mcpu=native dotprod auto-detection can emit `sdot`
+# instructions the assembler rejects ("selected processor does not support sdot").
+# Disable native CPU optimizations on ARM (baseline armv8-a); keep native on x86_64.
+GGML_ARCH_ARGS=""
+case "$(uname -m)" in
+	aarch64|arm64)
+		echo -e "\e[94mARM detected - building ggml without native CPU optimizations (MT_GGML_NATIVE=OFF)\e[0m"
+		GGML_ARCH_ARGS="-DMT_GGML_NATIVE=OFF"
+		;;
+esac
+
 if [ ! -f CMakeCache.txt ]; then
-	cmake ../ -DMT_ENABLE_MBEDTLS=OFF ${CMAKE_EXTRA_ARGS}
+	cmake ../ -DMT_ENABLE_MBEDTLS=OFF ${GGML_ARCH_ARGS} ${CMAKE_EXTRA_ARGS}
 fi
 make -j$(nproc) MTEngineSDL
 
